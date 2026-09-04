@@ -1,0 +1,48 @@
+# Local development dependencies.
+#
+# The Go server runs on the host (`make dev`) so hot reload and debuggers work.
+# Only its backing services live in Docker.
+#
+# Services are added here as the code that needs them lands — MinIO (media,
+# Phase 3) and Mailpit (magic-link email, with auth) are deliberately absent
+# until then, so `make up` stays fast and nothing runs unused.
+#
+# Ports are deliberately off the defaults (5433, 6380) so Cuckoo can run
+# alongside another project's Postgres and Redis without either having to be
+# stopped. Override with CUCKOO_POSTGRES_PORT / CUCKOO_REDIS_PORT.
+
+name: cuckoo
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cuckoo
+      POSTGRES_PASSWORD: cuckoo
+      POSTGRES_DB: cuckoo
+    ports:
+      - "${CUCKOO_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/postgres-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cuckoo -d cuckoo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${CUCKOO_REDIS_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:

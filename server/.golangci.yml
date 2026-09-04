@@ -1,0 +1,38 @@
+# Linters chosen to catch real defects, not to argue about style. gofmt settles
+# formatting; anything that only produces noise is off.
+
+run:
+  timeout: 3m
+
+linters:
+  enable:
+    - errcheck      # an ignored error is the most common bug in Go
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose     # leaked response bodies exhaust connections under load
+    - contextcheck  # a dropped context breaks cancellation and timeouts
+    - errorlint     # comparing errors with == misses wrapped ones
+    - gosec
+    - misspell
+    - nilerr
+    - rowserrcheck
+    - sqlclosecheck
+    - unconvert
+    - wastedassign
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  gosec:
+    excludes:
+      - G104  # duplicates errcheck
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    # Tests may assert on results without handling every error path.
+    - path: _test\.go
+      linters: [errcheck, gosec, bodyclose]
