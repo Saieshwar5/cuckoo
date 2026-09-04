@@ -1,0 +1,62 @@
+// Package users owns everything about a person's account.
+//
+// It is the worked example every other business package copies: a Store
+// interface naming only the queries it uses, a domain type that is not the
+// database row, validation that returns domain errors, and no knowledge of HTTP.
+package users
+
+import (
+	"context"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/cuckoo-chat/cuckoo/server/internal/store/gen"
+)
+
+// Store is the slice of the database this package needs.
+//
+// Naming the queries rather than accepting *store.Store keeps the dependency
+// visible and lets tests substitute a fake without a database when that is the
+// cheaper test. Any package may satisfy it; only store.Store does in production.
+type Store interface {
+	CreateUser(ctx context.Context, arg gen.CreateUserParams) (gen.User, error)
+	GetUser(ctx context.Context, id uuid.UUID) (gen.User, error)
+	UpdateUserProfile(ctx context.Context, arg gen.UpdateUserProfileParams) (gen.User, error)
+}
+
+// User is a person's account as the rest of the system understands it.
+//
+// It is a separate type from the generated database row on purpose: column
+// names are free to change, and the API's shape is decided by the API layer,
+// not by whatever the table happens to look like this month.
+type User struct {
+	ID          uuid.UUID
+	DisplayName string
+	Locale      string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+func fromRow(row gen.User) User {
+	return User{
+		ID:          row.ID,
+		DisplayName: row.DisplayName,
+		Locale:      row.Locale,
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
+	}
+}
+
+// CreateInput is the data needed to open an account.
+type CreateInput struct {
+	DisplayName string
+	Locale      string
+}
+
+// UpdateProfileInput describes a partial update: a nil field is left unchanged,
+// which is what lets the app send only what the user actually edited.
+type UpdateProfileInput struct {
+	DisplayName *string
+	Locale      *string
+}

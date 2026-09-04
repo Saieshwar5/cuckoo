@@ -1,0 +1,80 @@
+# Everything `make check` runs locally, run again on every push.
+#
+# The database is a real Postgres, not a stub: the tests that matter exercise
+# ordering, constraints and partial updates, and a stub would agree with
+# whatever the code believed.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  CUCKOO_TEST_DATABASE_URL: postgres://cuckoo:cuckoo@localhost:5432/cuckoo_test?sslmode=disable
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cuckoo
+          POSTGRES_PASSWORD: cuckoo
+          POSTGRES_DB: cuckoo_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U cuckoo"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      # Runs before the Go tests so an oversized file is reported plainly
+      # rather than as a failing test buried in the suite.
+      - name: File size limit
+        run: scripts/check-file-size.sh
+
+      - name: Formatting
+        working-directory: server
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"; echo "$unformatted"; exit 1
+          fi
+
+      # Generated code must match the SQL it came from, or a query and its Go
+      # signature can disagree in a way no test would catch.
+      - name: Generated code is current
+        working-directory: server
+        run: |
+          go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate
+          if ! git diff --quiet -- internal/store/gen; then
+            echo "internal/store/gen is stale — run 'make gen' and commit the result"
+            git diff -- internal/store/gen
+            exit 1
+          fi
+
+      - name: Vet
+        working-directory: server
+        run: go vet ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          working-directory: server
+
+      - name: Test
+        working-directory: server
+        run: go test ./... -race -count=1
