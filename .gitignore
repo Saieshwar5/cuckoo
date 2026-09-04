@@ -1,0 +1,74 @@
+# ─── Project-local material, not part of the repo ────────────────────────────
+proj-docs
+ref-proj
+
+# ─── Secrets & credentials — NEVER commit ────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+credentials.json
+service-account*.json
+secrets.yaml
+secrets.yml
+.netrc
+.npmrc
+.pypirc
+id_rsa*
+id_ed25519*
+*.gpg
+*.asc
+
+# Mobile signing (Expo / Android / iOS)
+google-services.json
+GoogleService-Info.plist
+*.mobileprovision
+android/app/release.keystore
+eas.json.local
+
+# ─── Build output ────────────────────────────────────────────────────────────
+bin/
+dist/
+build/
+tmp/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+
+# ─── Go ──────────────────────────────────────────────────────────────────────
+vendor/
+go.work
+go.work.sum
+
+# ─── Node / Expo ─────────────────────────────────────────────────────────────
+node_modules/
+.expo/
+.expo-shared/
+*.tsbuildinfo
+
+# ─── Local data volumes ──────────────────────────────────────────────────────
+.data/
+postgres-data/
+minio-data/
+
+# ─── Editors & OS ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-error.log*

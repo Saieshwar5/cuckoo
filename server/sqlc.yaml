@@ -1,0 +1,42 @@
+# Typed database access is generated from the SQL in internal/store/queries,
+# checked against the schema in internal/store/migrations.
+#
+# Regenerate with `make gen`. The output is committed so the repository builds
+# without sqlc installed.
+
+version: "2"
+
+sql:
+  - engine: postgresql
+    schema: internal/store/migrations
+    queries: internal/store/queries
+    gen:
+      go:
+        package: gen
+        out: internal/store/gen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        emit_prepared_queries: false
+        emit_interface: false
+        overrides:
+          # Plain Go types beat driver wrappers everywhere but the driver.
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              import: github.com/google/uuid
+              type: UUID
+              pointer: true
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              type: time.Time
+              pointer: true
+          - db_type: text
+            nullable: true
+            go_type:
+              type: string
+              pointer: true
