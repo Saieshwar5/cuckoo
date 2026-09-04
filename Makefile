@@ -12,7 +12,7 @@ export PATH := $(BIN_DIR):$(PATH)
 # Pinned tool versions. Installed into ./bin by `make tools` — never global.
 SQLC_VERSION          := v1.31.1
 AIR_VERSION           := v1.63.0
-GOLANGCI_LINT_VERSION := v1.64.8
+GOLANGCI_LINT_VERSION := v2.13.2
 
 # Enforced by scripts/check-file-size.sh and `make check`.
 export CUCKOO_FILE_LINE_LIMIT := 500
@@ -59,7 +59,7 @@ tools: ## Install pinned dev tools into ./bin
 	@mkdir -p $(BIN_DIR)
 	GOBIN=$(BIN_DIR) go install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 	GOBIN=$(BIN_DIR) go install github.com/air-verse/air@$(AIR_VERSION)
-	GOBIN=$(BIN_DIR) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	GOBIN=$(BIN_DIR) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	@echo "installed into $(BIN_DIR)"
 
 ##@ Develop
@@ -115,8 +115,33 @@ size: ## Fail if any source file exceeds the line limit
 size-top: ## Show the longest source files
 	@scripts/check-file-size.sh --top 15
 
+.PHONY: secrets
+secrets: ## Fail if a credential is about to be committed
+	@scripts/check-secrets.sh --all
+
 .PHONY: check
-check: size lint test ## Full verification — run this before every commit
+check: size secrets lint test ## Full verification — run this before every commit
+
+##@ Local CI
+
+.PHONY: ci
+ci: ## Everything a CI server would run, including a migrate-from-empty check
+	@scripts/ci.sh
+
+.PHONY: watch
+watch: ## Rerun tests on every file change (WATCH_FULL=1 to include the database)
+	@scripts/watch.sh $(ARGS)
+
+.PHONY: hooks
+hooks: ## Install the git hooks (pre-commit and pre-push)
+	@git config core.hooksPath scripts/hooks
+	@echo "hooks installed — pre-commit (~1s) and pre-push (~5s)"
+	@echo "bypass a single time with --no-verify; run 'make unhook' to remove"
+
+.PHONY: unhook
+unhook: ## Remove the git hooks
+	@git config --unset core.hooksPath || true
+	@echo "hooks removed"
 
 .PHONY: clean
 clean: ## Remove build output

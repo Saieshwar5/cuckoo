@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+#
+# pre-push — the real gate. Budget: a few seconds.
+#
+# This is the last point at which a mistake is still private. It builds and runs
+# the entire suite with the race detector against a real database.
+#
+# It refuses to run when Postgres is down rather than letting the database tests
+# skip, because a suite that skipped everything prints almost the same thing as
+# a suite that passed — and that is the single most dangerous failure mode of
+# testing without CI.
+#
+# Installed by `make hooks`. Bypass with `git push --no-verify`.
+#
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+TEST_DATABASE_URL="${CUCKOO_TEST_DATABASE_URL:-postgres://cuckoo:cuckoo@localhost:5433/cuckoo_test?sslmode=disable}"
+
+echo "pre-push:"
+
+# The database must be reachable, or the tests below are theatre.
+if ! docker compose exec -T postgres pg_isready -U cuckoo -q 2>/dev/null; then
+  echo
+  printf '  \033[31m✗\033[0m Postgres is not running.\n'
+  echo
+  echo "  The database tests would skip, and a skipped test is not a passing"
+  echo "  test. Start it and push again:"
+  echo
+  echo "      make up"
+  echo
+  echo "  To push anyway: git push --no-verify"
+  exit 1
+fi
+
+failed=0
+step() {
+  local name="$1"; shift
+  local output
+  if output=$("$@" 2>&1); then
+    printf '  \033[32m✓\033[0m %s\n' "$name"
+  else
+    printf '  \033[31m✗\033[0m %s\n' "$name"
+    printf '%s\n' "$output" | tail -30 | sed 's/^/      /'
+    failed=1
+  fi
+}
+
+step "file size limit" ./scripts/check-file-size.sh
+step "no credentials"  ./scripts/check-secrets.sh --all
+step "build"           bash -c 'cd server && go build ./...'
+step "tests (-race)"   bash -c "cd server && CUCKOO_TEST_DATABASE_URL='$TEST_DATABASE_URL' go test ./... -race -count=1"
+
+if [[ $failed -ne 0 ]]; then
+  echo
+  echo "Push refused. Run \`make ci\` for the full report."
+  exit 1
+fi
+
+exit 0

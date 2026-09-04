@@ -58,6 +58,9 @@ ports, so Cuckoo can run alongside another project's containers.
 | `make lint` | Run the linter |
 | `make gen` | Regenerate typed database code from SQL |
 | `make check` | Full verification — run this before every commit |
+| `make ci` | Local CI: everything above plus migrate-from-empty and lint |
+| `make watch` | Rerun tests on every file change |
+| `make hooks` | Install the git hooks (once per clone) |
 | `make size-top` | Show the longest source files |
 | `make psql` | Open a shell on the development database |
 
@@ -96,6 +99,9 @@ scripts/         developer tooling
   second job.
 - **Nothing speculative.** Each migration adds only what the code in the same
   change uses. No placeholder packages, no unused containers.
+- **Verification runs locally.** There is no hosted CI. `make hooks` installs a
+  fast pre-commit check and a full pre-push one; `make ci` is the complete run,
+  including migrating a fresh database from empty.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add a feature.
 

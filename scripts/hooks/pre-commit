@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+#
+# pre-commit — the fast gate. Budget: under one second.
+#
+# Speed is the whole design. A hook that takes longer than a couple of seconds
+# gets bypassed with --no-verify, and a bypassed hook protects nothing. So this
+# runs only checks that are nearly instant; the build and the test suite belong
+# to pre-push.
+#
+# Installed by `make hooks`. Bypass with `git commit --no-verify` when you
+# genuinely need to (a work-in-progress commit on a private branch).
+#
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+failed=0
+step() {
+  local name="$1"; shift
+  local output
+  if output=$("$@" 2>&1); then
+    printf '  \033[32m✓\033[0m %s\n' "$name"
+  else
+    printf '  \033[31m✗\033[0m %s\n' "$name"
+    printf '%s\n' "$output" | sed 's/^/      /'
+    failed=1
+  fi
+}
+
+echo "pre-commit:"
+
+# Nothing staged means nothing to check (an --amend of the message, say).
+if git diff --cached --quiet; then
+  echo "  nothing staged"
+  exit 0
+fi
+
+step "no credentials"     ./scripts/check-secrets.sh
+step "file size limit"    ./scripts/check-file-size.sh
+
+# gofmt is checked only on staged Go files, so an unrelated messy file
+# elsewhere cannot block an unrelated commit.
+staged_go=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' | grep -v '/gen/' || true)
+if [[ -n "$staged_go" ]]; then
+  unformatted=$(gofmt -l $staged_go 2>/dev/null || true)
+  if [[ -z "$unformatted" ]]; then
+    printf '  \033[32m✓\033[0m gofmt\n'
+  else
+    printf '  \033[31m✗\033[0m gofmt — run `make fmt`:\n'
+    printf '%s\n' "$unformatted" | sed 's/^/      /'
+    failed=1
+  fi
+
+  step "go vet" bash -c 'cd server && go vet ./...'
+fi
+
+if [[ $failed -ne 0 ]]; then
+  echo
+  echo "Commit refused. Fix the above, or use --no-verify if you know why."
+  exit 1
+fi
+
+exit 0
