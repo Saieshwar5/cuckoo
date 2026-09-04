@@ -13,8 +13,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/Saieshwar5/cuckoo/server/internal/agents"
+	"github.com/Saieshwar5/cuckoo/server/internal/api/agentapi"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/client"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
+	"github.com/Saieshwar5/cuckoo/server/internal/api/mgmt"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/middleware"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
@@ -26,8 +29,15 @@ import (
 // makes the whole router constructible in a test in one line.
 type Deps struct {
 	Logger *slog.Logger
-	Auth   middleware.Authenticator
+
+	// UserAuth identifies people; AgentAuth identifies agent backends. They
+	// are different credentials producing different principals, and each API
+	// below accepts exactly one of them.
+	UserAuth  middleware.Authenticator
+	AgentAuth middleware.Authenticator
+
 	Users  *users.Service
+	Agents *agents.Service
 	Health map[string]HealthCheck
 }
 
@@ -57,12 +67,23 @@ func NewRouter(d Deps) http.Handler {
 
 	// The app's API. Every route below requires a signed-in person.
 	r.Route("/v1/client", func(r chi.Router) {
-		r.Use(middleware.RequireUser(d.Auth))
+		r.Use(middleware.RequireUser(d.UserAuth))
 		r.Mount("/", client.New(d.Users).Routes())
 	})
 
-	// /v1/agent — the agent protocol — and /v1/mgmt — agent management — mount
-	// here next, each behind its own authentication.
+	// Agent management: owners creating agents and connecting backends.
+	// Also a signed-in person; later also an API key producing the same
+	// principal, through the same routes.
+	r.Route("/v1/mgmt", func(r chi.Router) {
+		r.Use(middleware.RequireUser(d.UserAuth))
+		r.Mount("/", mgmt.New(d.Agents).Routes())
+	})
+
+	// The agent protocol. Only a binding secret gets in.
+	r.Route("/v1/agent", func(r chi.Router) {
+		r.Use(middleware.RequireAgent(d.AgentAuth))
+		r.Mount("/", agentapi.New(d.Agents).Routes())
+	})
 
 	return r
 }

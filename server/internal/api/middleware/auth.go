@@ -40,3 +40,25 @@ func RequireUser(a Authenticator) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// RequireAgent rejects any request that does not carry a valid agent binding
+// secret, and places the agent identity in the request context.
+func RequireAgent(a Authenticator) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p, err := a.Authenticate(r)
+			if err != nil {
+				httpx.Error(w, r, err)
+				return
+			}
+
+			if !p.IsAgent() {
+				httpx.Error(w, r, domain.Forbidden("agent_required",
+					"This endpoint is for agent backends."))
+				return
+			}
+
+			next.ServeHTTP(w, r.WithContext(principal.NewContext(r.Context(), p)))
+		})
+	}
+}
