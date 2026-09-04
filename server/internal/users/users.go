@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/store/gen"
+	"github.com/Saieshwar5/cuckoo/server/internal/store/gen"
 )
 
 // Store is the slice of the database this package needs.

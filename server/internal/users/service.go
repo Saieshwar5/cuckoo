@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
-	"github.com/cuckoo-chat/cuckoo/server/internal/store"
-	"github.com/cuckoo-chat/cuckoo/server/internal/store/gen"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/store"
+	"github.com/Saieshwar5/cuckoo/server/internal/store/gen"
 )
 
 // Service holds the rules for user accounts.

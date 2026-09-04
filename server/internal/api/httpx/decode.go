@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 )
 
 // maxRequestBody caps how much a caller can make the server read.

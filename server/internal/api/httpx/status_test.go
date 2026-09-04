@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 )
 
 // The mapping is part of the public protocol: agent backends branch on these

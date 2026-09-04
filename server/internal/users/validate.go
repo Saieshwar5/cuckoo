@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 )
 
 // DefaultLocale is used when an account is created without one. India first,

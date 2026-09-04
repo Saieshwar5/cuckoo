@@ -3,7 +3,7 @@ package httpx
 import (
 	"net/http"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 )
 
 // statusFor maps a failure class to an HTTP status.

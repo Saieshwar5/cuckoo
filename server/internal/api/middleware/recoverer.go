@@ -7,8 +7,8 @@ import (
 
 	chimw "github.com/go-chi/chi/v5/middleware"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/api/httpx"
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 )
 
 // Recoverer turns a panic into a logged 500 instead of a dead connection.

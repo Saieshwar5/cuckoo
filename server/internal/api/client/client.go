@@ -9,7 +9,7 @@ package client
 import (
 	"github.com/go-chi/chi/v5"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/users"
+	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
 // Handler holds the services the client API needs.

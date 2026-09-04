@@ -8,8 +8,8 @@ package auth
 import (
 	"net/http"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
-	"github.com/cuckoo-chat/cuckoo/server/internal/principal"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/principal"
 )
 
 // DevHeader names the user a development request acts as.

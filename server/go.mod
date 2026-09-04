@@ -1,4 +1,4 @@
-module github.com/cuckoo-chat/cuckoo/server
+module github.com/Saieshwar5/cuckoo/server
 
 go 1.26.6
 

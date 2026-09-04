@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 )
 
 // JSON writes a success response.

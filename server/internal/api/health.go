@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/api/httpx"
+	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
 )
 
 // HealthCheck reports whether one dependency is usable.

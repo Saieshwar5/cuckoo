@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/api/httpx"
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
-	"github.com/cuckoo-chat/cuckoo/server/internal/principal"
-	"github.com/cuckoo-chat/cuckoo/server/internal/users"
+	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/principal"
+	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
 // userResponse is the wire shape of an account.

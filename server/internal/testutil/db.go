@@ -19,7 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/store"
+	"github.com/Saieshwar5/cuckoo/server/internal/store"
 )
 
 // defaultTestDatabaseURL matches what `make up` creates. Tests never touch the

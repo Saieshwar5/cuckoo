@@ -9,11 +9,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/api"
-	"github.com/cuckoo-chat/cuckoo/server/internal/auth"
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
-	"github.com/cuckoo-chat/cuckoo/server/internal/store"
-	"github.com/cuckoo-chat/cuckoo/server/internal/users"
+	"github.com/Saieshwar5/cuckoo/server/internal/api"
+	"github.com/Saieshwar5/cuckoo/server/internal/auth"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/store"
+	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
 // Server is the whole HTTP stack — routing, middleware, authentication,

@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
-	"github.com/cuckoo-chat/cuckoo/server/internal/testutil"
-	"github.com/cuckoo-chat/cuckoo/server/internal/users"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/testutil"
+	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
 // newService returns a service over a transactional store. Every test gets its

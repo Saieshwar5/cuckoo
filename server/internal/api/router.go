@@ -13,11 +13,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/api/client"
-	"github.com/cuckoo-chat/cuckoo/server/internal/api/httpx"
-	"github.com/cuckoo-chat/cuckoo/server/internal/api/middleware"
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
-	"github.com/cuckoo-chat/cuckoo/server/internal/users"
+	"github.com/Saieshwar5/cuckoo/server/internal/api/client"
+	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
+	"github.com/Saieshwar5/cuckoo/server/internal/api/middleware"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
 // Deps is everything the HTTP layer needs, supplied by main.

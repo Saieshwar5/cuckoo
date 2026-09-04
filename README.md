@@ -101,5 +101,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add a feature.
 
 ## Licence
 
-Not yet chosen — see the open questions in the planning documents. The intent is
-to open-source the server.
+GPL-3.0. See [LICENSE](LICENSE).

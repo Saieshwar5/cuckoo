@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/store"
-	"github.com/cuckoo-chat/cuckoo/server/internal/users"
+	"github.com/Saieshwar5/cuckoo/server/internal/store"
+	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
 // fixtureSeq keeps generated values distinct within a test binary, so a test

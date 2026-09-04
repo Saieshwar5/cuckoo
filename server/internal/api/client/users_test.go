@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/auth"
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
-	"github.com/cuckoo-chat/cuckoo/server/internal/testutil"
-	"github.com/cuckoo-chat/cuckoo/server/internal/users"
+	"github.com/Saieshwar5/cuckoo/server/internal/auth"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/testutil"
+	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
 // meResponse mirrors what the app parses. It is written out here rather than

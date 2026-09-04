@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 )
 
 func TestValidateDisplayName(t *testing.T) {

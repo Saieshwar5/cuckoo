@@ -20,12 +20,12 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/api"
-	"github.com/cuckoo-chat/cuckoo/server/internal/api/middleware"
-	"github.com/cuckoo-chat/cuckoo/server/internal/auth"
-	"github.com/cuckoo-chat/cuckoo/server/internal/config"
-	"github.com/cuckoo-chat/cuckoo/server/internal/store"
-	"github.com/cuckoo-chat/cuckoo/server/internal/users"
+	"github.com/Saieshwar5/cuckoo/server/internal/api"
+	"github.com/Saieshwar5/cuckoo/server/internal/api/middleware"
+	"github.com/Saieshwar5/cuckoo/server/internal/auth"
+	"github.com/Saieshwar5/cuckoo/server/internal/config"
+	"github.com/Saieshwar5/cuckoo/server/internal/store"
+	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
 func main() {

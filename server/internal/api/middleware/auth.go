@@ -3,9 +3,9 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/cuckoo-chat/cuckoo/server/internal/api/httpx"
-	"github.com/cuckoo-chat/cuckoo/server/internal/domain"
-	"github.com/cuckoo-chat/cuckoo/server/internal/principal"
+	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/principal"
 )
 
 // Authenticator identifies the caller behind a request.
