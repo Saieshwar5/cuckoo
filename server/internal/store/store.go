@@ -13,15 +13,21 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/store/gen"
 )
 
 // Store is the handle every business package uses to reach the database.
+//
+// Exactly one of pool or tx is set. A pool-backed Store opens real
+// transactions; a tx-backed Store — every test, and the inside of WithTx —
+// nests with savepoints.
 type Store struct {
 	*gen.Queries
-	pool *pgxpool.Pool // nil when the Store is backed by a transaction
+	pool *pgxpool.Pool
+	tx   pgx.Tx
 }
 
 // Open connects to Postgres and verifies the connection.
@@ -47,7 +53,11 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 // NewFromDBTX builds a Store over any pgx executor — a pool, a connection, or a
 // transaction. Tests use it to run against a transaction that is rolled back.
 func NewFromDBTX(db gen.DBTX) *Store {
-	return &Store{Queries: gen.New(db)}
+	s := &Store{Queries: gen.New(db)}
+	if tx, ok := db.(pgx.Tx); ok {
+		s.tx = tx
+	}
+	return s
 }
 
 // Ping reports whether the database is reachable. Used by /healthz.
@@ -68,17 +78,29 @@ func (s *Store) Close() {
 // WithTx runs fn inside a database transaction, committing if it returns nil
 // and rolling back otherwise.
 //
+// Inside an existing transaction it opens a savepoint instead. That matters
+// more than it sounds: Postgres aborts a transaction on any error, including a
+// constraint violation, and refuses every statement after it. A savepoint
+// contains the failure — roll back to it and the enclosing transaction is
+// usable again. Without this, a test that provokes one duplicate-handle
+// conflict could never make another query, and a production request that
+// tried an insert before doing something else would be in the same state.
+//
 // The Store handed to fn is scoped to the transaction; using the outer Store
 // inside fn would silently escape it, so fn should only ever use its argument.
 func (s *Store) WithTx(ctx context.Context, fn func(*Store) error) error {
-	if s.pool == nil {
-		// Already inside a transaction (a test, or a nested call). Postgres
-		// savepoints would let this nest, but no caller needs that yet and
-		// pretending to start a transaction we cannot commit would be worse.
-		return fn(s)
+	var (
+		tx  pgx.Tx
+		err error
+	)
+	switch {
+	case s.tx != nil:
+		tx, err = s.tx.Begin(ctx) // pgx: a nested Begin is a savepoint
+	case s.pool != nil:
+		tx, err = s.pool.Begin(ctx)
+	default:
+		return errors.New("store: no transaction source")
 	}
-
-	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
@@ -104,4 +126,14 @@ func (s *Store) WithTx(ctx context.Context, fn func(*Store) error) error {
 // which keeps pgx out of every package that reads from the database.
 func IsNoRows(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
+}
+
+// IsUniqueViolation reports whether err is Postgres refusing a duplicate.
+//
+// Business packages turn this into a domain Conflict — "that handle is
+// taken" — rather than a 500, and rely on the database rather than a
+// check-then-insert, which has a race the database does not.
+func IsUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

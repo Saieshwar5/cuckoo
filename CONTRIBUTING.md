@@ -73,6 +73,10 @@ containers nothing talks to. Add it in the change that needs it.
   move must backdate a row first (see `TestUpdateProfileTouchesUpdatedAt`).
 - Soft-delete anything a person can see the history of. Chat history must
   survive a departed account or a revoked agent.
+- A write that can violate a constraint — a unique handle, say — runs inside
+  `store.WithTx`. Postgres aborts a transaction on any error, and tests share
+  one transaction per test; `WithTx` nests as a savepoint, so the failure is
+  contained and the rest of the test (or request) can continue.
 - Configuration comes from the environment only. Every problem is reported at
   once, so a broken deployment is fixed in one pass.
 

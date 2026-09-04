@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -49,4 +50,52 @@ func CreateUser(t *testing.T, db *store.Store, opts ...UserOption) users.User {
 		t.Fatalf("testutil: create user fixture: %v", err)
 	}
 	return user
+}
+
+// AgentOption customises an agent fixture.
+type AgentOption func(*agents.CreateInput)
+
+// WithHandle sets the fixture's handle.
+func WithHandle(handle string) AgentOption {
+	return func(in *agents.CreateInput) { in.Handle = handle }
+}
+
+// WithAgentName sets the fixture's display name.
+func WithAgentName(name string) AgentOption {
+	return func(in *agents.CreateInput) { in.DisplayName = name }
+}
+
+// CreateAgent inserts an agent owned by the given user, through the real
+// service so it can only hold values the application accepts.
+func CreateAgent(t *testing.T, db *store.Store, owner users.User, opts ...AgentOption) agents.Agent {
+	t.Helper()
+
+	n := fixtureSeq.Add(1)
+	in := agents.CreateInput{
+		Handle:      fmt.Sprintf("test-agent-%d", n),
+		DisplayName: fmt.Sprintf("Test Agent %d", n),
+		Description: "A fixture.",
+	}
+	for _, opt := range opts {
+		opt(&in)
+	}
+
+	agent, err := agents.New(db).Create(context.Background(), owner.ID, in)
+	if err != nil {
+		t.Fatalf("testutil: create agent fixture: %v", err)
+	}
+	return agent
+}
+
+// BindAgent gives an agent a socket binding and returns it with its secret —
+// the one place outside the management API where the plaintext is visible.
+func BindAgent(t *testing.T, db *store.Store, agent agents.Agent) (agents.Binding, string) {
+	t.Helper()
+
+	binding, secret, err := agents.New(db).SetBinding(context.Background(), agent.OwnerID, agent.ID,
+		agents.SetBindingInput{Mode: agents.ModeSocket})
+	if err != nil {
+		t.Fatalf("testutil: bind agent fixture: %v", err)
+	}
+	return binding, secret
 }

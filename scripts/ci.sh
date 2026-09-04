@@ -64,8 +64,21 @@ step "go vet"                 bash -c 'cd server && go vet ./...'
 step "build"                  bash -c 'cd server && go build ./...'
 
 # ── Generated code matches its source ────────────────────────────────────────
+# Regenerate and compare the output with itself from a moment ago. Comparing
+# against git instead would call correct-but-unstaged output stale, which is
+# exactly the state a developer is in between `make gen` and `git add`.
+gen_fingerprint() {
+  find server/internal/store/gen -type f -name '*.go' -exec sha256sum {} + | sort | sha256sum
+}
 if [[ -x "$SQLC" ]]; then
-  step "generated code is current" bash -c "cd server && '$SQLC' generate && git diff --quiet -- internal/store/gen || { echo 'internal/store/gen is stale — run make gen and commit the result'; git --no-pager diff -- internal/store/gen; false; }"
+  step "generated code is current" bash -c "
+    before=\$($(declare -f gen_fingerprint); gen_fingerprint)
+    (cd server && '$SQLC' generate) || exit 1
+    after=\$($(declare -f gen_fingerprint); gen_fingerprint)
+    if [[ \"\$before\" != \"\$after\" ]]; then
+      echo 'internal/store/gen was stale — it has been regenerated; review and commit it'
+      exit 1
+    fi"
 else
   skip "generated code is current" "sqlc missing, run make tools"
 fi

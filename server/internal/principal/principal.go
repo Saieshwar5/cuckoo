@@ -71,3 +71,13 @@ func UserID(ctx context.Context) (uuid.UUID, bool) {
 	}
 	return p.UserID, true
 }
+
+// AgentID returns the calling agent's identifier, reporting false for an
+// unauthenticated request or a human caller.
+func AgentID(ctx context.Context) (uuid.UUID, bool) {
+	p, ok := FromContext(ctx)
+	if !ok || !p.IsAgent() {
+		return uuid.Nil, false
+	}
+	return p.AgentID, true
+}

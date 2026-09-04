@@ -20,6 +20,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/api"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/middleware"
 	"github.com/Saieshwar5/cuckoo/server/internal/auth"
@@ -75,10 +76,14 @@ func run() error {
 	}
 	defer func() { _ = redisClient.Close() }()
 
+	agentService := agents.New(db)
+
 	router := api.NewRouter(api.Deps{
-		Logger: log,
-		Auth:   authenticator,
-		Users:  users.New(db),
+		Logger:    log,
+		UserAuth:  authenticator,
+		AgentAuth: auth.NewBinding(agentService),
+		Users:     users.New(db),
+		Agents:    agentService,
 		Health: map[string]api.HealthCheck{
 			"postgres": db.Ping,
 			"redis":    func(ctx context.Context) error { return redisClient.Ping(ctx).Err() },

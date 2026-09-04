@@ -10,6 +10,29 @@ import (
 	"github.com/google/uuid"
 )
 
+type Agent struct {
+	ID          uuid.UUID
+	OwnerUserID uuid.UUID
+	Handle      string
+	DisplayName string
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	DeletedAt   *time.Time
+}
+
+type AgentBinding struct {
+	ID         uuid.UUID
+	AgentID    uuid.UUID
+	Mode       string
+	WebhookUrl *string
+	SecretHash []byte
+	Status     string
+	LastSeenAt *time.Time
+	CreatedAt  time.Time
+	RevokedAt  *time.Time
+}
+
 type User struct {
 	ID          uuid.UUID
 	DisplayName string

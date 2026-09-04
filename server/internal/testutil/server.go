@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/api"
 	"github.com/Saieshwar5/cuckoo/server/internal/auth"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
@@ -31,11 +32,14 @@ type Server struct {
 func NewServer(t *testing.T, db *store.Store) *Server {
 	t.Helper()
 
+	agentService := agents.New(db)
 	handler := api.NewRouter(api.Deps{
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Auth:   auth.NewDev(),
-		Users:  users.New(db),
-		Health: map[string]api.HealthCheck{},
+		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		UserAuth:  auth.NewDev(),
+		AgentAuth: auth.NewBinding(agentService),
+		Users:     users.New(db),
+		Agents:    agentService,
+		Health:    map[string]api.HealthCheck{},
 	})
 
 	srv := httptest.NewServer(handler)
@@ -61,6 +65,17 @@ func (s *Server) AsUser(t *testing.T, user users.User) *Client {
 	}
 }
 
+// AsAgent returns a client authenticated with a binding secret, as an agent
+// backend would be.
+func (s *Server) AsAgent(t *testing.T, secret string) *Client {
+	t.Helper()
+	return &Client{
+		t:       t,
+		baseURL: s.URL,
+		headers: map[string]string{"Authorization": "Bearer " + secret},
+	}
+}
+
 // Anonymous returns a client with no credentials.
 func (s *Server) Anonymous(t *testing.T) *Client {
 	t.Helper()
@@ -81,10 +96,18 @@ func (c *Client) WithHeader(key, value string) *Client {
 // Get issues a GET request.
 func (c *Client) Get(path string) *Response { return c.do(http.MethodGet, path, nil) }
 
+// Post issues a POST request with a JSON body.
+func (c *Client) Post(path string, body any) *Response {
+	return c.do(http.MethodPost, path, body)
+}
+
 // Patch issues a PATCH request with a JSON body.
 func (c *Client) Patch(path string, body any) *Response {
 	return c.do(http.MethodPatch, path, body)
 }
+
+// Delete issues a DELETE request.
+func (c *Client) Delete(path string) *Response { return c.do(http.MethodDelete, path, nil) }
 
 // PatchRaw issues a PATCH request with a body sent exactly as given, for
 // testing malformed JSON.
