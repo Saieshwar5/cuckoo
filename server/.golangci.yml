@@ -1,38 +1,48 @@
 # Linters chosen to catch real defects, not to argue about style. gofmt settles
 # formatting; anything that only produces noise is off.
+#
+# errcheck, govet, ineffassign, staticcheck and unused are enabled by default in
+# golangci-lint v2 and are not repeated here.
 
-run:
-  timeout: 3m
+version: "2"
 
 linters:
   enable:
-    - errcheck      # an ignored error is the most common bug in Go
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    - bodyclose     # leaked response bodies exhaust connections under load
+    - bodyclose     # a leaked response body exhausts connections under load
     - contextcheck  # a dropped context breaks cancellation and timeouts
     - errorlint     # comparing errors with == misses wrapped ones
     - gosec
     - misspell
-    - nilerr
+    - nilerr        # returning nil after checking err != nil
     - rowserrcheck
     - sqlclosecheck
     - unconvert
     - wastedassign
 
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-  gosec:
-    excludes:
-      - G104  # duplicates errcheck
+  settings:
+    errcheck:
+      check-type-assertions: true
+    gosec:
+      excludes:
+        - G104      # duplicates errcheck
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - std-error-handling
+    rules:
+      # Tests may assert on results without handling every error path.
+      - path: _test\.go
+        linters: [errcheck, gosec, bodyclose]
+    # Deliberately no "examples$" here: the reference agents in examples/ are
+    # the first thing an outside developer reads, so they are held to the same
+    # standard as the server.
+    paths:
+      - third_party$
+      - builtin$
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    # Tests may assert on results without handling every error path.
-    - path: _test\.go
-      linters: [errcheck, gosec, bodyclose]

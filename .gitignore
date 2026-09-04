@@ -72,3 +72,6 @@ Thumbs.db
 *.log
 npm-debug.log*
 yarn-error.log*
+
+# Backup written by `golangci-lint migrate`
+*.bck.yml

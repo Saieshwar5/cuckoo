@@ -28,6 +28,11 @@ func Recoverer(log *slog.Logger) func(http.Handler) http.Handler {
 				// A client that hangs up mid-request surfaces as this panic
 				// value. Nothing is wrong with the server, and there is no
 				// connection left to answer on.
+				//
+				// recover() yields `any`, not an error, and net/http panics
+				// with this exact sentinel value — so identity comparison is
+				// both correct and what the standard library itself does.
+				//nolint:errorlint // sentinel panic value, not a wrapped error
 				if rec == http.ErrAbortHandler {
 					panic(rec)
 				}

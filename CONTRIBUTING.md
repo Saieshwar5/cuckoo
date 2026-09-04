@@ -76,20 +76,62 @@ containers nothing talks to. Add it in the change that needs it.
 - Configuration comes from the environment only. Every problem is reported at
   once, so a broken deployment is fixed in one pass.
 
-## Before committing
+## Verification
 
-There is no CI on this repository, so this command is the only gate. Run it
-every time.
+There is no hosted CI on this repository, so verification runs on your machine.
+Install the hooks once and most of it happens without you thinking about it:
 
 ```bash
-make up         # if Postgres and Redis are not already running
-make check      # file-size guard, linter, and the full test suite
+make hooks
 ```
 
-`make check` must be green before you commit. If the database is not running,
-database tests skip rather than fail — which is convenient locally and
-dangerous silently, so run `make up` first and check the output says tests
-passed rather than that they were skipped.
+That points `core.hooksPath` at `scripts/hooks`, so the hooks live in the
+repository and are versioned like everything else.
 
-A GitHub Actions workflow running exactly these steps is easy to add if Actions
-becomes available; nothing in the project depends on its absence.
+### The three gates
+
+| When | What runs | Time |
+|---|---|---|
+| `git commit` | secrets, file size, gofmt, `go vet` | **~0.3s** |
+| `git push` | build, full suite with `-race`, size, secrets | **~5s** |
+| `make ci` | all of the above, plus a migrate-from-empty check, sqlc drift, and the linter | **~9s** |
+
+Run `make ci` before opening a pull request. It is the closest thing to a real
+CI run, and it checks two things nothing else does:
+
+**It rebuilds the test database and migrates from empty.** Your development
+database already has every table, so a broken migration keeps working locally
+forever and fails on a self-hoster's first install. Migrating from nothing is
+the only way to catch it.
+
+**It regenerates the sqlc output and fails if it differs.** Edit a query, forget
+`make gen`, and your Go and your schema disagree with nothing to notice.
+
+### While you work
+
+```bash
+make watch                      # rerun tests on every save, no database
+WATCH_FULL=1 make watch         # include database tests
+make watch ARGS=./internal/users   # one package
+```
+
+### Rules the hooks enforce
+
+**Never commit a credential.** This repository is public: a pushed secret is
+scraped within minutes and deleting the commit does not un-leak it. Assume
+anything committed is compromised and rotate it. `scripts/check-secrets.sh`
+matches only high-confidence patterns — private keys, known token formats,
+files that should never be tracked — so that it stays worth listening to. If it
+flags something that genuinely is not a secret, put `ci:allow-secret` in a
+comment on that line.
+
+**A skipped test is not a passing test.** If Postgres is not running, the
+database tests skip and the output looks almost identical to success. `pre-push`
+refuses to run at all in that state; set `CI=true` to turn skips into failures
+anywhere else.
+
+### Bypassing
+
+`git commit --no-verify` and `git push --no-verify` both work, and are the right
+call for a work-in-progress commit on a private branch. They are not the right
+call for anything reaching `main`. `make unhook` removes the hooks entirely.

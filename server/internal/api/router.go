@@ -36,7 +36,12 @@ func NewRouter(d Deps) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(chimw.RequestID)
-	r.Use(chimw.RealIP)
+	// chi's RealIP is deliberately absent. It rewrites RemoteAddr from
+	// X-Forwarded-For / X-Real-IP, which any client can forge, so the moment
+	// anything trusts RemoteAddr — rate limiting by address, abuse blocking —
+	// a caller could spoof another user's address or evade their own limit.
+	// When real client addresses are needed, they must come from a proxy we
+	// configure and trust by name, not from a header we accept from anyone.
 	r.Use(middleware.Recoverer(d.Logger))
 	r.Use(middleware.Logger(d.Logger))
 

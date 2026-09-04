@@ -25,6 +25,10 @@ import (
 // defaultTestDatabaseURL matches what `make up` creates. Tests never touch the
 // development database, so a test run can never destroy data you are looking
 // at in the app.
+// The credentials here are the throwaway ones `make up` creates for a local
+// container. Nothing outside a developer's machine ever accepts them.
+//
+//nolint:gosec // G101: local development database, not a real credential
 const defaultTestDatabaseURL = "postgres://cuckoo:cuckoo@localhost:5433/cuckoo_test?sslmode=disable"
 
 var (
