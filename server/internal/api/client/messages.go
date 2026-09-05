@@ -62,8 +62,12 @@ func newMessageResponse(m conversations.Message) messageResponse {
 	return resp
 }
 
+// sendMessageRequest is a send. The idempotency key is optional on the wire
+// and always sent by the app: a retry after a dropped response returns the
+// message already created rather than a duplicate bubble.
 type sendMessageRequest struct {
-	Text string `json:"text"`
+	Text           string `json:"text"`
+	IdempotencyKey string `json:"idempotency_key"`
 }
 
 func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
@@ -84,12 +88,20 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg, err := h.conversations.SendText(r.Context(), userID, conversationID, req.Text)
+	res, err := h.conversations.SendAsUser(r.Context(), userID, conversationID, conversations.SendInput{
+		Text:           req.Text,
+		IdempotencyKey: req.IdempotencyKey,
+	})
 	if err != nil {
 		httpx.Error(w, r, err)
 		return
 	}
-	httpx.JSON(w, r, http.StatusCreated, messageEnvelope{Message: newMessageResponse(msg)})
+
+	status := http.StatusCreated
+	if !res.Created {
+		status = http.StatusOK
+	}
+	httpx.JSON(w, r, status, messageEnvelope{Message: newMessageResponse(res.Message)})
 }
 
 func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {

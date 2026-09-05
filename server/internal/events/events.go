@@ -77,44 +77,67 @@ type Participant struct {
 // NewMessageCreated builds the event agentID receives for msg in conv.
 func NewMessageCreated(eventID uuid.UUID, createdAt time.Time, agentID uuid.UUID,
 	msg conversations.Message, conv conversations.Conversation) Envelope {
-
-	participants := make([]Participant, 0, len(conv.Participants))
-	senderName := ""
-	for _, p := range conv.Participants {
-		if p.Kind == msg.Sender.Kind && p.ID == msg.Sender.ID {
-			senderName = p.DisplayName
-		}
-		participants = append(participants, Participant{
-			Kind:        string(p.Kind),
-			ID:          formatParticipantID(p.Kind, p.ID),
-			DisplayName: p.DisplayName,
-			Handle:      p.Handle,
-			IsMe:        p.Kind == conversations.ParticipantAgent && p.ID == agentID,
-		})
-	}
-
 	return Envelope{
 		ID:        domain.FormatID(domain.PrefixEvent, eventID),
 		Type:      TypeMessageCreated,
 		CreatedAt: createdAt,
 		AgentID:   domain.FormatID(domain.PrefixAgent, agentID),
 		Data: MessageCreated{
-			Conversation: Conversation{
-				ID:   domain.FormatID(domain.PrefixConv, conv.ID),
-				Kind: string(conv.Kind),
-			},
-			Message: Message{
-				ID: domain.FormatID(domain.PrefixMessage, msg.ID),
-				Sender: Sender{
-					Kind:        string(msg.Sender.Kind),
-					ID:          formatParticipantID(msg.Sender.Kind, msg.Sender.ID),
-					DisplayName: senderName,
-				},
-				Body:      Body{Text: msg.Body.Text},
-				CreatedAt: msg.CreatedAt,
-			},
-			Participants: participants,
+			Conversation: ConversationOf(conv),
+			Message:      MessageOf(msg, SenderName(conv, msg.Sender)),
+			Participants: ParticipantsOf(conv, agentID),
 		},
+	}
+}
+
+// ConversationOf is the wire form of a conversation.
+func ConversationOf(conv conversations.Conversation) Conversation {
+	return Conversation{
+		ID:   domain.FormatID(domain.PrefixConv, conv.ID),
+		Kind: string(conv.Kind),
+	}
+}
+
+// ParticipantsOf is the wire form of a conversation's members as seen by
+// the agent me.
+func ParticipantsOf(conv conversations.Conversation, me uuid.UUID) []Participant {
+	out := make([]Participant, 0, len(conv.Participants))
+	for _, p := range conv.Participants {
+		out = append(out, Participant{
+			Kind:        string(p.Kind),
+			ID:          formatParticipantID(p.Kind, p.ID),
+			DisplayName: p.DisplayName,
+			Handle:      p.Handle,
+			IsMe:        p.Kind == conversations.ParticipantAgent && p.ID == me,
+		})
+	}
+	return out
+}
+
+// SenderName is the current display name of a message's sender, found among
+// the conversation's members. Empty if the sender is no longer one.
+func SenderName(conv conversations.Conversation, sender conversations.Sender) string {
+	for _, p := range conv.Participants {
+		if p.Kind == sender.Kind && p.ID == sender.ID {
+			return p.DisplayName
+		}
+	}
+	return ""
+}
+
+// MessageOf is the wire form of a message. The same shape whether it
+// arrives in an event, a history page, or as the answer to a send, so a
+// backend has one parser.
+func MessageOf(msg conversations.Message, senderName string) Message {
+	return Message{
+		ID: domain.FormatID(domain.PrefixMessage, msg.ID),
+		Sender: Sender{
+			Kind:        string(msg.Sender.Kind),
+			ID:          formatParticipantID(msg.Sender.Kind, msg.Sender.ID),
+			DisplayName: senderName,
+		},
+		Body:      Body{Text: msg.Body.Text},
+		CreatedAt: msg.CreatedAt,
 	}
 }
 

@@ -9,7 +9,9 @@ package httpx
 import (
 	"encoding/json"
 	"log/slog"
+	"math"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5/middleware"
 
@@ -67,6 +69,13 @@ func Error(w http.ResponseWriter, r *http.Request, err error) {
 	}
 
 	status := statusFor(domainErr.Kind)
+
+	// Whole seconds, never zero: a client told to wait 0 retries at once,
+	// which is exactly what the limit exists to prevent.
+	if domainErr.RetryAfter > 0 {
+		w.Header().Set("Retry-After",
+			strconv.Itoa(int(math.Ceil(domainErr.RetryAfter.Seconds()))))
+	}
 
 	if status >= http.StatusInternalServerError {
 		slog.ErrorContext(r.Context(), "request failed",

@@ -10,18 +10,20 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
+	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 )
 
 // Handler holds the services the agent API needs.
 type Handler struct {
-	agents   *agents.Service
-	delivery *delivery.Service
+	agents        *agents.Service
+	delivery      *delivery.Service
+	conversations *conversations.Service
 }
 
 // New builds the agent API handler.
-func New(agentService *agents.Service, deliveryService *delivery.Service) *Handler {
-	return &Handler{agents: agentService, delivery: deliveryService}
+func New(agentService *agents.Service, deliveryService *delivery.Service, conversationService *conversations.Service) *Handler {
+	return &Handler{agents: agentService, delivery: deliveryService, conversations: conversationService}
 }
 
 // Routes returns the agent protocol routes, to be mounted behind agent
@@ -31,6 +33,12 @@ func (h *Handler) Routes() chi.Router {
 
 	r.Get("/me", h.getMe)
 	r.Get("/events", h.listEvents)
+
+	r.Route("/conversations/{id}", func(r chi.Router) {
+		r.Get("/", h.getConversation)
+		r.Get("/messages", h.listMessages)
+		r.Post("/messages", h.sendMessage)
+	})
 
 	return r
 }

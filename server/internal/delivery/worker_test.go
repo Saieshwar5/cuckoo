@@ -95,11 +95,11 @@ func setup(t *testing.T) *fixture {
 
 func (f *fixture) send(t *testing.T, conv conversations.Conversation, text string) conversations.Message {
 	t.Helper()
-	msg, err := f.convs.SendText(context.Background(), f.owner.ID, conv.ID, text)
+	res, err := f.convs.SendAsUser(context.Background(), f.owner.ID, conv.ID, conversations.SendInput{Text: text})
 	if err != nil {
-		t.Fatalf("SendText %q: %v", text, err)
+		t.Fatalf("SendAsUser %q: %v", text, err)
 	}
-	return msg
+	return res.Message
 }
 
 func (f *fixture) runOnce(t *testing.T) int {

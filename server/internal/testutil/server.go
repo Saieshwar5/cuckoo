@@ -35,7 +35,7 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 	t.Helper()
 
 	agentService := agents.New(db)
-	conversationService := conversations.New(db)
+	conversationService := conversations.New(db, conversations.WithLimiter(NewLimiter(t)))
 	handler := api.NewRouter(api.Deps{
 		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		UserAuth:      auth.NewDev(),
@@ -165,5 +165,5 @@ func (c *Client) send(method, path string, body []byte, contentType string) *Res
 		c.t.Fatalf("testutil: read response body: %v", err)
 	}
 
-	return &Response{t: c.t, Status: resp.StatusCode, Body: payload}
+	return &Response{t: c.t, Status: resp.StatusCode, Header: resp.Header, Body: payload}
 }

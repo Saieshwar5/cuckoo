@@ -92,6 +92,21 @@ type Message struct {
 	CreatedAt      time.Time
 }
 
+// SendInput is what a sender supplies. IdempotencyKey is optional: a sender
+// that retries after a lost response sends the same key and gets the same
+// message back instead of a duplicate.
+type SendInput struct {
+	Text           string
+	IdempotencyKey string
+}
+
+// SendResult is the message a send produced. Created is false when the
+// idempotency key matched a message that already existed.
+type SendResult struct {
+	Message
+	Created bool
+}
+
 // Page is one slice of a conversation's history, newest first. NextBefore is
 // the cursor for the page of older messages, or nil when this is the oldest.
 type Page struct {

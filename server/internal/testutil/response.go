@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"encoding/json"
+	"net/http"
 	"testing"
 )
 
@@ -9,6 +10,7 @@ import (
 type Response struct {
 	t      *testing.T
 	Status int
+	Header http.Header
 	Body   []byte
 }
 

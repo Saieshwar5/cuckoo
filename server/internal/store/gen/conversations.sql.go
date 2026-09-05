@@ -64,6 +64,25 @@ func (q *Queries) GetConversation(ctx context.Context, id uuid.UUID) (Conversati
 	return i, err
 }
 
+const isAgentParticipant = `-- name: IsAgentParticipant :one
+SELECT EXISTS (
+    SELECT 1 FROM participants
+    WHERE conversation_id = $1 AND agent_id = $2::uuid
+)
+`
+
+type IsAgentParticipantParams struct {
+	ConversationID uuid.UUID
+	AgentID        uuid.UUID
+}
+
+func (q *Queries) IsAgentParticipant(ctx context.Context, arg IsAgentParticipantParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isAgentParticipant, arg.ConversationID, arg.AgentID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const isUserParticipant = `-- name: IsUserParticipant :one
 SELECT EXISTS (
     SELECT 1 FROM participants

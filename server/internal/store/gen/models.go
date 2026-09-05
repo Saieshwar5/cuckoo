@@ -48,6 +48,7 @@ type Message struct {
 	SenderAgentID  *uuid.UUID
 	Body           []byte
 	CreatedAt      time.Time
+	IdempotencyKey *string
 }
 
 type MessageDelivery struct {

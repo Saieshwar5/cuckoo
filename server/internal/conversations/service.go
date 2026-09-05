@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/ratelimit"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/store/gen"
 )
@@ -16,11 +17,28 @@ import (
 // It takes the concrete store because opening a conversation is a transaction:
 // the conversation and its members appear together or not at all.
 type Service struct {
-	store *store.Store
+	store   *store.Store
+	limiter ratelimit.Limiter
+}
+
+// Option configures a Service.
+type Option func(*Service)
+
+// WithLimiter bounds how fast senders may send. Without it nothing is
+// limited, which suits callers that never send: agent creation opening a DM,
+// or a test of something other than the limit.
+func WithLimiter(l ratelimit.Limiter) Option {
+	return func(s *Service) { s.limiter = l }
 }
 
 // New builds the service.
-func New(st *store.Store) *Service { return &Service{store: st} }
+func New(st *store.Store, opts ...Option) *Service {
+	s := &Service{store: st, limiter: ratelimit.Unlimited{}}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
 
 // CreateDM opens the private conversation between a person and an agent.
 //
@@ -89,6 +107,44 @@ func (s *Service) GetMine(ctx context.Context, callerID, id uuid.UUID) (Conversa
 		return Conversation{}, err
 	}
 	return convs[0], nil
+}
+
+// GetForAgent returns one conversation the agent is a member of, with the
+// same missing-versus-forbidden distinction GetMine makes for people.
+func (s *Service) GetForAgent(ctx context.Context, agentID, id uuid.UUID) (Conversation, error) {
+	row, err := s.agentMember(ctx, agentID, id)
+	if err != nil {
+		return Conversation{}, err
+	}
+	convs, err := s.hydrate(ctx, []gen.Conversation{row})
+	if err != nil {
+		return Conversation{}, err
+	}
+	return convs[0], nil
+}
+
+// agentMember is member for an agent caller. Membership is the whole of an
+// agent's authority over a conversation today; the team rule of v2 will be
+// one more clause here.
+func (s *Service) agentMember(ctx context.Context, agentID, id uuid.UUID) (gen.Conversation, error) {
+	row, err := s.store.GetConversation(ctx, id)
+	if err != nil {
+		if store.IsNoRows(err) {
+			return gen.Conversation{}, errConversationNotFound()
+		}
+		return gen.Conversation{}, domain.Internal(fmt.Errorf("get conversation %s: %w", id, err))
+	}
+
+	ok, err := s.store.IsAgentParticipant(ctx, gen.IsAgentParticipantParams{
+		ConversationID: id, AgentID: agentID,
+	})
+	if err != nil {
+		return gen.Conversation{}, domain.Internal(fmt.Errorf("check membership of agent %s in %s: %w", agentID, id, err))
+	}
+	if !ok {
+		return gen.Conversation{}, errNotParticipant()
+	}
+	return row, nil
 }
 
 // member loads a conversation and checks the caller belongs to it. Every

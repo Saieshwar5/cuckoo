@@ -28,6 +28,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/config"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
+	"github.com/Saieshwar5/cuckoo/server/internal/ratelimit"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -80,7 +81,8 @@ func run() error {
 	defer func() { _ = redisClient.Close() }()
 
 	agentService := agents.New(db)
-	conversationService := conversations.New(db)
+	conversationService := conversations.New(db,
+		conversations.WithLimiter(ratelimit.NewRedis(redisClient, "cuckoo:")))
 	deliveryService := delivery.New(db, conversationService)
 
 	router := api.NewRouter(api.Deps{

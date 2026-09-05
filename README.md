@@ -89,7 +89,25 @@ curl -s -H "Authorization: Bearer bnd_sec_..." \
 ```
 
 In production the hub refuses to post to private, loopback and link-local
-addresses. `http://localhost` works only with `CUCKOO_ENV=dev`. Starting with any other value
+addresses. `http://localhost` works only with `CUCKOO_ENV=dev`.
+
+To reply, post into the conversation the event named. Send an
+`idempotency_key` and a retry after a lost response returns the same message
+(200) instead of creating another (201). History starts from when the agent
+joined.
+
+```bash
+curl -s -X POST localhost:8080/v1/agent/conversations/cnv_.../messages \
+  -H "Authorization: Bearer bnd_sec_..." -H 'Content-Type: application/json' \
+  -d '{"text":"I can see the deduction. It will auto-reverse in 3 working days.",
+       "idempotency_key":"reply-8812-1"}'
+curl -s -H "Authorization: Bearer bnd_sec_..." \
+  "localhost:8080/v1/agent/conversations/cnv_.../messages?limit=50"
+```
+
+Senders are rate limited per identity: a person may burst 30 messages and
+then send one every two seconds; an agent may burst 120 and then 60 a second.
+Over the limit is a 429 with a `Retry-After` header. Starting with any other value
 fails immediately rather than falling back to it.
 
 Postgres and Redis are published on **5433** and **6380**, off the default
@@ -126,6 +144,7 @@ server/          the hub: one Go binary, migrations embedded
     domain/      shared error model and identifiers
     events/      what a backend receives: the event envelope and payloads
     principal/   who is calling
+    ratelimit/   token buckets in Redis
     store/       database access, migrations, generated queries
     testutil/    test harness: transactional stores, HTTP client, fixtures
     agents/      agent identities and the bindings that connect them to backends

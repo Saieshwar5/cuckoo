@@ -1,7 +1,26 @@
 -- name: CreateMessage :one
-INSERT INTO messages (id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO messages (id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, idempotency_key)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
+
+-- name: GetMessageByUserKey :one
+SELECT * FROM messages
+WHERE sender_user_id = sqlc.arg('sender_user_id')::uuid AND idempotency_key = sqlc.arg('idempotency_key')::text;
+
+-- name: GetMessageByAgentKey :one
+SELECT * FROM messages
+WHERE sender_agent_id = sqlc.arg('sender_agent_id')::uuid AND idempotency_key = sqlc.arg('idempotency_key')::text;
+
+-- name: ListMessagesBeforeForAgent :many
+-- History as an agent sees it: only from the moment it joined. An agent
+-- added to a group later must not be handed everything said before it.
+SELECT m.* FROM messages m
+JOIN participants p ON p.conversation_id = m.conversation_id AND p.agent_id = sqlc.arg('agent_id')::uuid
+WHERE m.conversation_id = sqlc.arg('conversation_id')
+  AND m.created_at >= p.joined_at
+  AND (sqlc.narg('before')::uuid IS NULL OR m.id < sqlc.narg('before')::uuid)
+ORDER BY m.id DESC
+LIMIT sqlc.arg('page_size');
 
 -- name: ListMessagesBefore :many
 -- One page of history, newest first. The cursor is a message id: everything

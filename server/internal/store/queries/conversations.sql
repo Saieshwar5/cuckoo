@@ -17,6 +17,12 @@ SELECT EXISTS (
     WHERE conversation_id = sqlc.arg('conversation_id') AND user_id = sqlc.arg('user_id')::uuid
 );
 
+-- name: IsAgentParticipant :one
+SELECT EXISTS (
+    SELECT 1 FROM participants
+    WHERE conversation_id = sqlc.arg('conversation_id') AND agent_id = sqlc.arg('agent_id')::uuid
+);
+
 -- name: ListUserConversations :many
 -- The chat list, most recently active first.
 --

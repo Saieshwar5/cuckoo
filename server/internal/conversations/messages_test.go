@@ -14,7 +14,7 @@ func TestSendText(t *testing.T) {
 	ctx := context.Background()
 	f := setup(t)
 
-	msg, err := f.svc.SendText(ctx, f.owner.ID, f.dm.ID, "  my UPI payment failed  ")
+	msg, err := f.svc.SendAsUser(ctx, f.owner.ID, f.dm.ID, conversations.SendInput{Text: "  my UPI payment failed  "})
 	if err != nil {
 		t.Fatalf("SendText: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestSendText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListMessages: %v", err)
 	}
-	if len(page.Messages) != 1 || page.Messages[0] != msg {
+	if len(page.Messages) != 1 || page.Messages[0] != msg.Message {
 		t.Errorf("history = %+v, want exactly the sent message", page.Messages)
 	}
 	if page.NextBefore != nil {
@@ -47,7 +47,7 @@ func TestSendTextRecordsDeliveriesForAgents(t *testing.T) {
 	ctx := context.Background()
 	f := setup(t)
 
-	unheard, err := f.svc.SendText(ctx, f.owner.ID, f.dm.ID, "anyone?")
+	unheard, err := f.svc.SendAsUser(ctx, f.owner.ID, f.dm.ID, conversations.SendInput{Text: "anyone?"})
 	if err != nil {
 		t.Fatalf("SendText: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestSendTextRecordsDeliveriesForAgents(t *testing.T) {
 	}
 
 	testutil.BindWebhook(t, f.db, f.agent, "https://example.com/cuckoo")
-	heard, err := f.svc.SendText(ctx, f.owner.ID, f.dm.ID, "hello")
+	heard, err := f.svc.SendAsUser(ctx, f.owner.ID, f.dm.ID, conversations.SendInput{Text: "hello"})
 	if err != nil {
 		t.Fatalf("SendText: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestSendTextRejectsInvalidText(t *testing.T) {
 	}
 	for name, text := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, err := f.svc.SendText(context.Background(), f.owner.ID, f.dm.ID, text)
+			_, err := f.svc.SendAsUser(context.Background(), f.owner.ID, f.dm.ID, conversations.SendInput{Text: text})
 			if domain.CodeOf(err) != "invalid_text" {
 				t.Errorf("got %v, want invalid_text", err)
 			}
@@ -93,7 +93,7 @@ func TestSendTextRejectsInvalidText(t *testing.T) {
 
 	// The limit is in characters, not bytes: 8000 Devanagari letters is a
 	// legal message even though it is 24 000 bytes.
-	if _, err := f.svc.SendText(context.Background(), f.owner.ID, f.dm.ID, strings.Repeat("क", 8000)); err != nil {
+	if _, err := f.svc.SendAsUser(context.Background(), f.owner.ID, f.dm.ID, conversations.SendInput{Text: strings.Repeat("क", 8000)}); err != nil {
 		t.Errorf("8000 non-ASCII characters rejected: %v", err)
 	}
 }
@@ -104,11 +104,11 @@ func TestSendTextRequiresMembership(t *testing.T) {
 	ctx := context.Background()
 	f := setup(t)
 
-	_, err := f.svc.SendText(ctx, f.other.ID, f.dm.ID, "")
+	_, err := f.svc.SendAsUser(ctx, f.other.ID, f.dm.ID, conversations.SendInput{Text: ""})
 	if domain.CodeOf(err) != "not_participant" {
 		t.Errorf("non-member got %v, want not_participant", err)
 	}
-	_, err = f.svc.SendText(ctx, f.owner.ID, domain.NewID(), "hi")
+	_, err = f.svc.SendAsUser(ctx, f.owner.ID, domain.NewID(), conversations.SendInput{Text: "hi"})
 	if domain.CodeOf(err) != "conversation_not_found" {
 		t.Errorf("missing conversation got %v, want conversation_not_found", err)
 	}
@@ -120,7 +120,7 @@ func TestListMessagesPaginatesNewestFirst(t *testing.T) {
 
 	texts := []string{"one", "two", "three", "four", "five"}
 	for _, text := range texts {
-		if _, err := f.svc.SendText(ctx, f.owner.ID, f.dm.ID, text); err != nil {
+		if _, err := f.svc.SendAsUser(ctx, f.owner.ID, f.dm.ID, conversations.SendInput{Text: text}); err != nil {
 			t.Fatalf("SendText %q: %v", text, err)
 		}
 	}

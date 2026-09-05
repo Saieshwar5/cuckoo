@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/events"
@@ -36,7 +37,7 @@ func TestListEvents(t *testing.T) {
 	// Another owner's agent has its own events, which must not leak.
 	other := testutil.CreateUser(t, f.db)
 	otherAgent := testutil.CreateAgent(t, f.db, other)
-	if _, err := f.convs.SendText(ctx, other.ID, testutil.OwnerDM(t, f.db, otherAgent).ID, "theirs"); err != nil {
+	if _, err := f.convs.SendAsUser(ctx, other.ID, testutil.OwnerDM(t, f.db, otherAgent).ID, conversations.SendInput{Text: "theirs"}); err != nil {
 		t.Fatalf("other SendText: %v", err)
 	}
 
