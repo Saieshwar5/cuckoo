@@ -23,9 +23,15 @@ CMDLINE_CANDIDATES=(
   "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
 )
 
+# Newer SDK tools keep devices under ~/.config/.android and older ones under
+# ~/.android; the emulator only looks where ANDROID_AVD_HOME says, so say it.
+AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.config/.android/avd}"
+[ -d "$AVD_HOME" ] || [ ! -d "$HOME/.android/avd" ] || AVD_HOME="$HOME/.android/avd"
+
 export JAVA_HOME="$JDK_DIR"
 export ANDROID_HOME="$SDK"
 export ANDROID_SDK_ROOT="$SDK"
+export ANDROID_AVD_HOME="$AVD_HOME"
 export PATH="$JDK_DIR/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/emulator:$PATH"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -36,6 +42,7 @@ env_exports() {
 export JAVA_HOME="$JDK_DIR"
 export ANDROID_HOME="$SDK"
 export ANDROID_SDK_ROOT="$SDK"
+export ANDROID_AVD_HOME="$AVD_HOME"
 export PATH="$JDK_DIR/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/emulator:\$PATH"
 E
 }
@@ -69,6 +76,7 @@ install() {
   sdkmanager --install "platform-tools" "emulator" "platforms;android-$API" "$IMAGE" | grep -v -E '^\[=|^$' || true
 
   hdr "Creating the device '$AVD'"
+  mkdir -p "$AVD_HOME"
   echo no | avdmanager create avd -n "$AVD" -k "$IMAGE" -d pixel_7 --force >/dev/null
   # Newer tools keep devices under ~/.config/.android; older ones under ~/.android.
   local ini
