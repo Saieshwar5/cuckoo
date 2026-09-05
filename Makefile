@@ -101,13 +101,17 @@ mobile: ## Start the app (set CUCKOO_HUB_URL to the hub's address on your wifi)
 mobile-check: ## Typecheck, lint, format-check and test the app
 	cd apps/mobile && npm run check
 
-.PHONY: demo
-demo: ## Sign in, create an echo agent and run it (make demo EMAIL=you@example.com)
-	@scripts/demo.sh $(EMAIL)
+.PHONY: play
+play: ## Start everything for a phone test (make play EMAIL=you@example.com)
+	@scripts/play.sh $(EMAIL)
 
 .PHONY: say
-say: ## Send a message as yourself to the demo agent (make say TEXT="hello")
-	@scripts/demo.sh say "$(TEXT)"
+say: ## Send a message as yourself to your Echo agent (make say TEXT="hello")
+	@scripts/play.sh say "$(TEXT)"
+
+.PHONY: stop
+stop: ## Stop anything make play left running
+	@scripts/play.sh stop
 
 ##@ Verify
 

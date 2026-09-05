@@ -82,5 +82,5 @@ __pycache__/
 *.egg-info/
 .venv/
 
-# demo script state
-.demo.env
+# make play state and logs
+.play/

@@ -214,20 +214,24 @@ ports, so Cuckoo can run alongside another project's containers.
 
 ### The app
 
-Three terminals and a phone with Expo Go on the same wifi.
+One command, and a phone with Expo Go on the same wifi:
 
 ```bash
-make run                                   # terminal 1: the hub; sign-in codes print here
-make demo EMAIL=you@example.com            # terminal 2: asks for the code, then runs an echo agent for you
-CUCKOO_HUB_URL=http://<laptop wifi address>:8080 make mobile   # terminal 3: shows a QR code
+make play EMAIL=you@example.com
 ```
 
-Scan the QR code with Expo Go, sign in with the same email (a new code
-prints in terminal 1), and the chat list shows your Echo agent. Then, from
-any terminal, `make say TEXT="hello"` sends a message as you and the list
-updates live as the agent answers. `hostname -I` prints the laptop's
-address. The hub already listens on every interface, so nothing on the
-server changes.
+That starts Postgres and Redis, builds and starts the hub, signs you in
+(reading the code from the hub's own log), creates an Echo agent and runs
+it, and starts the app's dev server with your laptop's wifi address filled
+in. Scan the QR code with Expo Go and sign in with the same email; the code
+is printed in green in that terminal. Then, from another terminal:
+
+```bash
+make say TEXT="hello from the laptop"
+```
+
+and watch the chat list on the phone update as the agent answers. Ctrl+C
+stops everything; `make stop` cleans up if something was left behind.
 
 ## Commands
 
