@@ -1,9 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { Conversation, Message } from '@/api/types';
+import type { Conversation, DeliveryStatus, Message } from '@/api/types';
 import { t } from '@/i18n';
-import { colors, spacing, type } from '@/theme/tokens';
+import { sizes, spacing, type, useTheme, type Palette } from '@/theme';
 import { formatListTime } from '@/util/time';
 
 import { Avatar } from './Avatar';
@@ -21,48 +22,59 @@ export function preview(m: Message | null): string {
   return m.body.text ?? '';
 }
 
-// ticks renders delivery status for our own last message, WhatsApp-style.
-function ticks(m: Message | null): string {
-  if (!m || m.sender.kind !== 'user' || !m.delivery_status) return '';
-  switch (m.delivery_status) {
+// Ticks renders delivery status for our own last message the way every
+// chat app does: one tick once the hub has it, two once the agent has it.
+export function Ticks({ status, colors }: { status: DeliveryStatus; colors: Palette }) {
+  switch (status) {
     case 'pending':
-      return '✓ ';
+      return <Ionicons name="checkmark" size={16} color={colors.textSecondary} testID="ticks-pending" />;
     case 'delivered':
-      return '✓✓ ';
+      return <Ionicons name="checkmark-done" size={16} color={colors.tickRead} testID="ticks-delivered" />;
     case 'failed':
-      return '! ';
+      return <Ionicons name="alert-circle" size={16} color={colors.danger} testID="ticks-failed" />;
   }
 }
 
 export function ChatRow({ conversation, onPress }: { conversation: Conversation; onPress: () => void }) {
+  const { colors } = useTheme();
   const who = counterpart(conversation);
   const last = conversation.last_message;
+  const mine = last?.sender.kind === 'user' && last.delivery_status;
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surface }]}
       testID={`chat-row-${conversation.id}`}
     >
       <Avatar
         name={who?.display_name ?? '?'}
+        size={sizes.avatar}
         status={who?.kind === 'agent' ? (who.status ?? null) : undefined}
       />
       <View style={styles.body}>
         <View style={styles.top}>
-          <Text style={styles.name} numberOfLines={1}>
+          <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
             {who?.display_name ?? ''}
           </Text>
           {last ? (
-            <Text style={styles.time}>
+            <Text style={[styles.time, { color: colors.textSecondary }]}>
               {formatListTime(last.created_at, new Date(), t('chats.time.yesterday'))}
             </Text>
           ) : null}
         </View>
-        <Text style={[styles.preview, last?.delivery_status === 'failed' && styles.failed]} numberOfLines={1}>
-          {ticks(last)}
-          {preview(last)}
-        </Text>
+        <View style={styles.bottom}>
+          {mine ? <Ticks status={mine} colors={colors} /> : null}
+          <Text
+            style={[
+              styles.preview,
+              { color: last?.delivery_status === 'failed' ? colors.danger : colors.textSecondary },
+            ]}
+            numberOfLines={1}
+          >
+            {preview(last)}
+          </Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -74,19 +86,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-    backgroundColor: colors.ground,
+    gap: spacing.md + 2,
   },
-  pressed: { backgroundColor: colors.surface },
-  body: {
-    flex: 1,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.hairline,
-    paddingBottom: spacing.md,
-  },
+  body: { flex: 1, gap: 3 },
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.sm },
-  name: { ...type.body, color: colors.text, fontWeight: '600', flexShrink: 1 },
-  time: { ...type.caption, color: colors.textSecondary },
-  preview: { ...type.secondary, color: colors.textSecondary, marginTop: 2 },
-  failed: { color: colors.danger },
+  name: { ...type.headline, flexShrink: 1 },
+  time: type.caption,
+  bottom: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  preview: { ...type.secondary, flex: 1 },
 });

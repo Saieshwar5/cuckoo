@@ -43,6 +43,34 @@ development (`CUCKOO_CORS_ORIGINS`).
 For how it feels on Android, `make emulator` boots the Android emulator
 and `make play EMAIL=... TARGET=emulator` opens the app in it.
 
+## The look
+
+Dark first, following the phone's setting, in the language of the chat apps
+people already have: a near-black ground, one green accent, ash surfaces,
+coloured initials for avatars, a floating action button, tabs with a tinted
+pill behind the active one. `src/theme/tokens.ts` holds both palettes and
+the type scale. `ThemeProvider` at the root reads the phone's setting once;
+screens take colours from `useTheme()` and build their styles with
+`useStyles(make)`, so no screen knows which theme is on. The platform's own
+typeface is used on purpose: Roboto on Android, San Francisco on iOS.
+
+The components under `src/components` are the vocabulary: `Screen`,
+`Header`, `SearchBar`, `Fab`, `EmptyState`, `Button` (primary, outline,
+plain), `TextField`, `CodeInput`, `Avatar`, `IconButton`, `ChatRow`. A screen
+composes those and holds no rules.
+
+To see the other theme in the browser: DevTools → Rendering → "Emulate CSS
+media feature prefers-color-scheme". Without a window, `scripts/webshot.py`
+drives headless Chromium through a list of steps (open, type, click, wait,
+media, shot) and is how the screenshots for a change get made:
+
+```bash
+examples/echo/.venv/bin/python scripts/webshot.py '[
+  ["open", "http://localhost:8081/", 8], ["wait", "Sign in", 60],
+  ["shot", "signin-dark.png"], ["media", "light"], ["sleep", 1], ["shot", "signin-light.png"]
+]'
+```
+
 Layout: `app/` is the route tree; `src/` is everything a route uses —
 the API client, the session, the live socket, the chat list reducer, the
 theme tokens and the strings. Screens hold no rules; the modules under

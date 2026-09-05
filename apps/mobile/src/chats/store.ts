@@ -67,3 +67,16 @@ export function applyFrame(state: ChatsState, frame: Frame): ChatsState {
       return state;
   }
 }
+
+// filterConversations narrows the list to what matches a search: a name,
+// a handle, or words in the last message. Empty matches everything.
+export function filterConversations(list: Conversation[], query: string): Conversation[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter(
+    (c) =>
+      c.participants.some(
+        (p) => p.display_name.toLowerCase().includes(q) || (p.handle ?? '').toLowerCase().includes(q),
+      ) || (c.last_message?.body.text ?? '').toLowerCase().includes(q),
+  );
+}

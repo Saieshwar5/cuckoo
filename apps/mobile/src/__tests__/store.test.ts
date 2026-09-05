@@ -1,5 +1,5 @@
 import type { Conversation, Message } from '@/api/types';
-import { applyFrame, empty, setConversations } from '@/chats/store';
+import { applyFrame, empty, filterConversations, setConversations } from '@/chats/store';
 
 function msg(over: Partial<Message> & { id: string; conversation_id: string; created_at: string }): Message {
   return {
@@ -109,5 +109,35 @@ describe('chat list', () => {
       },
     });
     expect(s2.conversations[0]?.last_message?.id).toBe('m2');
+  });
+});
+
+describe('search', () => {
+  const list = [
+    {
+      ...conv(
+        'cnv_a',
+        '2026-09-01T10:00:00Z',
+        msg({
+          id: 'm1',
+          conversation_id: 'cnv_a',
+          created_at: '2026-09-02T10:00:00Z',
+          body: { text: 'your refund is on its way' },
+        }),
+      ),
+      participants: [{ kind: 'agent' as const, id: 'agt_1', display_name: 'SBI Support', handle: 'sbi' }],
+    },
+    {
+      ...conv('cnv_b', '2026-09-01T10:00:00Z'),
+      participants: [{ kind: 'agent' as const, id: 'agt_2', display_name: 'Echo', handle: 'echo-1' }],
+    },
+  ];
+
+  it('matches names, handles and the last message, ignoring case', () => {
+    expect(filterConversations(list, '').map((c) => c.id)).toEqual(['cnv_a', 'cnv_b']);
+    expect(filterConversations(list, 'sbi').map((c) => c.id)).toEqual(['cnv_a']);
+    expect(filterConversations(list, 'ECHO-').map((c) => c.id)).toEqual(['cnv_b']);
+    expect(filterConversations(list, 'refund').map((c) => c.id)).toEqual(['cnv_a']);
+    expect(filterConversations(list, 'nothing')).toEqual([]);
   });
 });

@@ -29,8 +29,18 @@ describe('ChatRow', () => {
   it('shows the agent, the last message with its ticks, and the status dot', async () => {
     const view = await render(<ChatRow conversation={dm} onPress={() => {}} />);
     expect(view.getByText('SBI Support')).toBeTruthy();
-    expect(view.getByText(/✓✓ my payment failed/)).toBeTruthy();
+    expect(view.getByText('my payment failed')).toBeTruthy();
+    expect(view.getByTestId('ticks-delivered')).toBeTruthy();
     expect(view.getByTestId('status-dot')).toBeTruthy();
+  });
+
+  it('shows no ticks on what the agent said', async () => {
+    const theirs = {
+      ...dm,
+      last_message: { ...dm.last_message!, sender: { kind: 'agent' as const, id: 'agt_1' } },
+    };
+    const view = await render(<ChatRow conversation={theirs} onPress={() => {}} />);
+    expect(view.queryByTestId('ticks-delivered')).toBeNull();
   });
 
   it('previews a stream in progress as typing', () => {

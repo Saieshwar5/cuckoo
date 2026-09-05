@@ -14,11 +14,8 @@ export function formatListTime(iso: string, now: Date = new Date(), yesterdayLab
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
 
-// initials is the avatar text for a name: up to two letters.
-export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  const first = parts[0]?.[0] ?? '';
-  const second = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
-  return (first + second).toUpperCase();
+// formatCountdown renders seconds as m:ss, the way a resend timer reads.
+export function formatCountdown(seconds: number): string {
+  const s = Math.max(0, Math.ceil(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
