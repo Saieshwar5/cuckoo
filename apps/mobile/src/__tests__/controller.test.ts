@@ -1,23 +1,12 @@
 import type { Api } from '@/api/client';
 import type { Conversation } from '@/api/types';
 import { ChatsController } from '@/chats/controller';
-import type { SocketLike } from '@/realtime/socket';
 
-class FakeSocket implements SocketLike {
-  onopen: (() => void) | null = null;
-  onmessage: ((ev: { data: unknown }) => void) | null = null;
-  onclose: (() => void) | null = null;
-  onerror: ((ev: unknown) => void) | null = null;
-  close() {
-    this.onclose?.();
-  }
-}
+import { FakeRealtime, flush } from './fakes';
 
 function conv(id: string, created_at: string): Conversation {
   return { id, kind: 'dm', participants: [], last_message: null, created_at };
 }
-
-const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('chats controller', () => {
   it('loads the list, applies live frames, and reloads on reconnect', async () => {
@@ -28,12 +17,8 @@ describe('chats controller', () => {
         return [conv('a', '2026-09-01T00:00:00Z')];
       },
     } as unknown as Api;
-    const sockets: FakeSocket[] = [];
-    const c = new ChatsController(api, 'ws://hub', 'ses_tok_1', () => {
-      const s = new FakeSocket();
-      sockets.push(s);
-      return s;
-    });
+    const realtime = new FakeRealtime();
+    const c = new ChatsController(api, realtime);
     const seen: number[] = [];
     c.subscribe(() => seen.push(c.getSnapshot().conversations.length));
 
@@ -44,40 +29,36 @@ describe('chats controller', () => {
     expect(c.getSnapshot().conversations.map((x) => x.id)).toEqual(['a']);
     expect(lists).toBe(1);
 
-    sockets[0]?.onopen?.();
+    realtime.open();
     expect(c.getSnapshot().connected).toBe(true);
-    sockets[0]?.onmessage?.({
-      data: JSON.stringify({
-        type: 'message.created',
-        data: {
+    realtime.emit({
+      type: 'message.created',
+      data: {
+        conversation_id: 'a',
+        message: {
+          id: 'm1',
           conversation_id: 'a',
-          message: {
-            id: 'm1',
-            conversation_id: 'a',
-            sender: { kind: 'agent', id: 'agt_1' },
-            body: { text: 'hello' },
-            reply_to: null,
-            status: 'complete',
-            truncated: false,
-            delivery_status: null,
-            created_at: '2026-09-05T00:00:00Z',
-          },
+          sender: { kind: 'agent', id: 'agt_1' },
+          body: { text: 'hello' },
+          reply_to: null,
+          status: 'complete',
+          truncated: false,
+          delivery_status: null,
+          created_at: '2026-09-05T00:00:00Z',
         },
-      }),
+      },
     });
     expect(c.getSnapshot().conversations[0]?.last_message?.body.text).toBe('hello');
 
     // A reconnect reloads from the hub: the record, not the frames.
-    jest.useFakeTimers();
-    sockets[0]?.onclose?.();
+    realtime.close();
     expect(c.getSnapshot().connected).toBe(false);
-    jest.advanceTimersByTime(1_000);
-    jest.useRealTimers();
-    sockets[1]?.onopen?.();
+    realtime.open(true);
     await flush();
     expect(lists).toBe(2);
 
     c.stop();
+    expect(realtime.subs.size).toBe(0);
     expect(seen.length).toBeGreaterThan(0);
   });
 
@@ -89,7 +70,7 @@ describe('chats controller', () => {
         return [];
       },
     } as unknown as Api;
-    const c = new ChatsController(api, 'ws://hub', 't', () => new FakeSocket());
+    const c = new ChatsController(api, new FakeRealtime());
     c.start();
     await flush();
     expect(c.getSnapshot().error).toBeInstanceOf(Error);

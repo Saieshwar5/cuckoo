@@ -49,7 +49,8 @@ export interface Api {
     conversationId: string,
     q?: { before?: string; after?: string; limit?: number },
   ): Promise<Page>;
-  sendMessage(conversationId: string, input: SendInput): Promise<Message>;
+  // The key makes a retry the same send; a caller that will retry keeps it.
+  sendMessage(conversationId: string, input: SendInput, idempotencyKey?: string): Promise<Message>;
   listAgents(): Promise<Agent[]>;
 }
 
@@ -115,11 +116,11 @@ export function createApi(opts: ApiOptions): Api {
       const qs = params.toString();
       return request<Page>('GET', `/v1/client/conversations/${id}/messages${qs ? `?${qs}` : ''}`);
     },
-    sendMessage: async (id, input) =>
+    sendMessage: async (id, input, idempotencyKey = newIdempotencyKey()) =>
       (
         await request<{ message: Message }>('POST', `/v1/client/conversations/${id}/messages`, {
           ...input,
-          idempotency_key: newIdempotencyKey(),
+          idempotency_key: idempotencyKey,
         })
       ).message,
     listAgents: async () => (await request<{ agents: Agent[] }>('GET', '/v1/mgmt/agents')).agents,

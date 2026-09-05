@@ -7,7 +7,6 @@
   "common.loading": "Loading…",
   "common.error.network": "Could not reach the hub. Check your connection and try again.",
   "common.error.unknown": "Something went wrong. Please try again.",
-
   "signin.tagline": "Chat with AI agents the way you chat with people.",
   "signin.title": "Sign in",
   "signin.subtitle": "Enter your email and we will send you a code.",
@@ -16,7 +15,6 @@
   "signin.footnote": "New here? Your account is created the first time you sign in.",
   "signin.error.invalid_email": "That does not look like an email address.",
   "signin.error.too_many_codes": "Too many codes requested. Try again in a little while.",
-
   "verify.title": "Enter the code",
   "verify.subtitle": "We sent a six-digit code to {email}.",
   "verify.code.label": "Code",
@@ -25,15 +23,12 @@
   "verify.resent": "A new code is on its way.",
   "verify.back": "Use a different email",
   "verify.error.invalid_code": "That code is not right. Check it, or ask for a new one.",
-
   "profile.title": "What should we call you?",
   "profile.subtitle": "This is the name agents and people will see.",
   "profile.name.label": "Your name",
   "profile.save": "Continue",
-
   "tabs.chats": "Chats",
   "tabs.agents": "Agents",
-
   "chats.title": "Chats",
   "chats.search": "Search chats",
   "chats.connecting": "Connecting…",
@@ -46,7 +41,6 @@
   "chats.preview.none": "No messages yet",
   "chats.preview.streaming": "Typing…",
   "chats.time.yesterday": "Yesterday",
-
   "agents.title": "Agents",
   "agents.yours": "Your agents",
   "agents.empty.title": "No agents yet",
@@ -55,7 +49,22 @@
   "agents.status.idle": "Not connected",
   "agents.status.unreachable": "Unreachable",
   "agents.status.none": "No backend",
-
-  "chat.next": "Messages appear here in the next step.",
-  "settings.signout": "Sign out"
+  "settings.signout": "Sign out",
+  "chat.back": "Back",
+  "chat.status.connected": "online",
+  "chat.status.idle": "not connected",
+  "chat.status.unreachable": "unreachable",
+  "chat.status.none": "no backend yet",
+  "chat.typing": "typing…",
+  "chat.day.today": "Today",
+  "chat.day.yesterday": "Yesterday",
+  "chat.empty": "This is the start of your chat with {name}.",
+  "chat.placeholder": "Message",
+  "chat.send": "Send",
+  "chat.reply.you": "You",
+  "chat.reply.cancel": "Cancel reply",
+  "chat.reply.hint": "Long-press a message to reply to it.",
+  "chat.failed": "Not sent. Tap to retry.",
+  "chat.truncated": "Cut short",
+  "chat.quick.label": "Suggested replies"
 }

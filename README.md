@@ -241,6 +241,10 @@ The same command runs the app elsewhere:
 | `make web EMAIL=...` | a tab in this laptop's browser, for building |
 | `make play EMAIL=... TARGET=emulator` | the Android emulator |
 
+The app follows the phone's light or dark setting, dark by default, and
+looks like the chat apps people already have: open a chat, watch a reply
+stream in, tap the buttons an agent offers, long-press to reply.
+
 The emulator is a one-time install with no Android Studio and no sudo:
 `make emulator-install` downloads a Java runtime, the SDK tools and one
 Android 15 image (about 5 GB) into your home directory and creates a
