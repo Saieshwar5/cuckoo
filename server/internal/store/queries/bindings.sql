@@ -29,6 +29,13 @@ UPDATE agent_bindings
 SET status = 'connected', last_seen_at = now(), failure_streak_started_at = NULL
 WHERE id = $1 AND revoked_at IS NULL;
 
+-- name: MarkBindingIdle :exec
+-- A socket closed: the backend is no longer connected, and nothing is known
+-- about its health until it comes back.
+UPDATE agent_bindings
+SET status = 'idle'
+WHERE id = $1 AND revoked_at IS NULL AND status = 'connected';
+
 -- name: RecordBindingFailure :exec
 -- Starts a failure streak, or continues one; five minutes into a streak the
 -- binding is unreachable. Computed here so the rule holds under concurrent

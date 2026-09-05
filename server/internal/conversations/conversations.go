@@ -60,6 +60,9 @@ type Conversation struct {
 const (
 	EventMessageCreated  = "message.created"
 	EventDeliveryUpdated = "delivery.updated"
+	// EventDeliveryPending is a nudge to an agent's socket: something is
+	// waiting in the outbox. It carries nothing; the socket reads the rows.
+	EventDeliveryPending = "delivery.pending"
 )
 
 // MessageCreatedEvent is what a device hears when a message lands in one of

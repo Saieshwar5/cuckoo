@@ -31,6 +31,23 @@ func (s *Service) DeliveryChanged(ctx context.Context, messageID uuid.UUID) erro
 	return nil
 }
 
+// nudge tells the sockets of agents that their outbox has something new.
+// Agents on webhooks have no socket and hear nothing, which is fine: the
+// worker polls for them.
+func (s *Service) nudge(ctx context.Context, agentIDs []uuid.UUID) {
+	if len(agentIDs) == 0 {
+		return
+	}
+	ev, err := realtime.NewEvent(EventDeliveryPending, agentIDs, struct{}{})
+	if err != nil {
+		slog.WarnContext(ctx, "realtime: could not encode nudge", "error", err)
+		return
+	}
+	if err := s.publisher.Publish(ctx, ev); err != nil {
+		slog.WarnContext(ctx, "realtime: could not publish nudge", "error", err)
+	}
+}
+
 // notify publishes an event to the devices of everyone in a conversation.
 //
 // It never fails the operation that triggered it: the record is already

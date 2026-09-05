@@ -22,20 +22,22 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Event is something a person's device should hear about now.
+// Event is something a connection should hear about now. Recipients are
+// the identifiers of the principals it is for: people, whose devices render
+// it, or agents, whose sockets treat it as a nudge to read the outbox.
 type Event struct {
-	Type    string          `json:"type"`
-	UserIDs []uuid.UUID     `json:"user_ids"`
-	Payload json.RawMessage `json:"payload"`
+	Type       string          `json:"type"`
+	Recipients []uuid.UUID     `json:"recipients"`
+	Payload    json.RawMessage `json:"payload"`
 }
 
 // NewEvent encodes a payload into an Event.
-func NewEvent(eventType string, userIDs []uuid.UUID, payload any) (Event, error) {
+func NewEvent(eventType string, recipients []uuid.UUID, payload any) (Event, error) {
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return Event{}, fmt.Errorf("encode %s event: %w", eventType, err)
 	}
-	return Event{Type: eventType, UserIDs: userIDs, Payload: raw}, nil
+	return Event{Type: eventType, Recipients: recipients, Payload: raw}, nil
 }
 
 // Publisher is what the business layer holds: a way to announce an event.

@@ -13,9 +13,9 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/testutil"
 )
 
-func event(t *testing.T, userIDs ...uuid.UUID) realtime.Event {
+func event(t *testing.T, recipients ...uuid.UUID) realtime.Event {
 	t.Helper()
-	ev, err := realtime.NewEvent("test.event", userIDs, map[string]string{"hello": "world"})
+	ev, err := realtime.NewEvent("test.event", recipients, map[string]string{"hello": "world"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,14 +82,29 @@ func TestHubDropsSlowSubscriber(t *testing.T) {
 	}
 }
 
-func TestHubCloseEndsSubscriptions(t *testing.T) {
+// Close ends every subscription's channel but does not forget the
+// connection: Wait returns only once the connection has closed its own
+// subscription, which it does after any bookkeeping on the way out.
+func TestHubCloseThenWaitForConnections(t *testing.T) {
 	hub := realtime.NewHub(nil)
 	s := hub.Subscribe(domain.NewID())
 	hub.Close()
 	if _, open := <-s.C; open {
 		t.Error("subscription still open after hub.Close")
 	}
+
+	short, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if err := hub.Wait(short); err == nil {
+		t.Error("Wait returned while a connection had not closed its subscription")
+	}
+
+	s.Close()
 	s.Close() // idempotent
+	if err := hub.Wait(context.Background()); err != nil {
+		t.Errorf("Wait after the connection closed: %v", err)
+	}
+	hub.Dispatch(realtime.Event{Type: "late"}) // must not panic after Close
 }
 
 // The whole path over a real Redis: subscribe, publish, receive.
@@ -109,7 +124,7 @@ func TestRedisBusRoundTrip(t *testing.T) {
 
 	select {
 	case ev := <-events:
-		if ev.Type != "test.event" || len(ev.UserIDs) != 1 || ev.UserIDs[0] != alice {
+		if ev.Type != "test.event" || len(ev.Recipients) != 1 || ev.Recipients[0] != alice {
 			t.Errorf("received %+v", ev)
 		}
 	case <-time.After(2 * time.Second):

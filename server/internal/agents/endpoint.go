@@ -51,6 +51,21 @@ func (s *Service) RecordDeliverySuccess(ctx context.Context, bindingID uuid.UUID
 	return nil
 }
 
+// SocketConnected notes that the backend holds a live socket for the
+// binding: it is connected, and it is heard from now.
+func (s *Service) SocketConnected(ctx context.Context, bindingID uuid.UUID) error {
+	return s.RecordDeliverySuccess(ctx, bindingID)
+}
+
+// SocketClosed notes that the socket has gone. The binding is idle, not
+// unreachable: nothing is known until the backend comes back.
+func (s *Service) SocketClosed(ctx context.Context, bindingID uuid.UUID) error {
+	if err := s.store.MarkBindingIdle(ctx, bindingID); err != nil {
+		return domain.Internal(fmt.Errorf("mark binding %s idle: %w", bindingID, err))
+	}
+	return nil
+}
+
 // RecordDeliveryFailure notes that the backend behind a binding did not
 // answer. Five minutes of unbroken failures makes the binding unreachable,
 // which is what the app shows as a grey dot.

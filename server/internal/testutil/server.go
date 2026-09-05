@@ -57,7 +57,17 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 		t.Fatalf("testutil: start realtime hub: %v", err)
 	}
 	t.Cleanup(cancel)
-	t.Cleanup(hub.Close)
+	// Socket handlers are hijacked connections, which the HTTP server's
+	// Close does not wait for. Waiting here keeps a handler's last database
+	// call inside this test's transaction rather than the next test's.
+	t.Cleanup(func() {
+		hub.Close()
+		wctx, wcancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer wcancel()
+		if err := hub.Wait(wctx); err != nil {
+			t.Errorf("testutil: socket handlers still running at cleanup: %v", err)
+		}
+	})
 
 	agentService := agents.New(db)
 	conversationService := conversations.New(db,
@@ -72,6 +82,7 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 		Conversations: conversationService,
 		Delivery:      delivery.New(db, conversationService),
 		Hub:           hub,
+		Bus:           bus,
 		Health:        map[string]api.HealthCheck{},
 	})
 
@@ -81,22 +92,34 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 	return &Server{Server: srv, Store: db, Conversations: conversationService}
 }
 
-// Socket opens the live-update socket as the given user. The connection is
-// closed when the test ends.
+// Socket opens the app's live-update socket as the given user. The
+// connection is closed when the test ends.
 func (s *Server) Socket(t *testing.T, user users.User) *websocket.Conn {
 	t.Helper()
-	c, err := s.DialSocket(t, http.Header{auth.DevHeader: {domain.FormatID(domain.PrefixUser, user.ID)}})
+	c, err := s.DialSocket(t, "/v1/client/socket",
+		http.Header{auth.DevHeader: {domain.FormatID(domain.PrefixUser, user.ID)}})
 	if err != nil {
 		t.Fatalf("testutil: open socket: %v", err)
 	}
 	return c
 }
 
-// DialSocket opens the live-update socket with the given headers, returning
-// the handshake error so a test can assert on a refused connection.
-func (s *Server) DialSocket(t *testing.T, headers http.Header) (*websocket.Conn, error) {
+// AgentSocket opens the agent protocol's socket with a binding secret, as a
+// backend would.
+func (s *Server) AgentSocket(t *testing.T, secret string) *websocket.Conn {
 	t.Helper()
-	url := "ws" + strings.TrimPrefix(s.URL, "http") + "/v1/client/socket"
+	c, err := s.DialSocket(t, "/v1/agent/socket", http.Header{"Authorization": {"Bearer " + secret}})
+	if err != nil {
+		t.Fatalf("testutil: open agent socket: %v", err)
+	}
+	return c
+}
+
+// DialSocket opens a socket at path with the given headers, returning the
+// handshake error so a test can assert on a refused connection.
+func (s *Server) DialSocket(t *testing.T, path string, headers http.Header) (*websocket.Conn, error) {
+	t.Helper()
+	url := "ws" + strings.TrimPrefix(s.URL, "http") + path
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	c, resp, err := websocket.Dial(ctx, url, &websocket.DialOptions{HTTPHeader: headers})

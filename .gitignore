@@ -75,3 +75,9 @@ yarn-error.log*
 
 # Backup written by `golangci-lint migrate`
 *.bck.yml
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/

@@ -13,17 +13,19 @@ import (
 
 // fanOut records that every agent in the conversation, other than the
 // sender, must be told about the message. It runs in the message's own
-// transaction.
+// transaction and returns the agents that now have something pending, so
+// the caller can nudge their sockets once the transaction has committed.
 //
 // An agent with no backend connected gets a row that has already failed: the
 // user sees "not delivered" now rather than a tick that never comes, and the
 // event still exists for a backend that connects later and reads its history.
-func fanOut(ctx context.Context, tx *store.Store, msg Message) error {
+func fanOut(ctx context.Context, tx *store.Store, msg Message) ([]uuid.UUID, error) {
 	agentIDs, err := tx.ListAgentParticipants(ctx, msg.ConversationID)
 	if err != nil {
-		return domain.Internal(fmt.Errorf("list agents of %s: %w", msg.ConversationID, err))
+		return nil, domain.Internal(fmt.Errorf("list agents of %s: %w", msg.ConversationID, err))
 	}
 
+	var pending []uuid.UUID
 	for _, agentID := range agentIDs {
 		if msg.Sender.Kind == ParticipantAgent && msg.Sender.ID == agentID {
 			continue
@@ -33,11 +35,13 @@ func fanOut(ctx context.Context, tx *store.Store, msg Message) error {
 		var lastError *string
 		if _, err := tx.GetActiveBinding(ctx, agentID); err != nil {
 			if !store.IsNoRows(err) {
-				return domain.Internal(fmt.Errorf("get binding of %s: %w", agentID, err))
+				return nil, domain.Internal(fmt.Errorf("get binding of %s: %w", agentID, err))
 			}
 			status = DeliveryFailed
 			reason := "no_binding"
 			lastError = &reason
+		} else {
+			pending = append(pending, agentID)
 		}
 
 		_, err := tx.CreateDelivery(ctx, gen.CreateDeliveryParams{
@@ -49,10 +53,10 @@ func fanOut(ctx context.Context, tx *store.Store, msg Message) error {
 			LastError: lastError,
 		})
 		if err != nil {
-			return domain.Internal(fmt.Errorf("create delivery of %s to %s: %w", msg.ID, agentID, err))
+			return nil, domain.Internal(fmt.Errorf("create delivery of %s to %s: %w", msg.ID, agentID, err))
 		}
 	}
-	return nil
+	return pending, nil
 }
 
 // attachDeliveryStatus fills in DeliveryStatus for a batch of messages with

@@ -103,6 +103,19 @@ func (q *Queries) GetActiveBinding(ctx context.Context, agentID uuid.UUID) (Agen
 	return i, err
 }
 
+const markBindingIdle = `-- name: MarkBindingIdle :exec
+UPDATE agent_bindings
+SET status = 'idle'
+WHERE id = $1 AND revoked_at IS NULL AND status = 'connected'
+`
+
+// A socket closed: the backend is no longer connected, and nothing is known
+// about its health until it comes back.
+func (q *Queries) MarkBindingIdle(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markBindingIdle, id)
+	return err
+}
+
 const recordBindingFailure = `-- name: RecordBindingFailure :exec
 UPDATE agent_bindings
 SET failure_streak_started_at = COALESCE(failure_streak_started_at, now()),

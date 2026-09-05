@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cuckoo-agent"
+version = "0.0.1"
+description = "Connect an agent backend to a Cuckoo hub: receive messages, reply, done."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "websockets>=13",
+    "httpx>=0.27",
+]
+
+[tool.setuptools.packages.find]
+include = ["cuckoo*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

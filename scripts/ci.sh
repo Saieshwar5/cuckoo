@@ -62,6 +62,11 @@ step "no credentials"         ./scripts/check-secrets.sh --all
 step "gofmt"                  bash -c 'cd server && test -z "$(gofmt -l .)" || { gofmt -l .; false; }'
 step "go vet"                 bash -c 'cd server && go vet ./...'
 step "build"                  bash -c 'cd server && go build ./...'
+if command -v python3 >/dev/null 2>&1; then
+  step "python syntax"          bash -c 'python3 -m compileall -q sdk examples'
+else
+  skip "python syntax"          "python3 not installed"
+fi
 
 # ── Generated code matches its source ────────────────────────────────────────
 # Regenerate and compare the output with itself from a moment ago. Comparing

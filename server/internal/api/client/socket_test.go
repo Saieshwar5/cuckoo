@@ -131,7 +131,7 @@ func TestSocketRelaysDeliveryAndReplies(t *testing.T) {
 
 func TestSocketRequiresAUser(t *testing.T) {
 	f := setupChat(t)
-	if _, err := f.srv.DialSocket(t, http.Header{}); err == nil || !strings.Contains(err.Error(), "401") {
+	if _, err := f.srv.DialSocket(t, "/v1/client/socket", http.Header{}); err == nil || !strings.Contains(err.Error(), "401") {
 		t.Errorf("anonymous socket: %v, want a 401 handshake failure", err)
 	}
 }
