@@ -1,0 +1,69 @@
+import type { Conversation, Frame } from '../api/types';
+
+// The chat list, and how live frames change it. Pure, so it is tested
+// without a screen: the same reducer runs on every frame the socket brings.
+
+export interface ChatsState {
+  conversations: Conversation[];
+}
+
+export const empty: ChatsState = { conversations: [] };
+
+function activity(c: Conversation): string {
+  return c.last_message?.created_at ?? c.created_at;
+}
+
+function sorted(list: Conversation[]): Conversation[] {
+  return [...list].sort((a, b) => (activity(a) < activity(b) ? 1 : activity(a) > activity(b) ? -1 : 0));
+}
+
+export function setConversations(_: ChatsState, list: Conversation[]): ChatsState {
+  return { conversations: sorted(list) };
+}
+
+function update(state: ChatsState, id: string, fn: (c: Conversation) => Conversation): ChatsState {
+  const i = state.conversations.findIndex((c) => c.id === id);
+  const current = state.conversations[i];
+  if (!current) return state;
+  const next = state.conversations.slice();
+  next[i] = fn(current);
+  return { conversations: sorted(next) };
+}
+
+// applyFrame folds one live frame into the list. A message in a conversation
+// we do not know about is ignored; the next refresh brings the conversation.
+export function applyFrame(state: ChatsState, frame: Frame): ChatsState {
+  switch (frame.type) {
+    case 'message.created':
+    case 'message.started':
+    case 'message.completed': {
+      const { conversation_id, message } = frame.data;
+      return update(state, conversation_id, (c) => {
+        const last = c.last_message;
+        if (last && last.id !== message.id && last.created_at > message.created_at) return c;
+        return { ...c, last_message: message };
+      });
+    }
+    case 'message.delta': {
+      const { conversation_id, message_id, text } = frame.data;
+      return update(state, conversation_id, (c) => {
+        const last = c.last_message;
+        if (!last || last.id !== message_id) return c;
+        return {
+          ...c,
+          last_message: { ...last, body: { ...last.body, text: (last.body.text ?? '') + text } },
+        };
+      });
+    }
+    case 'delivery.updated': {
+      const { conversation_id, message_id, delivery_status } = frame.data;
+      return update(state, conversation_id, (c) => {
+        const last = c.last_message;
+        if (!last || last.id !== message_id) return c;
+        return { ...c, last_message: { ...last, delivery_status } };
+      });
+    }
+    default:
+      return state;
+  }
+}

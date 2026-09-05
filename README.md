@@ -212,6 +212,17 @@ fails immediately rather than falling back to it.
 Postgres and Redis are published on **5433** and **6380**, off the default
 ports, so Cuckoo can run alongside another project's containers.
 
+### The app
+
+```bash
+make mobile-install
+CUCKOO_HUB_URL=http://<your laptop's wifi address>:8080 make mobile
+```
+
+Open it in Expo Go on a phone on the same wifi. The hub already listens on
+every interface, so nothing on the server changes. Sign in with any email
+and read the code off the hub's log.
+
 ## Commands
 
 | Command | What it does |
@@ -251,7 +262,7 @@ server/          the hub: one Go binary, migrations embedded
     testutil/    test harness: transactional stores, HTTP client, fixtures
     agents/      agent identities and the bindings that connect them to backends
     users/       the first business package, and the pattern for the rest
-apps/mobile/     React Native app (not started)
+apps/mobile/     the app: React Native with Expo (see apps/mobile/README.md)
 sdk/python/      the Python SDK: connect, receive, reply
 protocol/        the published agent protocol spec (not started)
 examples/echo/   the reference agent, and the protocol's smoke test

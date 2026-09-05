@@ -67,8 +67,17 @@ func TestAgentCreationOpensOwnerDM(t *testing.T) {
 	if user.ID != f.owner.ID || user.DisplayName != "Priya" || user.Handle != "" {
 		t.Errorf("user participant = %+v", user)
 	}
-	if agent.ID != f.agent.ID || agent.DisplayName != "Helper" || agent.Handle != "helper" {
-		t.Errorf("agent participant = %+v", agent)
+	if agent.ID != f.agent.ID || agent.DisplayName != "Helper" || agent.Handle != "helper" || agent.Status != "" {
+		t.Errorf("agent participant = %+v, want no status while no backend is connected", agent)
+	}
+
+	// The avatar's dot: the live binding's health.
+	testutil.BindAgent(t, f.db, f.agent)
+	list, _ = f.svc.ListMine(context.Background(), f.owner.ID)
+	for _, p := range list[0].Participants {
+		if p.Kind == conversations.ParticipantAgent && p.Status != "idle" {
+			t.Errorf("agent status = %q after binding, want idle", p.Status)
+		}
 	}
 }
 

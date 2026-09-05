@@ -87,6 +87,20 @@ gen: ## Regenerate typed DB code from SQL (sqlc)
 fmt: ## Format Go code
 	cd $(SERVER_DIR) && go fmt ./...
 
+##@ Mobile
+
+.PHONY: mobile-install
+mobile-install: ## Install the app's dependencies
+	cd apps/mobile && npm install --no-audit --no-fund
+
+.PHONY: mobile
+mobile: ## Start the app (set CUCKOO_HUB_URL to the hub's address on your wifi)
+	cd apps/mobile && npx expo start
+
+.PHONY: mobile-check
+mobile-check: ## Typecheck, lint, format-check and test the app
+	cd apps/mobile && npm run check
+
 ##@ Verify
 
 .PHONY: test
