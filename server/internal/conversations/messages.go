@@ -3,7 +3,9 @@ package conversations
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -16,10 +18,12 @@ import (
 // Send limits. A person may burst a screenful, then one message every two
 // seconds; a backend answering many conversations gets far more. Both are
 // per sender, not per conversation, so spreading traffic across chats does
-// not evade them.
+// not evade them. A stream's pieces have a bound of their own, so a long
+// answer does not spend the agent's message budget word by word.
 var (
-	userSendPolicy  = ratelimit.Policy{Rate: 0.5, Burst: 30}
-	agentSendPolicy = ratelimit.Policy{Rate: 60, Burst: 120}
+	userSendPolicy   = ratelimit.Policy{Rate: 0.5, Burst: 30}
+	agentSendPolicy  = ratelimit.Policy{Rate: 60, Burst: 120}
+	agentDeltaPolicy = ratelimit.Policy{Rate: 200, Burst: 400}
 )
 
 // SendAsUser records a message from a person into a conversation they are a
@@ -47,9 +51,29 @@ func (s *Service) SendAsAgent(ctx context.Context, agentID, conversationID uuid.
 }
 
 func (s *Service) send(ctx context.Context, sender Sender, conversationID uuid.UUID, in SendInput, policy ratelimit.Policy) (SendResult, error) {
-	text, err := validateText(in.Text)
-	if err != nil {
-		return SendResult{}, err
+	return s.create(ctx, sender, conversationID, in, policy, false)
+}
+
+// create records a message. A streaming one starts empty and is told to
+// nobody but the person's devices; its agents hear about it when it
+// finishes, as a whole.
+func (s *Service) create(ctx context.Context, sender Sender, conversationID uuid.UUID, in SendInput,
+	policy ratelimit.Policy, streaming bool) (SendResult, error) {
+
+	text := ""
+	if streaming {
+		if strings.TrimSpace(in.Text) != "" {
+			return SendResult{}, domain.InvalidField("text", "stream_with_text",
+				"A streamed message starts empty; append its text after starting it.")
+		}
+		if s.streams == nil {
+			return SendResult{}, domain.Internal(errors.New("streaming is not configured"))
+		}
+	} else {
+		var err error
+		if text, err = validateText(in.Text); err != nil {
+			return SendResult{}, err
+		}
 	}
 	key, err := validateIdempotencyKey(in.IdempotencyKey)
 	if err != nil {
@@ -84,6 +108,10 @@ func (s *Service) send(ctx context.Context, sender Sender, conversationID uuid.U
 		SenderKind:     string(sender.Kind),
 		Body:           body,
 		IdempotencyKey: key,
+		Status:         string(MessageComplete),
+	}
+	if streaming {
+		params.Status = string(MessageStreaming)
 	}
 	switch sender.Kind {
 	case ParticipantUser:
@@ -103,6 +131,9 @@ func (s *Service) send(ctx context.Context, sender Sender, conversationID uuid.U
 		}
 		if msg, err = messageFromRow(row); err != nil {
 			return err
+		}
+		if streaming {
+			return nil
 		}
 		pending, err = fanOut(ctx, tx, msg)
 		return err
@@ -124,6 +155,14 @@ func (s *Service) send(ctx context.Context, sender Sender, conversationID uuid.U
 	sent := []Message{msg}
 	if err := s.attachDeliveryStatus(ctx, sent); err != nil {
 		return SendResult{}, err
+	}
+	if streaming {
+		if err := s.openStream(ctx, sent[0]); err != nil {
+			return SendResult{}, err
+		}
+		s.notify(ctx, EventMessageStarted, conversationID,
+			MessageCreatedEvent{ConversationID: conversationID, Message: sent[0]})
+		return SendResult{Message: sent[0], Created: true}, nil
 	}
 	s.notify(ctx, EventMessageCreated, conversationID,
 		MessageCreatedEvent{ConversationID: conversationID, Message: sent[0]})
@@ -237,6 +276,9 @@ func (s *Service) ListMessages(ctx context.Context, callerID, conversationID uui
 	if err := s.attachDeliveryStatus(ctx, page.Messages); err != nil {
 		return Page{}, err
 	}
+	if err := s.attachStreamText(ctx, page.Messages); err != nil {
+		return Page{}, err
+	}
 	return page, nil
 }
 
@@ -261,7 +303,14 @@ func (s *Service) ListMessagesForAgent(ctx context.Context, agentID, conversatio
 	if err != nil {
 		return Page{}, domain.Internal(fmt.Errorf("list messages of %s for agent: %w", conversationID, err))
 	}
-	return pageOf(rows, limit)
+	page, err := pageOf(rows, limit)
+	if err != nil {
+		return Page{}, err
+	}
+	if err := s.attachStreamText(ctx, page.Messages); err != nil {
+		return Page{}, err
+	}
+	return page, nil
 }
 
 // pageOf turns limit+1 rows into a page and a cursor on its last message,

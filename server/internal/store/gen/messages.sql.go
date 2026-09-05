@@ -7,14 +7,15 @@ package gen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 const createMessage = `-- name: CreateMessage :one
-INSERT INTO messages (id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, idempotency_key)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key
+INSERT INTO messages (id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, idempotency_key, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated
 `
 
 type CreateMessageParams struct {
@@ -25,6 +26,7 @@ type CreateMessageParams struct {
 	SenderAgentID  *uuid.UUID
 	Body           []byte
 	IdempotencyKey *string
+	Status         string
 }
 
 func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error) {
@@ -36,6 +38,7 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		arg.SenderAgentID,
 		arg.Body,
 		arg.IdempotencyKey,
+		arg.Status,
 	)
 	var i Message
 	err := row.Scan(
@@ -47,12 +50,79 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		&i.Body,
 		&i.CreatedAt,
 		&i.IdempotencyKey,
+		&i.Status,
+		&i.Truncated,
+	)
+	return i, err
+}
+
+const finishMessage = `-- name: FinishMessage :one
+UPDATE messages
+SET body = $1, status = 'complete', truncated = $2
+WHERE id = $3
+  AND sender_agent_id = $4::uuid
+  AND status = 'streaming'
+RETURNING id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated
+`
+
+type FinishMessageParams struct {
+	Body          []byte
+	Truncated     bool
+	ID            uuid.UUID
+	SenderAgentID uuid.UUID
+}
+
+// Ends a stream: the whole text lands in one update. Scoped to the agent
+// that started it, and to a message still streaming, so a second finish or
+// another agent's finish changes nothing.
+func (q *Queries) FinishMessage(ctx context.Context, arg FinishMessageParams) (Message, error) {
+	row := q.db.QueryRow(ctx, finishMessage,
+		arg.Body,
+		arg.Truncated,
+		arg.ID,
+		arg.SenderAgentID,
+	)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.ConversationID,
+		&i.SenderKind,
+		&i.SenderUserID,
+		&i.SenderAgentID,
+		&i.Body,
+		&i.CreatedAt,
+		&i.IdempotencyKey,
+		&i.Status,
+		&i.Truncated,
+	)
+	return i, err
+}
+
+const getMessage = `-- name: GetMessage :one
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated FROM messages
+WHERE id = $1
+`
+
+func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (Message, error) {
+	row := q.db.QueryRow(ctx, getMessage, id)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.ConversationID,
+		&i.SenderKind,
+		&i.SenderUserID,
+		&i.SenderAgentID,
+		&i.Body,
+		&i.CreatedAt,
+		&i.IdempotencyKey,
+		&i.Status,
+		&i.Truncated,
 	)
 	return i, err
 }
 
 const getMessageByAgentKey = `-- name: GetMessageByAgentKey :one
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key FROM messages
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated FROM messages
 WHERE sender_agent_id = $1::uuid AND idempotency_key = $2::text
 `
 
@@ -73,12 +143,14 @@ func (q *Queries) GetMessageByAgentKey(ctx context.Context, arg GetMessageByAgen
 		&i.Body,
 		&i.CreatedAt,
 		&i.IdempotencyKey,
+		&i.Status,
+		&i.Truncated,
 	)
 	return i, err
 }
 
 const getMessageByUserKey = `-- name: GetMessageByUserKey :one
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key FROM messages
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated FROM messages
 WHERE sender_user_id = $1::uuid AND idempotency_key = $2::text
 `
 
@@ -99,12 +171,14 @@ func (q *Queries) GetMessageByUserKey(ctx context.Context, arg GetMessageByUserK
 		&i.Body,
 		&i.CreatedAt,
 		&i.IdempotencyKey,
+		&i.Status,
+		&i.Truncated,
 	)
 	return i, err
 }
 
 const listLatestMessages = `-- name: ListLatestMessages :many
-SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key
+SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated
 FROM messages
 WHERE conversation_id = ANY($1::uuid[])
 ORDER BY conversation_id, id DESC
@@ -129,6 +203,8 @@ func (q *Queries) ListLatestMessages(ctx context.Context, conversationIds []uuid
 			&i.Body,
 			&i.CreatedAt,
 			&i.IdempotencyKey,
+			&i.Status,
+			&i.Truncated,
 		); err != nil {
 			return nil, err
 		}
@@ -141,7 +217,7 @@ func (q *Queries) ListLatestMessages(ctx context.Context, conversationIds []uuid
 }
 
 const listMessagesAfter = `-- name: ListMessagesAfter :many
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key FROM messages
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated FROM messages
 WHERE conversation_id = $1
   AND id > $2::uuid
 ORDER BY id ASC
@@ -174,6 +250,8 @@ func (q *Queries) ListMessagesAfter(ctx context.Context, arg ListMessagesAfterPa
 			&i.Body,
 			&i.CreatedAt,
 			&i.IdempotencyKey,
+			&i.Status,
+			&i.Truncated,
 		); err != nil {
 			return nil, err
 		}
@@ -186,7 +264,7 @@ func (q *Queries) ListMessagesAfter(ctx context.Context, arg ListMessagesAfterPa
 }
 
 const listMessagesBefore = `-- name: ListMessagesBefore :many
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key FROM messages
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated FROM messages
 WHERE conversation_id = $1
   AND ($2::uuid IS NULL OR id < $2::uuid)
 ORDER BY id DESC
@@ -219,6 +297,8 @@ func (q *Queries) ListMessagesBefore(ctx context.Context, arg ListMessagesBefore
 			&i.Body,
 			&i.CreatedAt,
 			&i.IdempotencyKey,
+			&i.Status,
+			&i.Truncated,
 		); err != nil {
 			return nil, err
 		}
@@ -231,7 +311,7 @@ func (q *Queries) ListMessagesBefore(ctx context.Context, arg ListMessagesBefore
 }
 
 const listMessagesBeforeForAgent = `-- name: ListMessagesBeforeForAgent :many
-SELECT m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key FROM messages m
+SELECT m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key, m.status, m.truncated FROM messages m
 JOIN participants p ON p.conversation_id = m.conversation_id AND p.agent_id = $1::uuid
 WHERE m.conversation_id = $2
   AND m.created_at >= p.joined_at
@@ -272,6 +352,8 @@ func (q *Queries) ListMessagesBeforeForAgent(ctx context.Context, arg ListMessag
 			&i.Body,
 			&i.CreatedAt,
 			&i.IdempotencyKey,
+			&i.Status,
+			&i.Truncated,
 		); err != nil {
 			return nil, err
 		}
@@ -284,7 +366,7 @@ func (q *Queries) ListMessagesBeforeForAgent(ctx context.Context, arg ListMessag
 }
 
 const listMessagesByIDs = `-- name: ListMessagesByIDs :many
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key FROM messages
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated FROM messages
 WHERE id = ANY($1::uuid[])
 `
 
@@ -306,6 +388,48 @@ func (q *Queries) ListMessagesByIDs(ctx context.Context, ids []uuid.UUID) ([]Mes
 			&i.Body,
 			&i.CreatedAt,
 			&i.IdempotencyKey,
+			&i.Status,
+			&i.Truncated,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStaleStreamingMessages = `-- name: ListStaleStreamingMessages :many
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated FROM messages
+WHERE status = 'streaming' AND created_at < $1::timestamptz
+ORDER BY created_at
+LIMIT 100
+`
+
+// Streams still open long after they began: the buffer's own bookkeeping
+// was lost, and the row must be finished from whatever is left.
+func (q *Queries) ListStaleStreamingMessages(ctx context.Context, startedBefore time.Time) ([]Message, error) {
+	rows, err := q.db.Query(ctx, listStaleStreamingMessages, startedBefore)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Message{}
+	for rows.Next() {
+		var i Message
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConversationID,
+			&i.SenderKind,
+			&i.SenderUserID,
+			&i.SenderAgentID,
+			&i.Body,
+			&i.CreatedAt,
+			&i.IdempotencyKey,
+			&i.Status,
+			&i.Truncated,
 		); err != nil {
 			return nil, err
 		}

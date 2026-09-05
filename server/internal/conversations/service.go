@@ -21,6 +21,7 @@ type Service struct {
 	store     *store.Store
 	limiter   ratelimit.Limiter
 	publisher realtime.Publisher
+	streams   *StreamStore
 }
 
 // Option configures a Service.
@@ -38,6 +39,12 @@ func WithLimiter(l ratelimit.Limiter) Option {
 // record is unaffected either way.
 func WithPublisher(p realtime.Publisher) Option {
 	return func(s *Service) { s.publisher = p }
+}
+
+// WithStreams enables streamed messages, whose growing text is kept in the
+// given store until they finish. Without it, starting a stream is refused.
+func WithStreams(s *StreamStore) Option {
+	return func(svc *Service) { svc.streams = s }
 }
 
 // New builds the service.
@@ -223,6 +230,9 @@ func (s *Service) hydrate(ctx context.Context, rows []gen.Conversation) ([]Conve
 		previews = append(previews, msg)
 	}
 	if err := s.attachDeliveryStatus(ctx, previews); err != nil {
+		return nil, err
+	}
+	if err := s.attachStreamText(ctx, previews); err != nil {
 		return nil, err
 	}
 	for i := range previews {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/ratelimit"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 )
@@ -31,6 +32,13 @@ func NewLimiter(t *testing.T) *ratelimit.Redis {
 	t.Helper()
 
 	return ratelimit.NewRedis(sharedRedis(t), "test:"+randomHex(t)+":")
+}
+
+// NewStreamStore returns a stream buffer store with a key prefix unique to
+// this test. Buffers expire on their own.
+func NewStreamStore(t *testing.T) *conversations.StreamStore {
+	t.Helper()
+	return conversations.NewStreamStore(sharedRedis(t), "test:"+randomHex(t)+":")
 }
 
 // NewBus returns a live-update bus on a Redis channel unique to this test.

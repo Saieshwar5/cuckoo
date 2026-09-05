@@ -1,4 +1,4 @@
-"""The Agent: a socket to the hub, a handler, and a way to reply."""
+"""The Agent: a socket to the hub, a handler, and ways to reply."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import logging
 import uuid
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Self
 
 import httpx
 import websockets
@@ -26,7 +26,19 @@ CLOSE_BINDING_GONE = 4002
 # event it never saw acknowledged, so a slow ack can mean seeing one twice.
 _REMEMBER = 1000
 
+# How long to wait for the hub to answer a socket operation.
+_REPLY_TIMEOUT = 30.0
+
 Handler = Callable[[Message, Conversation], Awaitable[None]]
+
+
+class ProtocolError(Exception):
+    """The hub refused an operation. ``code`` is the stable error code."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(f"{code}: {message}")
+        self.code = code
+        self.message = message
 
 
 class Agent:
@@ -47,6 +59,9 @@ class Agent:
         self._handler: Handler | None = None
         self._seen: OrderedDict[str, None] = OrderedDict()
         self._http: httpx.AsyncClient | None = None
+        self._ws: Any = None
+        self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._tasks: set[asyncio.Task[None]] = set()
 
     # -- registration -----------------------------------------------------
 
@@ -104,9 +119,10 @@ class Agent:
         )
         try:
             async with websockets.connect(url, additional_headers=self._auth()) as ws:
+                self._ws = ws
                 log.info("connected to %s", self._hub)
                 async for raw in ws:
-                    await self._handle(ws, json.loads(raw))
+                    self._dispatch(ws, json.loads(raw))
         except ConnectionClosed as exc:
             if exc.rcvd is not None and exc.rcvd.code == CLOSE_REPLACED:
                 log.error("another connection took over this binding; stopping")
@@ -115,19 +131,40 @@ class Agent:
                 log.error("the binding was revoked or replaced; stopping")
                 return
             raise
+        finally:
+            self._ws = None
+            for fut in self._pending.values():
+                if not fut.done():
+                    fut.set_exception(ConnectionError("connection closed before the hub answered"))
+            self._pending.clear()
+
+    def _dispatch(self, ws: Any, frame: dict[str, Any]) -> None:
+        """Route one frame: an answer to us, a rejection, or an event."""
+        cid = frame.get("reply_to_cid")
+        if cid is not None:
+            fut = self._pending.pop(cid, None)
+            if fut is not None and not fut.done():
+                fut.set_result(frame)
+            return
+        if "error" in frame and "type" not in frame:
+            log.warning("hub rejected a frame for %s: %s", frame.get("message_id"), frame["error"])
+            return
+        if frame.get("id") and frame.get("type"):
+            # Handlers run as tasks so a slow one never blocks the frames the
+            # others, and our own operations, are waiting for.
+            task = asyncio.create_task(self._handle(ws, frame))
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
 
     async def _handle(self, ws: Any, event: dict[str, Any]) -> None:
-        event_id = event.get("id")
-        if not event_id:
-            return
+        event_id = event["id"]
         if event_id in self._seen:
-            await ws.send(json.dumps({"ack": event_id}))
+            await self._ack(ws, event_id)
             return
-
         if event.get("type") != "message.created":
             # Nothing to do with it, but it was received.
             self._remember(event_id)
-            await ws.send(json.dumps({"ack": event_id}))
+            await self._ack(ws, event_id)
             return
 
         data = event.get("data") or {}
@@ -141,7 +178,13 @@ class Agent:
             return
 
         self._remember(event_id)
-        await ws.send(json.dumps({"ack": event_id}))
+        await self._ack(ws, event_id)
+
+    async def _ack(self, ws: Any, event_id: str) -> None:
+        try:
+            await ws.send(json.dumps({"ack": event_id}))
+        except ConnectionClosed:
+            log.warning("could not acknowledge %s; the hub will send it again", event_id)
 
     def _remember(self, event_id: str) -> None:
         self._seen[event_id] = None
@@ -163,5 +206,66 @@ class Agent:
         response.raise_for_status()
         return Message.from_wire(response.json()["message"], conversation_id)
 
+    def stream(self, conversation_id: str) -> Stream:
+        """Begin a message that arrives piece by piece. Use as ``async with``."""
+        return Stream(self, conversation_id)
+
+    # -- socket operations ------------------------------------------------
+
+    async def _call(self, op: str, **fields: Any) -> dict[str, Any]:
+        """Send an operation over the socket and wait for the hub's answer."""
+        ws = self._ws
+        if ws is None:
+            raise ConnectionError("not connected to the hub")
+        cid = uuid.uuid4().hex
+        fut: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+        self._pending[cid] = fut
+        try:
+            await ws.send(json.dumps({"op": op, "cid": cid, **fields}))
+            reply = await asyncio.wait_for(fut, _REPLY_TIMEOUT)
+        finally:
+            self._pending.pop(cid, None)
+        if not reply.get("ok"):
+            err = reply.get("error") or {}
+            raise ProtocolError(
+                err.get("code", "unknown"), err.get("message", "The hub refused the operation.")
+            )
+        return reply
+
+    async def _fire(self, op: str, **fields: Any) -> None:
+        """Send an operation the hub only answers when it fails."""
+        ws = self._ws
+        if ws is None:
+            raise ConnectionError("not connected to the hub")
+        await ws.send(json.dumps({"op": op, **fields}))
+
     def _auth(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._secret}"}
+
+
+class Stream:
+    """A message being written. Entering starts it; ``append`` adds text;
+    leaving finishes it, even after an exception, with what was sent."""
+
+    def __init__(self, agent: Agent, conversation_id: str):
+        self._agent = agent
+        self.conversation_id = conversation_id
+        self.message_id: str | None = None
+        self.message: Message | None = None
+
+    async def __aenter__(self) -> Self:
+        reply = await self._agent._call("stream.start", conversation_id=self.conversation_id)
+        self.message_id = reply["message"]["id"]
+        return self
+
+    async def append(self, text: str) -> None:
+        """Add text to the message."""
+        if self.message_id is None:
+            raise RuntimeError("append is only available inside the stream's context")
+        await self._agent._fire("stream.delta", message_id=self.message_id, text=text)
+
+    async def __aexit__(self, exc_type: object, exc: object, tb: object) -> bool:
+        if self.message_id is not None:
+            reply = await self._agent._call("stream.end", message_id=self.message_id)
+            self.message = Message.from_wire(reply["message"], self.conversation_id)
+        return False

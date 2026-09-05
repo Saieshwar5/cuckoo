@@ -49,6 +49,14 @@ type deliveryUpdatedFrame struct {
 	DeliveryStatus string `json:"delivery_status"`
 }
 
+// messageDeltaFrame is one piece of a streaming message. The app appends
+// it to the bubble it drew on message.started.
+type messageDeltaFrame struct {
+	ConversationID string `json:"conversation_id"`
+	MessageID      string `json:"message_id"`
+	Text           string `json:"text"`
+}
+
 // socket holds a live connection for the signed-in person and pushes them
 // every event in their conversations until they leave.
 //
@@ -129,7 +137,7 @@ func write(ctx context.Context, c *websocket.Conn, fr frame) error {
 // frameOf renders an internal event as the app sees it.
 func frameOf(ev realtime.Event) (frame, error) {
 	switch ev.Type {
-	case conversations.EventMessageCreated:
+	case conversations.EventMessageCreated, conversations.EventMessageStarted, conversations.EventMessageCompleted:
 		var p conversations.MessageCreatedEvent
 		if err := json.Unmarshal(ev.Payload, &p); err != nil {
 			return frame{}, err
@@ -137,6 +145,17 @@ func frameOf(ev realtime.Event) (frame, error) {
 		return frame{Type: ev.Type, Data: messageCreatedFrame{
 			ConversationID: domain.FormatID(domain.PrefixConv, p.ConversationID),
 			Message:        newMessageResponse(p.Message),
+		}}, nil
+
+	case conversations.EventMessageDelta:
+		var p conversations.MessageDeltaEvent
+		if err := json.Unmarshal(ev.Payload, &p); err != nil {
+			return frame{}, err
+		}
+		return frame{Type: ev.Type, Data: messageDeltaFrame{
+			ConversationID: domain.FormatID(domain.PrefixConv, p.ConversationID),
+			MessageID:      domain.FormatID(domain.PrefixMessage, p.MessageID),
+			Text:           p.Text,
 		}}, nil
 
 	case conversations.EventDeliveryUpdated:

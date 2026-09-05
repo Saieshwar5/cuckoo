@@ -42,11 +42,15 @@ type Conversation struct {
 	Kind string `json:"kind"`
 }
 
-// Message is a message as a backend sees it.
+// Message is a message as a backend sees it. Status is "streaming" while
+// an agent is still writing it and "complete" once it is final; Truncated
+// marks a stream the hub had to cut off.
 type Message struct {
 	ID        string    `json:"id"`
 	Sender    Sender    `json:"sender"`
 	Body      Body      `json:"body"`
+	Status    string    `json:"status"`
+	Truncated bool      `json:"truncated"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -137,6 +141,8 @@ func MessageOf(msg conversations.Message, senderName string) Message {
 			DisplayName: senderName,
 		},
 		Body:      Body{Text: msg.Body.Text},
+		Status:    string(msg.Status),
+		Truncated: msg.Truncated,
 		CreatedAt: msg.CreatedAt,
 	}
 }

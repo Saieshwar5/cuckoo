@@ -37,9 +37,16 @@ const (
 	socketReadLimit    = 64 << 10
 )
 
-// ackFrame is the one frame a backend sends: it has an event.
-type ackFrame struct {
-	Ack string `json:"ack"`
+// inboundFrame is anything a backend sends: an ack, or an operation. One
+// shape, so the reader needs one decode.
+type inboundFrame struct {
+	Ack            string `json:"ack"`
+	Op             string `json:"op"`
+	CID            string `json:"cid"`
+	ConversationID string `json:"conversation_id"`
+	MessageID      string `json:"message_id"`
+	Text           string `json:"text"`
+	IdempotencyKey string `json:"idempotency_key"`
 }
 
 type openedPayload struct {
@@ -83,20 +90,25 @@ func (h *Handler) socket(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = c.CloseNow() }()
 	c.SetReadLimit(socketReadLimit)
 
+	agent, err := h.agents.Get(r.Context(), agentID)
+	if err != nil {
+		return
+	}
 	s := &agentSocket{
-		h: h, c: c, agentID: agentID, binding: ep.BindingID, connID: domain.NewID(),
+		h: h, c: c, agentID: agentID, agentName: agent.DisplayName, binding: ep.BindingID, connID: domain.NewID(),
 		log: slog.Default().With("component", "agent-socket", "agent", agentID),
 	}
 	s.run(r.Context())
 }
 
 type agentSocket struct {
-	h       *Handler
-	c       *websocket.Conn
-	agentID uuid.UUID
-	binding uuid.UUID
-	connID  uuid.UUID
-	log     *slog.Logger
+	h         *Handler
+	c         *websocket.Conn
+	agentID   uuid.UUID
+	agentName string
+	binding   uuid.UUID
+	connID    uuid.UUID
+	log       *slog.Logger
 }
 
 func (s *agentSocket) run(parent context.Context) {
@@ -127,7 +139,8 @@ func (s *agentSocket) run(parent context.Context) {
 	}()
 
 	acks := make(chan uuid.UUID, 64)
-	go s.readAcks(ctx, cancel, acks)
+	ops := make(chan inboundFrame, 64)
+	go s.read(ctx, cancel, acks, ops)
 
 	if !s.push(ctx) {
 		return
@@ -172,6 +185,11 @@ func (s *agentSocket) run(parent context.Context) {
 				}
 			}
 
+		case op := <-ops:
+			if !s.handleOp(ctx, op) {
+				return
+			}
+
 		case <-pings.C:
 			if !s.heartbeat(ctx) {
 				return
@@ -189,28 +207,37 @@ func (s *agentSocket) announce(ctx context.Context) error {
 	return s.h.publisher.Publish(ctx, ev)
 }
 
-// readAcks is the only reader. It turns ack frames into ids for the main
-// loop, so every piece of database work stays on one goroutine, and ends
-// the connection when the backend goes.
-func (s *agentSocket) readAcks(ctx context.Context, cancel context.CancelFunc, acks chan<- uuid.UUID) {
+// read is the only reader. It turns frames into acks and operations for
+// the main loop, so every piece of database work and every write stays on
+// one goroutine, and it ends the connection when the backend goes.
+func (s *agentSocket) read(ctx context.Context, cancel context.CancelFunc, acks chan<- uuid.UUID, ops chan<- inboundFrame) {
 	defer cancel()
 	for {
 		_, data, err := s.c.Read(ctx)
 		if err != nil {
 			return
 		}
-		var f ackFrame
-		if err := json.Unmarshal(data, &f); err != nil || f.Ack == "" {
+		var f inboundFrame
+		if err := json.Unmarshal(data, &f); err != nil {
 			continue
 		}
-		id, err := domain.ParseID(domain.PrefixEvent, f.Ack)
-		if err != nil {
-			continue
-		}
-		select {
-		case acks <- id:
-		case <-ctx.Done():
-			return
+		switch {
+		case f.Ack != "":
+			id, err := domain.ParseID(domain.PrefixEvent, f.Ack)
+			if err != nil {
+				continue
+			}
+			select {
+			case acks <- id:
+			case <-ctx.Done():
+				return
+			}
+		case f.Op != "":
+			select {
+			case ops <- f:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 }

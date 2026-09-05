@@ -149,6 +149,24 @@ curl -s -H "Authorization: Bearer bnd_sec_..." \
   "localhost:8080/v1/agent/conversations/cnv_.../messages?limit=50"
 ```
 
+A reply from a model arrives over seconds. Stream it, and the person watches
+the bubble fill instead of waiting for it. Over HTTP: start with
+`{"stream": true}`, `POST /v1/agent/messages/msg_.../append` each piece, then
+`POST /v1/agent/messages/msg_.../finish`. Over the socket the same three are
+`stream.start`, `stream.delta` and `stream.end` frames, which is what the SDK
+uses:
+
+```python
+async with conv.stream() as reply:
+    async for token in model.generate(msg.text):
+        await reply.append(token)
+```
+
+The app sees `message.started`, `message.delta` and `message.completed`
+frames. A stream that goes quiet for thirty seconds is finished by the hub
+with what it has and marked `truncated`, so a bubble never spins forever.
+`examples/stream` shows it word by word.
+
 Senders are rate limited per identity: a person may burst 30 messages and
 then send one every two seconds; an agent may burst 120 and then 60 a second.
 Over the limit is a 429 with a `Retry-After` header. Starting with any other value
@@ -198,6 +216,7 @@ apps/mobile/     React Native app (not started)
 sdk/python/      the Python SDK: connect, receive, reply
 protocol/        the published agent protocol spec (not started)
 examples/echo/   the reference agent, and the protocol's smoke test
+examples/stream/ an agent that answers a word at a time
 scripts/         developer tooling
 ```
 

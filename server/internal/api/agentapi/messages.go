@@ -24,10 +24,12 @@ type messagePageEnvelope struct {
 
 // sendMessageRequest is a reply. The idempotency key is optional on the
 // wire and always sent by the SDK: a retry after a lost response returns
-// the message already created rather than a duplicate.
+// the message already created rather than a duplicate. Stream starts an
+// empty message to append to instead of sending text.
 type sendMessageRequest struct {
 	Text           string `json:"text"`
 	IdempotencyKey string `json:"idempotency_key"`
+	Stream         bool   `json:"stream"`
 }
 
 // sendMessage posts a message from the agent into a conversation it is in.
@@ -49,10 +51,13 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.conversations.SendAsAgent(r.Context(), agentID, conversationID, conversations.SendInput{
-		Text:           req.Text,
-		IdempotencyKey: req.IdempotencyKey,
-	})
+	in := conversations.SendInput{Text: req.Text, IdempotencyKey: req.IdempotencyKey}
+	var res conversations.SendResult
+	if req.Stream {
+		res, err = h.conversations.StartStream(r.Context(), agentID, conversationID, in)
+	} else {
+		res, err = h.conversations.SendAsAgent(r.Context(), agentID, conversationID, in)
+	}
 	if err != nil {
 		httpx.Error(w, r, err)
 		return
