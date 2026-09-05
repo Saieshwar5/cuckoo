@@ -35,9 +35,9 @@ export function Composer({ replyTo, agentName, onCancelReply, onSend }: Props) {
     <View style={[styles.bar, { backgroundColor: colors.ground, paddingBottom: spacing.sm + insets.bottom }]}>
       {replyTo ? (
         <View style={[styles.reply, { backgroundColor: colors.surface }]}>
-          <View style={[styles.replyBar, { backgroundColor: colors.quoteBar }]} />
+          <View style={[styles.replyBar, { backgroundColor: colors.accent }]} />
           <View style={styles.replyBody}>
-            <Text style={[styles.replyName, { color: colors.quoteBar }]} numberOfLines={1}>
+            <Text style={[styles.replyName, { color: colors.accent }]} numberOfLines={1}>
               {replyTo.sender.kind === 'user' ? t('chat.reply.you') : agentName}
             </Text>
             <Text style={[styles.replyText, { color: colors.textSecondary }]} numberOfLines={1}>

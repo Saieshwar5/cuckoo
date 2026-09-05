@@ -26,6 +26,8 @@ export function Bubble({ message: m, mine, first, agentName, onReply, onButton, 
   const { colors } = useTheme();
   const failed = m.delivery_status === 'failed' && m.localKey;
   const meta = mine ? colors.bubbleMetaMine : colors.bubbleMetaTheirs;
+  const ink = mine ? colors.bubbleTextMine : colors.bubbleTextTheirs;
+  const quoteBar = mine ? colors.quoteBarMine : colors.quoteBarTheirs;
   return (
     <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
       <Pressable
@@ -36,14 +38,20 @@ export function Bubble({ message: m, mine, first, agentName, onReply, onButton, 
         style={[
           styles.bubble,
           { backgroundColor: mine ? colors.bubbleMine : colors.bubbleTheirs },
+          !mine && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.bubbleBorder },
           first && (mine ? styles.tailMine : styles.tailTheirs),
         ]}
       >
         {m.reply_to ? (
-          <View style={[styles.quote, { backgroundColor: colors.bubbleQuote }]}>
-            <View style={[styles.quoteBar, { backgroundColor: colors.quoteBar }]} />
+          <View
+            style={[
+              styles.quote,
+              { backgroundColor: mine ? colors.bubbleQuoteMine : colors.bubbleQuoteTheirs },
+            ]}
+          >
+            <View style={[styles.quoteBar, { backgroundColor: quoteBar }]} />
             <View style={styles.quoteBody}>
-              <Text style={[styles.quoteName, { color: colors.quoteBar }]} numberOfLines={1}>
+              <Text style={[styles.quoteName, { color: quoteBar }]} numberOfLines={1}>
                 {m.reply_to.sender_kind === 'user' ? t('chat.reply.you') : agentName}
               </Text>
               <Text style={[styles.quoteText, { color: meta }]} numberOfLines={2}>
@@ -52,9 +60,9 @@ export function Bubble({ message: m, mine, first, agentName, onReply, onButton, 
             </View>
           </View>
         ) : null}
-        <Text style={[styles.text, { color: colors.bubbleText }]}>
+        <Text style={[styles.text, { color: ink }]}>
           {m.body.text ?? ''}
-          {m.status === 'streaming' ? <Caret color={colors.accentStrong} /> : null}
+          {m.status === 'streaming' ? <Caret color={ink} /> : null}
         </Text>
         <View style={styles.footer}>
           {m.truncated ? (
@@ -88,7 +96,9 @@ function Ticks({ status, colors }: { status: DeliveryStatus; colors: Palette }) 
     case 'pending':
       return <Ionicons name="checkmark" size={15} color={colors.bubbleMetaMine} testID="tick-pending" />;
     case 'delivered':
-      return <Ionicons name="checkmark-done" size={15} color={colors.tickRead} testID="tick-delivered" />;
+      return (
+        <Ionicons name="checkmark-done" size={15} color={colors.bubbleTextMine} testID="tick-delivered" />
+      );
     case 'failed':
       return <Ionicons name="alert-circle" size={15} color={colors.danger} testID="tick-failed" />;
   }

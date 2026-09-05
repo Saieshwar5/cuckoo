@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { AgentStatus } from '@/api/types';
 import { sizes, useTheme, type Palette } from '@/theme';
-import { colorFor, initials } from '@/util/avatar';
+import { avatarIndex, initials } from '@/util/avatar';
 
 interface Props {
   name: string;
@@ -24,20 +24,20 @@ function dotColor(colors: Palette, status: AgentStatus): string {
   }
 }
 
-// Avatar is a coloured disc with the name's initials. The colour comes from
-// the name, so an agent looks the same everywhere it appears.
+// Avatar is a grey disc with the name's initials. The shade comes from the
+// name, so an agent looks the same everywhere it appears.
 export function Avatar({ name, size = sizes.avatar, status }: Props) {
   const { colors } = useTheme();
   const dot = Math.round(size * 0.27);
+  const shade = colors.avatars[avatarIndex(name, colors.avatars.length)] ?? colors.surfaceStrong;
   return (
     <View style={{ width: size, height: size }}>
       <View
-        style={[
-          styles.disc,
-          { width: size, height: size, borderRadius: size / 2, backgroundColor: colorFor(name) },
-        ]}
+        style={[styles.disc, { width: size, height: size, borderRadius: size / 2, backgroundColor: shade }]}
       >
-        <Text style={[styles.initials, { fontSize: Math.round(size * 0.38) }]}>{initials(name)}</Text>
+        <Text style={[styles.initials, { fontSize: Math.round(size * 0.38), color: colors.onAvatar }]}>
+          {initials(name)}
+        </Text>
       </View>
       {status !== undefined ? (
         <View
@@ -58,6 +58,6 @@ export function Avatar({ name, size = sizes.avatar, status }: Props) {
 
 const styles = StyleSheet.create({
   disc: { alignItems: 'center', justifyContent: 'center' },
-  initials: { color: '#FFFFFF', fontWeight: '600' },
+  initials: { fontWeight: '600' },
   dot: { position: 'absolute', right: -1, bottom: -1, borderWidth: 2.5 },
 });
