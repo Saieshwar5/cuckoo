@@ -140,16 +140,22 @@ type clientFrame struct {
 	Type string `json:"type"`
 }
 
+// readClientFrames reads n frames about the conversation. Announcements
+// about the agent's backend coming and going are not counted: they are the
+// agent screens' business, and these tests are about the thread.
 func readClientFrames(t *testing.T, c *websocket.Conn, n int) []clientFrame {
 	t.Helper()
 	out := make([]clientFrame, 0, n)
-	for range n {
+	for len(out) < n {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		var fr clientFrame
 		err := wsjson.Read(ctx, c, &fr)
 		cancel()
 		if err != nil {
 			t.Fatalf("read client frame %d: %v", len(out)+1, err)
+		}
+		if fr.Type == "agent.status" {
+			continue
 		}
 		out = append(out, fr)
 	}

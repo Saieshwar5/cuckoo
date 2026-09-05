@@ -131,7 +131,9 @@ export function retryLocal(state: ChatState, key: string): ChatState {
 // applyFrame folds one live frame into the conversation. Frames for other
 // conversations are not ours to handle.
 export function applyFrame(state: ChatState, frame: Frame, conversationId: string): ChatState {
-  if (frame.type === 'ready') return state;
+  // Announcements about an agent are the chat list's and the header's
+  // business, not the thread's.
+  if (frame.type === 'ready' || frame.type === 'agent.status') return state;
   if (frame.data.conversation_id !== conversationId) return state;
   switch (frame.type) {
     case 'message.created':

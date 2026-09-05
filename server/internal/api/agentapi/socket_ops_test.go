@@ -65,15 +65,24 @@ type phoneFrame struct {
 	} `json:"data"`
 }
 
+// readPhone reads the next frame about the conversation. Announcements
+// about the agent's backend coming and going are skipped: these tests are
+// about the thread.
 func readPhone(t *testing.T, c *websocket.Conn) phoneFrame {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	var fr phoneFrame
-	if err := wsjson.Read(ctx, c, &fr); err != nil {
-		t.Fatalf("read phone frame: %v", err)
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		var fr phoneFrame
+		err := wsjson.Read(ctx, c, &fr)
+		cancel()
+		if err != nil {
+			t.Fatalf("read phone frame: %v", err)
+		}
+		if fr.Type == "agent.status" {
+			continue
+		}
+		return fr
 	}
-	return fr
 }
 
 // The whole reason for socket operations: a stream's pieces as forty-byte

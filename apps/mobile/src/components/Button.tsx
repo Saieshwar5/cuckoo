@@ -17,6 +17,8 @@ interface Props {
   icon?: Icon;
   // compact hugs its label instead of filling the row.
   compact?: boolean;
+  // danger is for the one destructive action on a screen.
+  tone?: 'accent' | 'danger';
   testID?: string;
 }
 
@@ -28,16 +30,17 @@ export function Button({
   variant = 'primary',
   icon,
   compact,
+  tone = 'accent',
   testID,
 }: Props) {
   const { colors } = useTheme();
   const inactive = disabled || busy;
+  const accent = tone === 'danger' ? colors.danger : colors.accent;
+  const onAccent = tone === 'danger' ? '#FFFFFF' : colors.onAccent;
   // A disabled primary goes quiet rather than translucent: a faded accent
   // reads as broken, a grey pill reads as "not yet".
-  const fg =
-    variant === 'primary' ? (disabled && !busy ? colors.textSecondary : colors.onAccent) : colors.accent;
-  const bg =
-    variant === 'primary' ? (disabled && !busy ? colors.surfaceStrong : colors.accent) : 'transparent';
+  const fg = variant === 'primary' ? (disabled && !busy ? colors.textSecondary : onAccent) : accent;
+  const bg = variant === 'primary' ? (disabled && !busy ? colors.surfaceStrong : accent) : 'transparent';
   return (
     <Pressable
       accessibilityRole="button"
@@ -49,7 +52,7 @@ export function Button({
         styles.base,
         compact && styles.compact,
         { backgroundColor: bg },
-        variant === 'outline' && { borderWidth: 1, borderColor: colors.accent },
+        variant === 'outline' && { borderWidth: 1, borderColor: accent },
         pressed && !inactive && styles.pressed,
       ]}
     >

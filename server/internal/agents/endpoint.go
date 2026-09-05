@@ -43,10 +43,18 @@ func (s *Service) ActiveEndpoint(ctx context.Context, agentID uuid.UUID) (*Endpo
 }
 
 // RecordDeliverySuccess notes that the backend behind a binding answered: it
-// is connected, and any failure streak is over.
+// is connected, and any failure streak is over. The first success after a
+// silence is announced; the rest are not news.
 func (s *Service) RecordDeliverySuccess(ctx context.Context, bindingID uuid.UUID) error {
-	if err := s.store.RecordBindingSuccess(ctx, bindingID); err != nil {
+	row, err := s.store.RecordBindingSuccess(ctx, bindingID)
+	if err != nil {
+		if store.IsNoRows(err) {
+			return nil // revoked meanwhile; nothing to record
+		}
 		return domain.Internal(fmt.Errorf("record success of binding %s: %w", bindingID, err))
+	}
+	if row.PreviousStatus != row.Status {
+		s.announce(ctx, row.AgentID, row.Status)
 	}
 	return nil
 }
@@ -60,9 +68,14 @@ func (s *Service) SocketConnected(ctx context.Context, bindingID uuid.UUID) erro
 // SocketClosed notes that the socket has gone. The binding is idle, not
 // unreachable: nothing is known until the backend comes back.
 func (s *Service) SocketClosed(ctx context.Context, bindingID uuid.UUID) error {
-	if err := s.store.MarkBindingIdle(ctx, bindingID); err != nil {
+	row, err := s.store.MarkBindingIdle(ctx, bindingID)
+	if err != nil {
+		if store.IsNoRows(err) {
+			return nil // was not connected, or revoked; nothing changed
+		}
 		return domain.Internal(fmt.Errorf("mark binding %s idle: %w", bindingID, err))
 	}
+	s.announce(ctx, row.AgentID, row.Status)
 	return nil
 }
 
@@ -70,8 +83,15 @@ func (s *Service) SocketClosed(ctx context.Context, bindingID uuid.UUID) error {
 // answer. Five minutes of unbroken failures makes the binding unreachable,
 // which is what the app shows as a grey dot.
 func (s *Service) RecordDeliveryFailure(ctx context.Context, bindingID uuid.UUID) error {
-	if err := s.store.RecordBindingFailure(ctx, bindingID); err != nil {
+	row, err := s.store.RecordBindingFailure(ctx, bindingID)
+	if err != nil {
+		if store.IsNoRows(err) {
+			return nil
+		}
 		return domain.Internal(fmt.Errorf("record failure of binding %s: %w", bindingID, err))
+	}
+	if row.PreviousStatus != row.Status {
+		s.announce(ctx, row.AgentID, row.Status)
 	}
 	return nil
 }

@@ -68,6 +68,15 @@ ORDER BY joined_at, agent_id;
 SELECT * FROM conversations
 WHERE id = ANY(sqlc.arg('ids')::uuid[]);
 
+-- name: ListUsersSharingAgent :many
+-- Everyone who has a conversation with an agent: who is told, live, when
+-- the agent's backend comes and goes. Today that is its owner; once agents
+-- are handed out it is everyone who added one.
+SELECT DISTINCT p.user_id::uuid AS user_id
+FROM participants ap
+JOIN participants p ON p.conversation_id = ap.conversation_id AND p.user_id IS NOT NULL
+WHERE ap.agent_id = $1::uuid;
+
 -- name: ListUserParticipants :many
 -- The people in a conversation: who is told, live, when something happens
 -- in it.

@@ -77,6 +77,21 @@ retry a failure with the same key. One live connection per session
 (`src/realtime/realtime.ts`, opened by `RealtimeProvider`) feeds both the
 chat list and the open chat.
 
+## Agents
+
+The Agents tab lists the agents you own, live: `AgentsProvider` keeps
+`AgentsController` alive for the session and the hub's `agent.status`
+frames move the dot beside each one the moment a backend attaches, drops,
+or stops answering. The same frame updates the chat list's avatars.
+
+`app/agent/new` creates one (name, a handle suggested from it, a line
+about it), `app/agent/[id]` is its profile, `app/agent/[id]/edit` changes
+the name and description (never the handle, which is its address), and
+`app/agent/[id]/connect` is the whole developer experience: pick socket or
+webhook, generate the secret (shown once), copy the three-line SDK snippet
+with the secret and this hub's address filled in, and watch the status
+line flip to Connected when the code speaks.
+
 Long-press a bubble to reply to it. A tap on an agent's button sends the
 choice as an action; quick replies are chips above the composer, shown while
 the agent's question is the last word. In a browser, Enter sends and

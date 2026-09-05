@@ -74,6 +74,7 @@ curl -s -H "$H" "localhost:8080/v1/client/conversations/cnv_.../messages?limit=5
 
 That header exists only when `CUCKOO_ENV=dev`; in any other environment only
 session tokens are accepted.
+
 ### Live updates for the app
 
 The app holds one WebSocket at `/v1/client/socket`, authenticated like any
@@ -86,6 +87,10 @@ the REST API.
 {"type":"message.created","data":{"conversation_id":"cnv_...","message":{...}}}
 {"type":"delivery.updated","data":{"conversation_id":"cnv_...","message_id":"msg_...","delivery_status":"delivered"}}
 ```
+
+When an agent's backend connects, drops, or stops answering, everyone who
+has a chat with it gets `{"type":"agent.status","data":{"agent_id":"agt_...","status":"connected"}}`;
+`status` is `connected`, `idle`, `unreachable`, or `none` once the binding is gone.
 
 The socket is a hint and the database is the record. After a disconnect the
 app asks for what it missed and then resumes:
@@ -135,7 +140,7 @@ first, in order; then events arrive as they happen. Acknowledge each one, or
 it is pushed again after thirty seconds:
 
 ```json
-{"ack": "evt_..."}
+{ "ack": "evt_..." }
 ```
 
 The Python SDK does all of this, and `examples/echo` is the whole of an agent:
@@ -235,16 +240,18 @@ stops everything; `make stop` cleans up if something was left behind.
 
 The same command runs the app elsewhere:
 
-| Command | Where the app runs |
-|---|---|
-| `make play EMAIL=...` | your phone, through Expo Go |
-| `make web EMAIL=...` | a tab in this laptop's browser, for building |
-| `make play EMAIL=... TARGET=emulator` | the Android emulator |
+| Command                               | Where the app runs                           |
+| ------------------------------------- | -------------------------------------------- |
+| `make play EMAIL=...`                 | your phone, through Expo Go                  |
+| `make web EMAIL=...`                  | a tab in this laptop's browser, for building |
+| `make play EMAIL=... TARGET=emulator` | the Android emulator                         |
 
 The app follows the phone's light or dark setting, dark by default, in
 white, grey and black, and works like the chat apps people already have:
 open a chat, watch a reply stream in, tap the buttons an agent offers,
-long-press to reply.
+long-press to reply. Create an agent from the Agents tab, generate its
+secret on the Connect screen, paste the snippet into a terminal, and the
+screen says Connected the moment your code speaks.
 
 The emulator is a one-time install with no Android Studio and no sudo:
 `make emulator-install` downloads a Java runtime, the SDK tools and one
@@ -253,20 +260,20 @@ device. `make emulator` boots it; `make emulator-stop` closes it.
 
 ## Commands
 
-| Command | What it does |
-|---|---|
-| `make up` / `make down` | Start / stop the local Postgres and Redis |
-| `make dev` | Run the server with hot reload |
-| `make test` | Run every test, including the file-size guard |
-| `make test-short` | Only tests that need no database |
-| `make lint` | Run the linter |
-| `make gen` | Regenerate typed database code from SQL |
-| `make check` | Full verification — run this before every commit |
-| `make ci` | Local CI: everything above plus migrate-from-empty and lint |
-| `make watch` | Rerun tests on every file change |
-| `make hooks` | Install the git hooks (once per clone) |
-| `make size-top` | Show the longest source files |
-| `make psql` | Open a shell on the development database |
+| Command                 | What it does                                                |
+| ----------------------- | ----------------------------------------------------------- |
+| `make up` / `make down` | Start / stop the local Postgres and Redis                   |
+| `make dev`              | Run the server with hot reload                              |
+| `make test`             | Run every test, including the file-size guard               |
+| `make test-short`       | Only tests that need no database                            |
+| `make lint`             | Run the linter                                              |
+| `make gen`              | Regenerate typed database code from SQL                     |
+| `make check`            | Full verification — run this before every commit            |
+| `make ci`               | Local CI: everything above plus migrate-from-empty and lint |
+| `make watch`            | Rerun tests on every file change                            |
+| `make hooks`            | Install the git hooks (once per clone)                      |
+| `make size-top`         | Show the longest source files                               |
+| `make psql`             | Open a shell on the development database                    |
 
 ## Layout
 

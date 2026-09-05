@@ -78,7 +78,7 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 	mailer := mail.NewMemory()
 	signinService := signin.New(db, mailer, signin.WithLimiter(NewLimiter(t)))
 
-	agentService := agents.New(db)
+	agentService := agents.New(db, agents.WithPublisher(bus))
 	conversationService := conversations.New(db,
 		conversations.WithLimiter(NewLimiter(t)),
 		conversations.WithPublisher(bus),

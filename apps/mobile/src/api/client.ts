@@ -1,4 +1,4 @@
-import type { Agent, Conversation, Message, Page, User, Verified } from './types';
+import type { Agent, Binding, Conversation, Message, Page, User, Verified } from './types';
 
 // ApiError is the hub's error envelope as a thrown value. `code` is stable
 // and is what the app matches on; `message` is for people.
@@ -38,6 +38,22 @@ export interface SendInput {
   reply_to?: string;
 }
 
+export interface CreateAgentInput {
+  handle: string;
+  display_name: string;
+  description: string;
+}
+
+export interface UpdateAgentInput {
+  display_name?: string;
+  description?: string;
+}
+
+export interface SetBindingInput {
+  mode: 'socket' | 'webhook';
+  webhook_url?: string;
+}
+
 export interface Api {
   startSignIn(email: string): Promise<void>;
   verifySignIn(email: string, code: string, deviceName: string): Promise<Verified>;
@@ -52,6 +68,13 @@ export interface Api {
   // The key makes a retry the same send; a caller that will retry keeps it.
   sendMessage(conversationId: string, input: SendInput, idempotencyKey?: string): Promise<Message>;
   listAgents(): Promise<Agent[]>;
+  getAgent(id: string): Promise<Agent>;
+  createAgent(input: CreateAgentInput): Promise<Agent>;
+  updateAgent(id: string, input: UpdateAgentInput): Promise<Agent>;
+  deleteAgent(id: string): Promise<void>;
+  // The secret comes back exactly once.
+  setBinding(id: string, input: SetBindingInput): Promise<{ binding: Binding; secret: string }>;
+  revokeBinding(id: string): Promise<void>;
 }
 
 // newIdempotencyKey is unique enough that two taps of Send never collide,
@@ -124,5 +147,13 @@ export function createApi(opts: ApiOptions): Api {
         })
       ).message,
     listAgents: async () => (await request<{ agents: Agent[] }>('GET', '/v1/mgmt/agents')).agents,
+    getAgent: async (id) => (await request<{ agent: Agent }>('GET', `/v1/mgmt/agents/${id}`)).agent,
+    createAgent: async (input) => (await request<{ agent: Agent }>('POST', '/v1/mgmt/agents', input)).agent,
+    updateAgent: async (id, input) =>
+      (await request<{ agent: Agent }>('PATCH', `/v1/mgmt/agents/${id}`, input)).agent,
+    deleteAgent: (id) => request('DELETE', `/v1/mgmt/agents/${id}`),
+    setBinding: (id, input) =>
+      request<{ binding: Binding; secret: string }>('POST', `/v1/mgmt/agents/${id}/binding`, input),
+    revokeBinding: (id) => request('DELETE', `/v1/mgmt/agents/${id}/binding`),
   };
 }

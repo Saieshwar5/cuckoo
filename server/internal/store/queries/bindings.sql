@@ -23,28 +23,41 @@ WHERE b.secret_hash = $1
   AND b.revoked_at IS NULL
   AND a.deleted_at IS NULL;
 
--- name: RecordBindingSuccess :exec
+-- name: RecordBindingSuccess :one
 -- A delivered event proves the backend is alive: any failure streak ends.
-UPDATE agent_bindings
+-- Returns the status before and after, so a caller can tell a change from
+-- the thousandth confirmation of the same thing.
+WITH before AS (
+    SELECT status FROM agent_bindings WHERE id = $1
+)
+UPDATE agent_bindings b
 SET status = 'connected', last_seen_at = now(), failure_streak_started_at = NULL
-WHERE id = $1 AND revoked_at IS NULL;
+FROM before
+WHERE b.id = $1 AND b.revoked_at IS NULL
+RETURNING b.agent_id, before.status AS previous_status, b.status;
 
--- name: MarkBindingIdle :exec
+-- name: MarkBindingIdle :one
 -- A socket closed: the backend is no longer connected, and nothing is known
--- about its health until it comes back.
+-- about its health until it comes back. No row means nothing changed.
 UPDATE agent_bindings
 SET status = 'idle'
-WHERE id = $1 AND revoked_at IS NULL AND status = 'connected';
+WHERE id = $1 AND revoked_at IS NULL AND status = 'connected'
+RETURNING agent_id, status;
 
--- name: RecordBindingFailure :exec
+-- name: RecordBindingFailure :one
 -- Starts a failure streak, or continues one; five minutes into a streak the
 -- binding is unreachable. Computed here so the rule holds under concurrent
 -- workers without a read-modify-write.
-UPDATE agent_bindings
-SET failure_streak_started_at = COALESCE(failure_streak_started_at, now()),
+WITH before AS (
+    SELECT status FROM agent_bindings WHERE id = $1
+)
+UPDATE agent_bindings b
+SET failure_streak_started_at = COALESCE(b.failure_streak_started_at, now()),
     status = CASE
-        WHEN COALESCE(failure_streak_started_at, now()) <= now() - interval '5 minutes'
+        WHEN COALESCE(b.failure_streak_started_at, now()) <= now() - interval '5 minutes'
             THEN 'unreachable'
-        ELSE status
+        ELSE b.status
     END
-WHERE id = $1 AND revoked_at IS NULL;
+FROM before
+WHERE b.id = $1 AND b.revoked_at IS NULL
+RETURNING b.agent_id, before.status AS previous_status, b.status;
