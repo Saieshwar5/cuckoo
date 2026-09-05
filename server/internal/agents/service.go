@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/store/gen"
@@ -25,7 +26,8 @@ type Service struct {
 // New builds the service.
 func New(st *store.Store) *Service { return &Service{store: st} }
 
-// Create brings an agent into existence, owned by the caller.
+// Create brings an agent into existence, owned by the caller, and opens the
+// DM between them: the chat the owner will find the agent in.
 func (s *Service) Create(ctx context.Context, ownerID uuid.UUID, in CreateInput) (Agent, error) {
 	handle, err := validateHandle(in.Handle)
 	if err != nil {
@@ -40,10 +42,11 @@ func (s *Service) Create(ctx context.Context, ownerID uuid.UUID, in CreateInput)
 		return Agent{}, err
 	}
 
-	// A transaction even for a single insert: a duplicate handle is a
-	// constraint violation, and Postgres aborts the surrounding transaction on
-	// any error. Scoping the insert keeps the failure contained to a
-	// savepoint, so whatever called us — a request, or a test — carries on.
+	// One transaction for the agent and its DM, so neither exists without the
+	// other. It also contains a duplicate handle: that is a constraint
+	// violation, and Postgres aborts the surrounding transaction on any error,
+	// so scoping the insert to a savepoint lets whatever called us — a
+	// request, or a test — carry on.
 	var row gen.Agent
 	err = s.store.WithTx(ctx, func(tx *store.Store) error {
 		var err error
@@ -54,9 +57,16 @@ func (s *Service) Create(ctx context.Context, ownerID uuid.UUID, in CreateInput)
 			DisplayName: name,
 			Description: desc,
 		})
+		if err != nil {
+			return err
+		}
+		_, err = conversations.New(tx).CreateDM(ctx, ownerID, row.ID)
 		return err
 	})
 	if err != nil {
+		if _, classified := domain.AsError(err); classified {
+			return Agent{}, err
+		}
 		if store.IsUniqueViolation(err) {
 			return Agent{}, domain.Conflict("handle_taken",
 				fmt.Sprintf("The handle %q is already in use.", handle))

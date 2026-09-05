@@ -12,6 +12,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/api"
 	"github.com/Saieshwar5/cuckoo/server/internal/auth"
+	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
@@ -34,12 +35,13 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 
 	agentService := agents.New(db)
 	handler := api.NewRouter(api.Deps{
-		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
-		UserAuth:  auth.NewDev(),
-		AgentAuth: auth.NewBinding(agentService),
-		Users:     users.New(db),
-		Agents:    agentService,
-		Health:    map[string]api.HealthCheck{},
+		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		UserAuth:      auth.NewDev(),
+		AgentAuth:     auth.NewBinding(agentService),
+		Users:         users.New(db),
+		Agents:        agentService,
+		Conversations: conversations.New(db),
+		Health:        map[string]api.HealthCheck{},
 	})
 
 	srv := httptest.NewServer(handler)

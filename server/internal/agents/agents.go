@@ -2,7 +2,7 @@
 // backends.
 //
 // An Agent is the thing in a chat list — a name, a description, an owner. It is
-// permanent, and everything that accumulates around it (conversations, later)
+// permanent, and everything that accumulates around it — its conversations —
 // belongs to it. A Binding is how a backend proves it speaks for an agent. It
 // is replaceable: revoking one, or swapping one for another, changes nothing
 // about the agent or its history. Keeping them separate is what lets a company
