@@ -29,6 +29,10 @@ type Config struct {
 	Env       Env
 	HTTPAddr  string
 	HubDomain string
+	// PublicURL is where people reach this hub from outside: the base of
+	// the links inside QR codes. The laptop's address in development, the
+	// hub's domain in production.
+	PublicURL string
 
 	DatabaseURL string
 	RedisURL    string
@@ -72,6 +76,14 @@ func Load() (Config, error) {
 	}
 	if len(cfg.CORSOrigins) == 0 && cfg.Env == EnvDev {
 		cfg.CORSOrigins = []string{"*"}
+	}
+	cfg.PublicURL = strings.TrimRight(l.str("CUCKOO_PUBLIC_URL", ""), "/")
+	if cfg.PublicURL == "" {
+		if cfg.Env == EnvDev {
+			cfg.PublicURL = "http://localhost" + portOf(cfg.HTTPAddr)
+		} else {
+			cfg.PublicURL = "https://" + cfg.HubDomain
+		}
 	}
 
 	switch {
@@ -175,4 +187,13 @@ func (l *loader) requireNonDefault(key, value, devDefault string) {
 	if value == devDefault {
 		l.fail("%s must be set explicitly when CUCKOO_ENV=prod", key)
 	}
+}
+
+// portOf is the ":port" of a listen address, or nothing for port 80.
+func portOf(addr string) string {
+	i := strings.LastIndex(addr, ":")
+	if i < 0 || addr[i:] == ":80" {
+		return ""
+	}
+	return addr[i:]
 }

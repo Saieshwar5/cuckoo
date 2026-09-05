@@ -93,6 +93,23 @@ class Message:
 
 
 @dataclass
+@dataclass
+class PairToken:
+    """The code someone scanned to reach the agent, with whatever the owner
+    put in it: a personalised code carries the company's own reference, a
+    poster carries nothing."""
+
+    id: str
+    payload: Any = None
+
+    @classmethod
+    def from_wire(cls, data: dict[str, Any] | None) -> PairToken | None:
+        if not data:
+            return None
+        return cls(id=data.get("id", ""), payload=data.get("payload"))
+
+
+@dataclass
 class Conversation:
     """Where a message was said, and the handle for replying there."""
 

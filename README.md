@@ -157,6 +157,8 @@ async def handle(msg, conv):
 agent.run()
 ```
 
+Add `@agent.on_join` and the agent speaks first to whoever adds it.
+
 To reply, post into the conversation the event named. Send an
 `idempotency_key` and a retry after a lost response returns the same message
 (200) instead of creating another (201). History starts from when the agent
@@ -170,6 +172,38 @@ curl -s -X POST localhost:8080/v1/agent/conversations/cnv_.../messages \
 curl -s -H "Authorization: Bearer bnd_sec_..." \
   "localhost:8080/v1/agent/conversations/cnv_.../messages?limit=50"
 ```
+
+### Handing an agent to other people
+
+An agent starts private: only its owner has a chat with it. A pair token
+opens it up. The owner mints one, and the response carries the link and a
+QR code of it:
+
+```bash
+curl -s -H "$H" -X POST localhost:8080/v1/mgmt/agents/agt_.../pair-tokens \
+  -H 'Content-Type: application/json' \
+  -d '{"payload":{"customer_ref":"SBI-8812"},"max_uses":1,"expires_in":3600}'
+# → {"token":{...},"code":"pair_...","url":"http://localhost:8080/p/pair_...","qr_png":"data:image/png;base64,..."}
+```
+
+Leave out `max_uses` for a poster anyone may scan; set it to one and put
+your own reference in `payload` for a code minted per customer. Someone
+scanning it sees the agent's card, with its owner's name and an Unverified
+label, and taps Add:
+
+```bash
+curl -s -H "$H2" localhost:8080/v1/client/pair/pair_...          # the card
+curl -s -H "$H2" -X POST localhost:8080/v1/client/pair/pair_.../accept   # → their chat with it
+```
+
+The backend hears `conversation.joined`, with the payload from the code,
+before the person says a word. That is where the SDK's `@agent.on_join`
+runs; `examples/buttons` greets people by the reference in their code.
+Blocking the agent (`POST /v1/client/agents/agt_.../block`) closes the chat
+in both directions and sends the backend `conversation.left`; scanning the
+code again reopens it. Revoking a token stops new scans and changes nothing
+for people who already have the agent. The link opens a small page on the
+hub for anyone without the app; `CUCKOO_PUBLIC_URL` is its base.
 
 A reply from a model arrives over seconds. Stream it, and the person watches
 the bubble fill instead of waiting for it. Over HTTP: start with

@@ -12,6 +12,8 @@ import (
 const (
 	PrefixBindingSecret = "bnd_sec"
 	PrefixSessionToken  = "ses_tok"
+	// PrefixPairToken is the token inside a QR code or link.
+	PrefixPairToken = "pair"
 )
 
 // secretBytes is the entropy in every generated secret. 256 bits: not

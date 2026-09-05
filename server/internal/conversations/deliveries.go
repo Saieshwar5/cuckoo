@@ -44,13 +44,15 @@ func fanOut(ctx context.Context, tx *store.Store, msg Message) ([]uuid.UUID, err
 			pending = append(pending, agentID)
 		}
 
+		messageID := msg.ID
 		_, err := tx.CreateDelivery(ctx, gen.CreateDeliveryParams{
-			ID:        domain.NewID(),
-			MessageID: msg.ID,
-			AgentID:   agentID,
-			EventType: EventMessageCreated,
-			Status:    string(status),
-			LastError: lastError,
+			ID:             domain.NewID(),
+			MessageID:      &messageID,
+			ConversationID: msg.ConversationID,
+			AgentID:        agentID,
+			EventType:      EventMessageCreated,
+			Status:         string(status),
+			LastError:      lastError,
 		})
 		if err != nil {
 			return nil, domain.Internal(fmt.Errorf("create delivery of %s to %s: %w", msg.ID, agentID, err))

@@ -23,6 +23,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/signin"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
@@ -46,6 +47,7 @@ type Deps struct {
 	Agents        *agents.Service
 	Conversations *conversations.Service
 	Delivery      *delivery.Service
+	Pairing       *pairing.Service
 	Hub           *realtime.Hub
 	Bus           realtime.Publisher
 	// CORSOrigins are the browser origins allowed to call the API; empty
@@ -79,6 +81,9 @@ func NewRouter(d Deps) http.Handler {
 
 	r.Get("/healthz", healthHandler(d.Health))
 
+	// What a QR code opens for someone without the app.
+	r.Get("/p/{code}", pairPageHandler(d.Pairing))
+
 	// Signing in: the only routes a person reaches before they have a
 	// credential, plus signing out, which needs the one it ends.
 	r.Route("/v1/auth", func(r chi.Router) {
@@ -88,7 +93,7 @@ func NewRouter(d Deps) http.Handler {
 	// The app's API. Every route below requires a signed-in person.
 	r.Route("/v1/client", func(r chi.Router) {
 		r.Use(middleware.RequireUser(d.UserAuth))
-		r.Mount("/", client.New(d.Users, d.Conversations, d.Hub).Routes())
+		r.Mount("/", client.New(d.Users, d.Conversations, d.Hub, d.Pairing).Routes())
 	})
 
 	// Agent management: owners creating agents and connecting backends.
@@ -96,7 +101,7 @@ func NewRouter(d Deps) http.Handler {
 	// principal, through the same routes.
 	r.Route("/v1/mgmt", func(r chi.Router) {
 		r.Use(middleware.RequireUser(d.UserAuth))
-		r.Mount("/", mgmt.New(d.Agents).Routes())
+		r.Mount("/", mgmt.New(d.Agents, d.Pairing).Routes())
 	})
 
 	// The agent protocol. Only a binding secret gets in.

@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
+	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -19,11 +20,13 @@ type Handler struct {
 	users         *users.Service
 	conversations *conversations.Service
 	hub           *realtime.Hub
+	pairing       *pairing.Service
 }
 
 // New builds the client API handler.
-func New(userService *users.Service, conversationService *conversations.Service, hub *realtime.Hub) *Handler {
-	return &Handler{users: userService, conversations: conversationService, hub: hub}
+func New(userService *users.Service, conversationService *conversations.Service, hub *realtime.Hub,
+	pairingService *pairing.Service) *Handler {
+	return &Handler{users: userService, conversations: conversationService, hub: hub, pairing: pairingService}
 }
 
 // Routes returns the client API routes, to be mounted behind authentication.
@@ -41,6 +44,13 @@ func (h *Handler) Routes() chi.Router {
 		r.Get("/messages", h.listMessages)
 		r.Post("/messages", h.sendMessage)
 	})
+
+	// Adding agents: what a scanned code resolves to, and accepting it.
+	r.Get("/pair/{code}", h.resolvePair)
+	r.Post("/pair/{code}/accept", h.acceptPair)
+	r.Get("/contacts", h.listContacts)
+	r.Post("/agents/{id}/block", h.blockAgent)
+	r.Delete("/agents/{id}/block", h.unblockAgent)
 
 	return r
 }

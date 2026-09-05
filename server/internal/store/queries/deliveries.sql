@@ -1,6 +1,7 @@
 -- name: CreateDelivery :one
-INSERT INTO message_deliveries (id, message_id, agent_id, event_type, status, last_error)
-VALUES ($1, $2, $3, $4, $5, $6)
+-- A message event names its message; a membership event carries a payload.
+INSERT INTO message_deliveries (id, message_id, conversation_id, agent_id, event_type, payload, status, last_error)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetDelivery :one
@@ -9,7 +10,7 @@ WHERE id = $1;
 
 -- name: ListDeliveriesByMessage :many
 SELECT * FROM message_deliveries
-WHERE message_id = $1
+WHERE message_id = sqlc.arg('message_id')::uuid
 ORDER BY id;
 
 -- name: ClaimDueWebhookDeliveries :many
@@ -117,7 +118,7 @@ LIMIT sqlc.arg('page_size');
 
 -- name: SummarizeDeliveries :many
 -- Per message: how many backends it was for, and how many have it.
-SELECT message_id,
+SELECT message_id::uuid AS message_id,
        count(*)::int                                     AS total,
        count(*) FILTER (WHERE status = 'delivered')::int AS delivered,
        count(*) FILTER (WHERE status = 'failed')::int    AS failed

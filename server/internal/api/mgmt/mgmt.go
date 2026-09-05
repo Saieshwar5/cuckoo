@@ -15,16 +15,18 @@ import (
 
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 )
 
 // Handler holds the services the management API needs.
 type Handler struct {
-	agents *agents.Service
+	agents  *agents.Service
+	pairing *pairing.Service
 }
 
 // New builds the management API handler.
-func New(agentService *agents.Service) *Handler {
-	return &Handler{agents: agentService}
+func New(agentService *agents.Service, pairingService *pairing.Service) *Handler {
+	return &Handler{agents: agentService, pairing: pairingService}
 }
 
 // Routes returns the management routes, to be mounted behind user
@@ -42,6 +44,11 @@ func (h *Handler) Routes() chi.Router {
 
 		r.Post("/binding", h.setBinding)
 		r.Delete("/binding", h.revokeBinding)
+
+		// The codes that hand the agent out.
+		r.Post("/pair-tokens", h.createPairToken)
+		r.Get("/pair-tokens", h.listPairTokens)
+		r.Delete("/pair-tokens/{tid}", h.revokePairToken)
 	})
 
 	return r

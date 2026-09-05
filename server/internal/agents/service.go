@@ -77,7 +77,13 @@ func (s *Service) Create(ctx context.Context, ownerID uuid.UUID, in CreateInput)
 		if err != nil {
 			return err
 		}
-		_, err = conversations.New(tx).CreateDM(ctx, ownerID, row.ID)
+		dm, err := conversations.New(tx).CreateDM(ctx, ownerID, row.ID)
+		if err != nil {
+			return err
+		}
+		_, err = tx.CreateContact(ctx, gen.CreateContactParams{
+			UserID: ownerID, AgentID: row.ID, DmConversationID: dm.ID, AddedVia: "owner",
+		})
 		return err
 	})
 	if err != nil {

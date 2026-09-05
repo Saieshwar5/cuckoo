@@ -104,7 +104,11 @@ start_hub() {
   say_hdr "Building and starting the hub on :$PORT"
   (cd "$ROOT/server" && go build -o "$ROOT/bin/cuckoo" ./cmd/cuckoo)
   : > "$HUB_LOG"
-  (cd "$ROOT/server" && CUCKOO_ENV=dev CUCKOO_MAIL=console CUCKOO_HTTP_ADDR=":$PORT" exec "$ROOT/bin/cuckoo" >> "$HUB_LOG" 2>&1) &
+  # Links inside QR codes point here; for a phone that must be the
+  # laptop's wifi address, not localhost.
+  local public="http://${CUCKOO_HUB_HOST:-$(lan_address)}:$PORT"
+  case "${TARGET:-phone}" in web) public="http://localhost:$PORT" ;; emulator) public="http://10.0.2.2:$PORT" ;; esac
+  (cd "$ROOT/server" && CUCKOO_ENV=dev CUCKOO_MAIL=console CUCKOO_HTTP_ADDR=":$PORT" CUCKOO_PUBLIC_URL="$public" exec "$ROOT/bin/cuckoo" >> "$HUB_LOG" 2>&1) &
   pids+=("$!")
   wait_for "$HUB/healthz" 30 || { tail -5 "$HUB_LOG" >&2; die "the hub did not start; log: $HUB_LOG"; }
   echo "hub is up (log: $HUB_LOG)"

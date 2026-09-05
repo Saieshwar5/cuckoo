@@ -26,9 +26,9 @@ type AckDeliveryParams struct {
 
 // A backend acknowledging an event over its socket. Scoped to the agent so
 // a backend can only ever acknowledge its own.
-func (q *Queries) AckDelivery(ctx context.Context, arg AckDeliveryParams) (uuid.UUID, error) {
+func (q *Queries) AckDelivery(ctx context.Context, arg AckDeliveryParams) (*uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, ackDelivery, arg.ID, arg.AgentID)
-	var message_id uuid.UUID
+	var message_id *uuid.UUID
 	err := row.Scan(&message_id)
 	return message_id, err
 }
@@ -53,7 +53,7 @@ WHERE d.id IN (
     LIMIT $2
     FOR UPDATE OF due SKIP LOCKED
 )
-RETURNING d.id, d.message_id, d.agent_id, d.event_type, d.status, d.attempts, d.next_attempt_at, d.last_error, d.delivered_at, d.created_at
+RETURNING d.id, d.message_id, d.agent_id, d.event_type, d.status, d.attempts, d.next_attempt_at, d.last_error, d.delivered_at, d.created_at, d.conversation_id, d.payload
 `
 
 type ClaimDueSocketDeliveriesParams struct {
@@ -84,6 +84,8 @@ func (q *Queries) ClaimDueSocketDeliveries(ctx context.Context, arg ClaimDueSock
 			&i.LastError,
 			&i.DeliveredAt,
 			&i.CreatedAt,
+			&i.ConversationID,
+			&i.Payload,
 		); err != nil {
 			return nil, err
 		}
@@ -114,7 +116,7 @@ WHERE d.id IN (
     LIMIT $1
     FOR UPDATE OF due SKIP LOCKED
 )
-RETURNING d.id, d.message_id, d.agent_id, d.event_type, d.status, d.attempts, d.next_attempt_at, d.last_error, d.delivered_at, d.created_at
+RETURNING d.id, d.message_id, d.agent_id, d.event_type, d.status, d.attempts, d.next_attempt_at, d.last_error, d.delivered_at, d.created_at, d.conversation_id, d.payload
 `
 
 // Leases a batch of due deliveries to one worker.
@@ -144,6 +146,8 @@ func (q *Queries) ClaimDueWebhookDeliveries(ctx context.Context, batchSize int32
 			&i.LastError,
 			&i.DeliveredAt,
 			&i.CreatedAt,
+			&i.ConversationID,
+			&i.Payload,
 		); err != nil {
 			return nil, err
 		}
@@ -156,26 +160,31 @@ func (q *Queries) ClaimDueWebhookDeliveries(ctx context.Context, batchSize int32
 }
 
 const createDelivery = `-- name: CreateDelivery :one
-INSERT INTO message_deliveries (id, message_id, agent_id, event_type, status, last_error)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, message_id, agent_id, event_type, status, attempts, next_attempt_at, last_error, delivered_at, created_at
+INSERT INTO message_deliveries (id, message_id, conversation_id, agent_id, event_type, payload, status, last_error)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, message_id, agent_id, event_type, status, attempts, next_attempt_at, last_error, delivered_at, created_at, conversation_id, payload
 `
 
 type CreateDeliveryParams struct {
-	ID        uuid.UUID
-	MessageID uuid.UUID
-	AgentID   uuid.UUID
-	EventType string
-	Status    string
-	LastError *string
+	ID             uuid.UUID
+	MessageID      *uuid.UUID
+	ConversationID uuid.UUID
+	AgentID        uuid.UUID
+	EventType      string
+	Payload        []byte
+	Status         string
+	LastError      *string
 }
 
+// A message event names its message; a membership event carries a payload.
 func (q *Queries) CreateDelivery(ctx context.Context, arg CreateDeliveryParams) (MessageDelivery, error) {
 	row := q.db.QueryRow(ctx, createDelivery,
 		arg.ID,
 		arg.MessageID,
+		arg.ConversationID,
 		arg.AgentID,
 		arg.EventType,
+		arg.Payload,
 		arg.Status,
 		arg.LastError,
 	)
@@ -191,6 +200,8 @@ func (q *Queries) CreateDelivery(ctx context.Context, arg CreateDeliveryParams) 
 		&i.LastError,
 		&i.DeliveredAt,
 		&i.CreatedAt,
+		&i.ConversationID,
+		&i.Payload,
 	)
 	return i, err
 }
@@ -233,7 +244,7 @@ func (q *Queries) FailUnboundDeliveries(ctx context.Context) (int64, error) {
 }
 
 const getDelivery = `-- name: GetDelivery :one
-SELECT id, message_id, agent_id, event_type, status, attempts, next_attempt_at, last_error, delivered_at, created_at FROM message_deliveries
+SELECT id, message_id, agent_id, event_type, status, attempts, next_attempt_at, last_error, delivered_at, created_at, conversation_id, payload FROM message_deliveries
 WHERE id = $1
 `
 
@@ -251,13 +262,15 @@ func (q *Queries) GetDelivery(ctx context.Context, id uuid.UUID) (MessageDeliver
 		&i.LastError,
 		&i.DeliveredAt,
 		&i.CreatedAt,
+		&i.ConversationID,
+		&i.Payload,
 	)
 	return i, err
 }
 
 const listDeliveriesByMessage = `-- name: ListDeliveriesByMessage :many
-SELECT id, message_id, agent_id, event_type, status, attempts, next_attempt_at, last_error, delivered_at, created_at FROM message_deliveries
-WHERE message_id = $1
+SELECT id, message_id, agent_id, event_type, status, attempts, next_attempt_at, last_error, delivered_at, created_at, conversation_id, payload FROM message_deliveries
+WHERE message_id = $1::uuid
 ORDER BY id
 `
 
@@ -281,6 +294,8 @@ func (q *Queries) ListDeliveriesByMessage(ctx context.Context, messageID uuid.UU
 			&i.LastError,
 			&i.DeliveredAt,
 			&i.CreatedAt,
+			&i.ConversationID,
+			&i.Payload,
 		); err != nil {
 			return nil, err
 		}
@@ -293,7 +308,7 @@ func (q *Queries) ListDeliveriesByMessage(ctx context.Context, messageID uuid.UU
 }
 
 const listDeliveriesSince = `-- name: ListDeliveriesSince :many
-SELECT id, message_id, agent_id, event_type, status, attempts, next_attempt_at, last_error, delivered_at, created_at FROM message_deliveries
+SELECT id, message_id, agent_id, event_type, status, attempts, next_attempt_at, last_error, delivered_at, created_at, conversation_id, payload FROM message_deliveries
 WHERE agent_id = $1
   AND ($2::uuid IS NULL OR id > $2::uuid)
 ORDER BY id
@@ -327,6 +342,8 @@ func (q *Queries) ListDeliveriesSince(ctx context.Context, arg ListDeliveriesSin
 			&i.LastError,
 			&i.DeliveredAt,
 			&i.CreatedAt,
+			&i.ConversationID,
+			&i.Payload,
 		); err != nil {
 			return nil, err
 		}
@@ -383,7 +400,7 @@ func (q *Queries) ScheduleRetry(ctx context.Context, arg ScheduleRetryParams) er
 }
 
 const summarizeDeliveries = `-- name: SummarizeDeliveries :many
-SELECT message_id,
+SELECT message_id::uuid AS message_id,
        count(*)::int                                     AS total,
        count(*) FILTER (WHERE status = 'delivered')::int AS delivered,
        count(*) FILTER (WHERE status = 'failed')::int    AS failed

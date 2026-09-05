@@ -74,3 +74,6 @@ func (r *Response) ErrorField() string {
 	}
 	return env.Error.Field
 }
+
+// Text is the raw body, for responses that are not JSON.
+func (r *Response) Text() string { return string(r.Body) }

@@ -29,6 +29,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/mail"
+	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/ratelimit"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/signin"
@@ -97,16 +98,19 @@ func run() error {
 		conversations.WithPublisher(bus),
 		conversations.WithStreams(conversations.NewStreamStore(redisClient, "cuckoo:")))
 	deliveryService := delivery.New(db, conversationService)
+	userService := users.New(db)
+	pairingService := pairing.New(db, agentService, conversationService, userService, cfg.PublicURL)
 
 	router := api.NewRouter(api.Deps{
 		Logger:        log,
 		UserAuth:      userAuth,
 		AgentAuth:     auth.NewBinding(agentService),
-		Users:         users.New(db),
+		Users:         userService,
 		SignIn:        signinService,
 		Agents:        agentService,
 		Conversations: conversationService,
 		Delivery:      deliveryService,
+		Pairing:       pairingService,
 		Hub:           hub,
 		Bus:           bus,
 		CORSOrigins:   cfg.CORSOrigins,
