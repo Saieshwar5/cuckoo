@@ -140,6 +140,51 @@ func (q *Queries) ListLatestMessages(ctx context.Context, conversationIds []uuid
 	return items, nil
 }
 
+const listMessagesAfter = `-- name: ListMessagesAfter :many
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key FROM messages
+WHERE conversation_id = $1
+  AND id > $2::uuid
+ORDER BY id ASC
+LIMIT $3
+`
+
+type ListMessagesAfterParams struct {
+	ConversationID uuid.UUID
+	After          uuid.UUID
+	PageSize       int32
+}
+
+// Catching up: everything newer than a message the caller already has,
+// oldest first, so a client that was away fills its gap in order.
+func (q *Queries) ListMessagesAfter(ctx context.Context, arg ListMessagesAfterParams) ([]Message, error) {
+	rows, err := q.db.Query(ctx, listMessagesAfter, arg.ConversationID, arg.After, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Message{}
+	for rows.Next() {
+		var i Message
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConversationID,
+			&i.SenderKind,
+			&i.SenderUserID,
+			&i.SenderAgentID,
+			&i.Body,
+			&i.CreatedAt,
+			&i.IdempotencyKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMessagesBefore = `-- name: ListMessagesBefore :many
 SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key FROM messages
 WHERE conversation_id = $1

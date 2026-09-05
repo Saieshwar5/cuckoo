@@ -54,9 +54,29 @@ type Conversation struct {
 	CreatedAt    time.Time
 }
 
-// EventMessageCreated names the event an agent receives when a message is
-// posted in a conversation it belongs to. Recorded on every delivery row.
-const EventMessageCreated = "message.created"
+// Event types. EventMessageCreated is both what an agent's backend receives
+// through the outbox and what a person's device hears live; it is the same
+// fact. EventDeliveryUpdated is for devices only: a tick mark changed.
+const (
+	EventMessageCreated  = "message.created"
+	EventDeliveryUpdated = "delivery.updated"
+)
+
+// MessageCreatedEvent is what a device hears when a message lands in one of
+// its person's conversations. Internal form; the socket renders the wire
+// shape.
+type MessageCreatedEvent struct {
+	ConversationID uuid.UUID `json:"conversation_id"`
+	Message        Message   `json:"message"`
+}
+
+// DeliveryUpdatedEvent is what a device hears when a message's delivery
+// status changes: the tick mark.
+type DeliveryUpdatedEvent struct {
+	ConversationID uuid.UUID      `json:"conversation_id"`
+	MessageID      uuid.UUID      `json:"message_id"`
+	DeliveryStatus DeliveryStatus `json:"delivery_status"`
+}
 
 // DeliveryStatus summarises whether the backends a message was for have it.
 // Empty when the message had nobody to be delivered to.
@@ -107,17 +127,23 @@ type SendResult struct {
 	Created bool
 }
 
-// Page is one slice of a conversation's history, newest first. NextBefore is
-// the cursor for the page of older messages, or nil when this is the oldest.
+// Page is one slice of a conversation's history. Paging backwards, messages
+// are newest first and NextBefore is the cursor for older ones; paging
+// forwards from After, they are oldest first and NextAfter continues. A nil
+// cursor means the history ends there.
 type Page struct {
 	Messages   []Message
 	NextBefore *uuid.UUID
+	NextAfter  *uuid.UUID
 }
 
-// ListMessagesInput selects a page of history. A nil Before means the newest
-// page; a zero Limit means the default page size.
+// ListMessagesInput selects a page of history. Neither cursor means the
+// newest page; Before pages back through older messages; After pages forward
+// from a message the caller already has, which is how a device that was
+// away fills its gap. A zero Limit means the default page size.
 type ListMessagesInput struct {
 	Before *uuid.UUID
+	After  *uuid.UUID
 	Limit  int
 }
 

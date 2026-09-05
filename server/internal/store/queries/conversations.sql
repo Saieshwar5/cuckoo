@@ -63,3 +63,11 @@ ORDER BY joined_at, agent_id;
 -- name: ListConversationsByIDs :many
 SELECT * FROM conversations
 WHERE id = ANY(sqlc.arg('ids')::uuid[]);
+
+-- name: ListUserParticipants :many
+-- The people in a conversation: who is told, live, when something happens
+-- in it.
+SELECT user_id::uuid AS user_id
+FROM participants
+WHERE conversation_id = $1 AND user_id IS NOT NULL
+ORDER BY joined_at, user_id;

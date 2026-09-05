@@ -8,6 +8,7 @@ import (
 
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/ratelimit"
+	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/store/gen"
 )
@@ -17,8 +18,9 @@ import (
 // It takes the concrete store because opening a conversation is a transaction:
 // the conversation and its members appear together or not at all.
 type Service struct {
-	store   *store.Store
-	limiter ratelimit.Limiter
+	store     *store.Store
+	limiter   ratelimit.Limiter
+	publisher realtime.Publisher
 }
 
 // Option configures a Service.
@@ -31,9 +33,16 @@ func WithLimiter(l ratelimit.Limiter) Option {
 	return func(s *Service) { s.limiter = l }
 }
 
+// WithPublisher announces messages and delivery changes to the devices of
+// the people in the conversation. Without it nothing is announced; the
+// record is unaffected either way.
+func WithPublisher(p realtime.Publisher) Option {
+	return func(s *Service) { s.publisher = p }
+}
+
 // New builds the service.
 func New(st *store.Store, opts ...Option) *Service {
-	s := &Service{store: st, limiter: ratelimit.Unlimited{}}
+	s := &Service{store: st, limiter: ratelimit.Unlimited{}, publisher: realtime.Discard{}}
 	for _, opt := range opts {
 		opt(s)
 	}

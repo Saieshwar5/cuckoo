@@ -22,6 +22,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
@@ -42,6 +43,7 @@ type Deps struct {
 	Agents        *agents.Service
 	Conversations *conversations.Service
 	Delivery      *delivery.Service
+	Hub           *realtime.Hub
 	Health        map[string]HealthCheck
 }
 
@@ -72,7 +74,7 @@ func NewRouter(d Deps) http.Handler {
 	// The app's API. Every route below requires a signed-in person.
 	r.Route("/v1/client", func(r chi.Router) {
 		r.Use(middleware.RequireUser(d.UserAuth))
-		r.Mount("/", client.New(d.Users, d.Conversations).Routes())
+		r.Mount("/", client.New(d.Users, d.Conversations, d.Hub).Routes())
 	})
 
 	// Agent management: owners creating agents and connecting backends.

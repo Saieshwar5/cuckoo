@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
+	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
@@ -17,11 +18,12 @@ import (
 type Handler struct {
 	users         *users.Service
 	conversations *conversations.Service
+	hub           *realtime.Hub
 }
 
 // New builds the client API handler.
-func New(userService *users.Service, conversationService *conversations.Service) *Handler {
-	return &Handler{users: userService, conversations: conversationService}
+func New(userService *users.Service, conversationService *conversations.Service, hub *realtime.Hub) *Handler {
+	return &Handler{users: userService, conversations: conversationService, hub: hub}
 }
 
 // Routes returns the client API routes, to be mounted behind authentication.
@@ -30,6 +32,8 @@ func (h *Handler) Routes() chi.Router {
 
 	r.Get("/me", h.getMe)
 	r.Patch("/me", h.updateMe)
+
+	r.Get("/socket", h.socket)
 
 	r.Get("/conversations", h.listConversations)
 	r.Route("/conversations/{id}", func(r chi.Router) {

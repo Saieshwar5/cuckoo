@@ -12,6 +12,7 @@ import (
 type messagePageJSON struct {
 	Messages   []messageJSON `json:"messages"`
 	NextBefore *string       `json:"next_before"`
+	NextAfter  *string       `json:"next_after"`
 }
 
 func send(t *testing.T, c *testutil.Client, convID, text string) messageJSON {

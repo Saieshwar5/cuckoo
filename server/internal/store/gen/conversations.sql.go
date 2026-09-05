@@ -246,3 +246,32 @@ func (q *Queries) ListUserConversations(ctx context.Context, userID uuid.UUID) (
 	}
 	return items, nil
 }
+
+const listUserParticipants = `-- name: ListUserParticipants :many
+SELECT user_id::uuid AS user_id
+FROM participants
+WHERE conversation_id = $1 AND user_id IS NOT NULL
+ORDER BY joined_at, user_id
+`
+
+// The people in a conversation: who is told, live, when something happens
+// in it.
+func (q *Queries) ListUserParticipants(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUserParticipants, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var user_id uuid.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

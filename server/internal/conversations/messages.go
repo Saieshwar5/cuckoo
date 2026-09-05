@@ -121,6 +121,8 @@ func (s *Service) send(ctx context.Context, sender Sender, conversationID uuid.U
 	if err := s.attachDeliveryStatus(ctx, sent); err != nil {
 		return SendResult{}, err
 	}
+	s.notify(ctx, EventMessageCreated, conversationID,
+		MessageCreatedEvent{ConversationID: conversationID, Message: sent[0]})
 	return SendResult{Message: sent[0], Created: true}, nil
 }
 
@@ -193,20 +195,39 @@ func (s *Service) ListMessages(ctx context.Context, callerID, conversationID uui
 	if err != nil {
 		return Page{}, err
 	}
-
-	// One more than asked for tells us whether an older page exists without
-	// a second query or a count.
-	rows, err := s.store.ListMessagesBefore(ctx, gen.ListMessagesBeforeParams{
-		ConversationID: conversationID,
-		Before:         in.Before,
-		PageSize:       limit + 1,
-	})
-	if err != nil {
-		return Page{}, domain.Internal(fmt.Errorf("list messages of %s: %w", conversationID, err))
+	if in.Before != nil && in.After != nil {
+		return Page{}, domain.InvalidField("after", "invalid_cursor",
+			"Use before or after, not both.")
 	}
-	page, err := pageOf(rows, limit)
-	if err != nil {
-		return Page{}, err
+
+	var page Page
+	if in.After != nil {
+		rows, err := s.store.ListMessagesAfter(ctx, gen.ListMessagesAfterParams{
+			ConversationID: conversationID,
+			After:          *in.After,
+			PageSize:       limit + 1,
+		})
+		if err != nil {
+			return Page{}, domain.Internal(fmt.Errorf("list messages of %s after: %w", conversationID, err))
+		}
+		if page, err = pageOf(rows, limit); err != nil {
+			return Page{}, err
+		}
+		page.NextAfter, page.NextBefore = page.NextBefore, nil
+	} else {
+		// One more than asked for tells us whether another page exists
+		// without a second query or a count.
+		rows, err := s.store.ListMessagesBefore(ctx, gen.ListMessagesBeforeParams{
+			ConversationID: conversationID,
+			Before:         in.Before,
+			PageSize:       limit + 1,
+		})
+		if err != nil {
+			return Page{}, domain.Internal(fmt.Errorf("list messages of %s: %w", conversationID, err))
+		}
+		if page, err = pageOf(rows, limit); err != nil {
+			return Page{}, err
+		}
 	}
 	if err := s.attachDeliveryStatus(ctx, page.Messages); err != nil {
 		return Page{}, err
@@ -238,7 +259,8 @@ func (s *Service) ListMessagesForAgent(ctx context.Context, agentID, conversatio
 	return pageOf(rows, limit)
 }
 
-// pageOf turns limit+1 rows into a page and a cursor.
+// pageOf turns limit+1 rows into a page and a cursor on its last message,
+// whichever direction the rows came in. The caller names the cursor.
 func pageOf(rows []gen.Message, limit int32) (Page, error) {
 	page := Page{Messages: make([]Message, 0, len(rows))}
 	for _, r := range rows[:min(len(rows), int(limit))] {
