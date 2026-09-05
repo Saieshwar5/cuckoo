@@ -200,6 +200,7 @@ func (w *Worker) record(ctx context.Context, a *attempt) error {
 			return fmt.Errorf("mark %s delivered: %w", d.ID, err)
 		}
 		w.log.Debug("delivered", "event", d.ID, "agent", d.AgentID, "attempt", d.Attempts)
+		w.tickChanged(ctx, d)
 		return w.agents.RecordDeliverySuccess(ctx, a.endpoint.BindingID)
 	}
 
@@ -228,7 +229,16 @@ func (w *Worker) markFailed(ctx context.Context, d Delivery, reason string) erro
 	if err := w.store.MarkFailed(ctx, gen.MarkFailedParams{ID: d.ID, LastError: &reason}); err != nil {
 		return fmt.Errorf("mark %s failed: %w", d.ID, err)
 	}
+	w.tickChanged(ctx, d)
 	return nil
+}
+
+// tickChanged tells the sender's devices the tick mark moved. It cannot fail
+// the pass: the outcome is recorded, and a device catches up on reconnect.
+func (w *Worker) tickChanged(ctx context.Context, d Delivery) {
+	if err := w.deliveries.conversations.DeliveryChanged(ctx, d.MessageID); err != nil {
+		w.log.Warn("could not announce delivery change", "event", d.ID, "error", err)
+	}
 }
 
 func truncate(s string, n int) string {

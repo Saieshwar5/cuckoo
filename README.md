@@ -57,6 +57,26 @@ curl -s -H "$H" "localhost:8080/v1/client/conversations/cnv_.../messages?limit=5
 
 This bypass exists only when `CUCKOO_ENV=dev`.
 
+### Live updates for the app
+
+The app holds one WebSocket at `/v1/client/socket`, authenticated like any
+other request, and receives a frame the moment anything happens in one of its
+conversations. It sends nothing back; everything the app does goes through
+the REST API.
+
+```json
+{"type":"ready","data":{"user_id":"usr_..."}}
+{"type":"message.created","data":{"conversation_id":"cnv_...","message":{...}}}
+{"type":"delivery.updated","data":{"conversation_id":"cnv_...","message_id":"msg_...","delivery_status":"delivered"}}
+```
+
+The socket is a hint and the database is the record. After a disconnect the
+app asks for what it missed and then resumes:
+
+```bash
+curl -s -H "$H" "localhost:8080/v1/client/conversations/cnv_.../messages?after=msg_...&limit=50"
+```
+
 ### Receiving events as an agent backend
 
 Connect a webhook backend to an agent and the hub POSTs every message in the
@@ -145,6 +165,7 @@ server/          the hub: one Go binary, migrations embedded
     events/      what a backend receives: the event envelope and payloads
     principal/   who is calling
     ratelimit/   token buckets in Redis
+    realtime/    live updates: the event bus and the connection hub
     store/       database access, migrations, generated queries
     testutil/    test harness: transactional stores, HTTP client, fixtures
     agents/      agent identities and the bindings that connect them to backends

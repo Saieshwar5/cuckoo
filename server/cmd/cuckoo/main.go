@@ -29,6 +29,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/ratelimit"
+	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -80,9 +81,20 @@ func run() error {
 	}
 	defer func() { _ = redisClient.Close() }()
 
+	// Live updates travel over one Redis channel so a socket on this
+	// instance hears what happened on another. The hub must be listening
+	// before anything can be announced.
+	bus := realtime.NewRedisBus(redisClient, "cuckoo:client")
+	hub := realtime.NewHub(log)
+	if err := hub.Start(ctx, bus); err != nil {
+		return err
+	}
+	defer hub.Close()
+
 	agentService := agents.New(db)
 	conversationService := conversations.New(db,
-		conversations.WithLimiter(ratelimit.NewRedis(redisClient, "cuckoo:")))
+		conversations.WithLimiter(ratelimit.NewRedis(redisClient, "cuckoo:")),
+		conversations.WithPublisher(bus))
 	deliveryService := delivery.New(db, conversationService)
 
 	router := api.NewRouter(api.Deps{
@@ -93,6 +105,7 @@ func run() error {
 		Agents:        agentService,
 		Conversations: conversationService,
 		Delivery:      deliveryService,
+		Hub:           hub,
 		Health: map[string]api.HealthCheck{
 			"postgres": db.Ping,
 			"redis":    func(ctx context.Context) error { return redisClient.Ping(ctx).Err() },

@@ -37,11 +37,13 @@ type messageEnvelope struct {
 	Message messageResponse `json:"message"`
 }
 
-// messagePageEnvelope is one page of history. NextBefore is the value to pass
-// as ?before= for older messages, or null when there are none.
+// messagePageEnvelope is one page of history. Paging back, NextBefore is the
+// value to pass as ?before= for older messages; paging forward with ?after=,
+// NextAfter continues. Null means the history ends there.
 type messagePageEnvelope struct {
 	Messages   []messageResponse `json:"messages"`
 	NextBefore *string           `json:"next_before"`
+	NextAfter  *string           `json:"next_after"`
 }
 
 func newMessageResponse(m conversations.Message) messageResponse {
@@ -121,6 +123,11 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, err)
 		return
 	}
+	after, err := httpx.QueryID(r, "after", domain.PrefixMessage)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
 	limit, err := httpx.QueryInt(r, "limit")
 	if err != nil {
 		httpx.Error(w, r, err)
@@ -128,7 +135,7 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	page, err := h.conversations.ListMessages(r.Context(), userID, conversationID,
-		conversations.ListMessagesInput{Before: before, Limit: limit})
+		conversations.ListMessagesInput{Before: before, After: after, Limit: limit})
 	if err != nil {
 		httpx.Error(w, r, err)
 		return
@@ -141,6 +148,10 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 	if page.NextBefore != nil {
 		cursor := domain.FormatID(domain.PrefixMessage, *page.NextBefore)
 		out.NextBefore = &cursor
+	}
+	if page.NextAfter != nil {
+		cursor := domain.FormatID(domain.PrefixMessage, *page.NextAfter)
+		out.NextAfter = &cursor
 	}
 	httpx.JSON(w, r, http.StatusOK, out)
 }

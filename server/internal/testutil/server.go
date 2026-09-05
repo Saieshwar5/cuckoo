@@ -2,12 +2,18 @@ package testutil
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/api"
@@ -15,6 +21,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -28,29 +35,82 @@ import (
 type Server struct {
 	*httptest.Server
 	Store *store.Store
+	// Conversations is the service the server itself uses, wired to its
+	// live-update bus, for tests that need to drive it from outside a
+	// request — running the delivery worker, say.
+	Conversations *conversations.Service
 }
 
 // NewServer builds the API against the given store.
 func NewServer(t *testing.T, db *store.Store) *Server {
 	t.Helper()
 
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	// Live updates go through a real Redis channel of this test's own, so a
+	// socket test proves the whole path, publish to frame.
+	bus := NewBus(t)
+	hub := realtime.NewHub(quiet)
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := hub.Start(ctx, bus); err != nil {
+		cancel()
+		t.Fatalf("testutil: start realtime hub: %v", err)
+	}
+	t.Cleanup(cancel)
+	t.Cleanup(hub.Close)
+
 	agentService := agents.New(db)
-	conversationService := conversations.New(db, conversations.WithLimiter(NewLimiter(t)))
+	conversationService := conversations.New(db,
+		conversations.WithLimiter(NewLimiter(t)),
+		conversations.WithPublisher(bus))
 	handler := api.NewRouter(api.Deps{
-		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Logger:        quiet,
 		UserAuth:      auth.NewDev(),
 		AgentAuth:     auth.NewBinding(agentService),
 		Users:         users.New(db),
 		Agents:        agentService,
 		Conversations: conversationService,
 		Delivery:      delivery.New(db, conversationService),
+		Hub:           hub,
 		Health:        map[string]api.HealthCheck{},
 	})
 
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
-	return &Server{Server: srv, Store: db}
+	return &Server{Server: srv, Store: db, Conversations: conversationService}
+}
+
+// Socket opens the live-update socket as the given user. The connection is
+// closed when the test ends.
+func (s *Server) Socket(t *testing.T, user users.User) *websocket.Conn {
+	t.Helper()
+	c, err := s.DialSocket(t, http.Header{auth.DevHeader: {domain.FormatID(domain.PrefixUser, user.ID)}})
+	if err != nil {
+		t.Fatalf("testutil: open socket: %v", err)
+	}
+	return c
+}
+
+// DialSocket opens the live-update socket with the given headers, returning
+// the handshake error so a test can assert on a refused connection.
+func (s *Server) DialSocket(t *testing.T, headers http.Header) (*websocket.Conn, error) {
+	t.Helper()
+	url := "ws" + strings.TrimPrefix(s.URL, "http") + "/v1/client/socket"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c, resp, err := websocket.Dial(ctx, url, &websocket.DialOptions{HTTPHeader: headers})
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	if err != nil {
+		if resp != nil {
+			return nil, fmt.Errorf("%w (status %d)", err, resp.StatusCode)
+		}
+		return nil, err
+	}
+	t.Cleanup(func() { _ = c.CloseNow() })
+	return c, nil
 }
 
 // Client issues requests as one caller.

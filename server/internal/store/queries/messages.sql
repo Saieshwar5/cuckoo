@@ -41,3 +41,12 @@ ORDER BY conversation_id, id DESC;
 -- name: ListMessagesByIDs :many
 SELECT * FROM messages
 WHERE id = ANY(sqlc.arg('ids')::uuid[]);
+
+-- name: ListMessagesAfter :many
+-- Catching up: everything newer than a message the caller already has,
+-- oldest first, so a client that was away fills its gap in order.
+SELECT * FROM messages
+WHERE conversation_id = sqlc.arg('conversation_id')
+  AND id > sqlc.arg('after')::uuid
+ORDER BY id ASC
+LIMIT sqlc.arg('page_size');

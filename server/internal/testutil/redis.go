@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/ratelimit"
+	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 )
 
 // defaultTestRedisURL matches `make up`, on a database number the running
@@ -29,11 +30,22 @@ var (
 func NewLimiter(t *testing.T) *ratelimit.Redis {
 	t.Helper()
 
+	return ratelimit.NewRedis(sharedRedis(t), "test:"+randomHex(t)+":")
+}
+
+// NewBus returns a live-update bus on a Redis channel unique to this test.
+func NewBus(t *testing.T) *realtime.RedisBus {
+	t.Helper()
+	return realtime.NewRedisBus(sharedRedis(t), "test:"+randomHex(t)+":client")
+}
+
+func randomHex(t *testing.T) string {
+	t.Helper()
 	var raw [8]byte
 	if _, err := rand.Read(raw[:]); err != nil {
-		t.Fatalf("testutil: random prefix: %v", err)
+		t.Fatalf("testutil: random id: %v", err)
 	}
-	return ratelimit.NewRedis(sharedRedis(t), "test:"+hex.EncodeToString(raw[:])+":")
+	return hex.EncodeToString(raw[:])
 }
 
 // sharedRedis opens the test Redis once per test binary.
