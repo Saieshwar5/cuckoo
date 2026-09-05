@@ -60,20 +60,13 @@ func (s *Service) send(ctx context.Context, sender Sender, conversationID uuid.U
 func (s *Service) create(ctx context.Context, sender Sender, conversationID uuid.UUID, in SendInput,
 	policy ratelimit.Policy, streaming bool) (SendResult, error) {
 
-	text := ""
-	if streaming {
-		if strings.TrimSpace(in.Text) != "" {
-			return SendResult{}, domain.InvalidField("text", "stream_with_text",
-				"A streamed message starts empty; append its text after starting it.")
-		}
-		if s.streams == nil {
-			return SendResult{}, domain.Internal(errors.New("streaming is not configured"))
-		}
-	} else {
-		var err error
-		if text, err = validateText(in.Text); err != nil {
-			return SendResult{}, err
-		}
+	body, tapped, err := s.composeBody(ctx, sender, conversationID, in, streaming)
+	if err != nil {
+		return SendResult{}, err
+	}
+	replyTo, err := s.validateReplyTo(ctx, conversationID, in.ReplyTo)
+	if err != nil {
+		return SendResult{}, err
 	}
 	key, err := validateIdempotencyKey(in.IdempotencyKey)
 	if err != nil {
@@ -98,17 +91,18 @@ func (s *Service) create(ctx context.Context, sender Sender, conversationID uuid
 			"You are sending messages too quickly.", wait)
 	}
 
-	body, err := json.Marshal(Body{Text: text})
+	raw, err := json.Marshal(body)
 	if err != nil {
 		return SendResult{}, domain.Internal(fmt.Errorf("encode message body: %w", err))
 	}
 	params := gen.CreateMessageParams{
-		ID:             domain.NewID(),
-		ConversationID: conversationID,
-		SenderKind:     string(sender.Kind),
-		Body:           body,
-		IdempotencyKey: key,
-		Status:         string(MessageComplete),
+		ID:               domain.NewID(),
+		ConversationID:   conversationID,
+		SenderKind:       string(sender.Kind),
+		Body:             raw,
+		IdempotencyKey:   key,
+		Status:           string(MessageComplete),
+		ReplyToMessageID: replyTo,
 	}
 	if streaming {
 		params.Status = string(MessageStreaming)
@@ -132,6 +126,11 @@ func (s *Service) create(ctx context.Context, sender Sender, conversationID uuid
 		if msg, err = messageFromRow(row); err != nil {
 			return err
 		}
+		if tapped != nil {
+			if err := recordTap(ctx, tx, tapped); err != nil {
+				return err
+			}
+		}
 		if streaming {
 			return nil
 		}
@@ -153,7 +152,7 @@ func (s *Service) create(ctx context.Context, sender Sender, conversationID uuid
 	}
 
 	sent := []Message{msg}
-	if err := s.attachDeliveryStatus(ctx, sent); err != nil {
+	if err := s.decorate(ctx, sent, true); err != nil {
 		return SendResult{}, err
 	}
 	if streaming {
@@ -205,10 +204,148 @@ func (s *Service) findByKey(ctx context.Context, sender Sender, conversationID u
 			"That idempotency key was already used for a message in another conversation.")
 	}
 	found := []Message{msg}
-	if err := s.attachDeliveryStatus(ctx, found); err != nil {
+	if err := s.decorate(ctx, found, true); err != nil {
 		return SendResult{}, false, err
 	}
 	return SendResult{Message: found[0], Created: false}, true, nil
+}
+
+// tap is a button press being turned into a message: the offering message,
+// and the button taken.
+type tap struct {
+	source   Message
+	buttonID string
+}
+
+// composeBody turns what a sender supplied into a message body, applying
+// who may send what. People send text or a tap; agents send text with,
+// optionally, buttons and quick replies; a stream starts empty.
+func (s *Service) composeBody(ctx context.Context, sender Sender, conversationID uuid.UUID, in SendInput, streaming bool) (Body, *tap, error) {
+	if streaming {
+		if strings.TrimSpace(in.Text) != "" {
+			return Body{}, nil, domain.InvalidField("text", "stream_with_text",
+				"A streamed message starts empty; append its text after starting it.")
+		}
+		if len(in.Buttons) > 0 || len(in.QuickReplies) > 0 {
+			return Body{}, nil, domain.InvalidField("buttons", "stream_with_buttons",
+				"Buttons and quick replies go on the finish of a stream.")
+		}
+		if in.Action != nil {
+			return Body{}, nil, domain.InvalidField("action", "action_not_allowed", "Only people tap buttons.")
+		}
+		if s.streams == nil {
+			return Body{}, nil, domain.Internal(errors.New("streaming is not configured"))
+		}
+		return Body{}, nil, nil
+	}
+
+	switch sender.Kind {
+	case ParticipantUser:
+		if len(in.Buttons) > 0 || len(in.QuickReplies) > 0 {
+			return Body{}, nil, domain.InvalidField("buttons", "buttons_not_allowed",
+				"Only agents can offer buttons or quick replies.")
+		}
+		if in.Action != nil {
+			if strings.TrimSpace(in.Text) != "" {
+				return Body{}, nil, domain.InvalidField("text", "invalid_action",
+					"A tap carries no text; the button's label becomes the text.")
+			}
+			source, button, err := s.resolveTap(ctx, conversationID, *in.Action)
+			if err != nil {
+				return Body{}, nil, err
+			}
+			return Body{Text: button.Label, Action: &Action{ButtonID: button.ID, SourceMessageID: source.ID}},
+				&tap{source: source, buttonID: button.ID}, nil
+		}
+		text, err := validateText(in.Text)
+		if err != nil {
+			return Body{}, nil, err
+		}
+		return Body{Text: text}, nil, nil
+
+	default:
+		if in.Action != nil {
+			return Body{}, nil, domain.InvalidField("action", "action_not_allowed", "Only people tap buttons.")
+		}
+		text, err := validateText(in.Text)
+		if err != nil {
+			return Body{}, nil, err
+		}
+		buttons, err := validateButtons(in.Buttons)
+		if err != nil {
+			return Body{}, nil, err
+		}
+		quick, err := validateQuickReplies(in.QuickReplies)
+		if err != nil {
+			return Body{}, nil, err
+		}
+		return Body{Text: text, Buttons: buttons, QuickReplies: quick}, nil, nil
+	}
+}
+
+// resolveTap finds the button a person tapped: on a message in this
+// conversation, from an agent, final, and offering that id.
+func (s *Service) resolveTap(ctx context.Context, conversationID uuid.UUID, a Action) (Message, Button, error) {
+	invalid := func(msg string) error { return domain.InvalidField("action", "invalid_action", msg) }
+
+	row, err := s.store.GetMessage(ctx, a.SourceMessageID)
+	if err != nil {
+		if store.IsNoRows(err) {
+			return Message{}, Button{}, invalid("That message does not exist.")
+		}
+		return Message{}, Button{}, domain.Internal(fmt.Errorf("get message %s: %w", a.SourceMessageID, err))
+	}
+	source, err := messageFromRow(row)
+	if err != nil {
+		return Message{}, Button{}, err
+	}
+	if source.ConversationID != conversationID {
+		return Message{}, Button{}, invalid("That message is not in this conversation.")
+	}
+	if source.Sender.Kind != ParticipantAgent || source.Status != MessageComplete {
+		return Message{}, Button{}, invalid("That message has no buttons.")
+	}
+	for _, row := range source.Body.Buttons {
+		for _, b := range row {
+			if b.ID == a.ButtonID {
+				return source, b, nil
+			}
+		}
+	}
+	return Message{}, Button{}, invalid("That message has no button with that id.")
+}
+
+// recordTap notes on the offering message which button was taken, so the
+// history shows the choice and the app can dim the row.
+func recordTap(ctx context.Context, tx *store.Store, t *tap) error {
+	body := t.source.Body
+	body.SelectedButtonID = t.buttonID
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return domain.Internal(fmt.Errorf("encode message body: %w", err))
+	}
+	if err := tx.UpdateMessageBody(ctx, gen.UpdateMessageBodyParams{ID: t.source.ID, Body: raw}); err != nil {
+		return domain.Internal(fmt.Errorf("record tap on %s: %w", t.source.ID, err))
+	}
+	return nil
+}
+
+// validateReplyTo checks that a quoted message is in the same conversation.
+func (s *Service) validateReplyTo(ctx context.Context, conversationID uuid.UUID, id *uuid.UUID) (*uuid.UUID, error) {
+	if id == nil {
+		return nil, nil
+	}
+	row, err := s.store.GetMessage(ctx, *id)
+	if err != nil {
+		if store.IsNoRows(err) {
+			return nil, domain.InvalidField("reply_to", "invalid_reply_to", "That message does not exist.")
+		}
+		return nil, domain.Internal(fmt.Errorf("get message %s: %w", *id, err))
+	}
+	if row.ConversationID != conversationID {
+		return nil, domain.InvalidField("reply_to", "invalid_reply_to", "That message is not in this conversation.")
+	}
+	return id, nil
 }
 
 // GetMessages returns the given messages in no particular order, with no
@@ -225,6 +362,9 @@ func (s *Service) GetMessages(ctx context.Context, ids []uuid.UUID) ([]Message, 
 			return nil, err
 		}
 		out = append(out, msg)
+	}
+	if err := s.decorate(ctx, out, false); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -273,10 +413,7 @@ func (s *Service) ListMessages(ctx context.Context, callerID, conversationID uui
 			return Page{}, err
 		}
 	}
-	if err := s.attachDeliveryStatus(ctx, page.Messages); err != nil {
-		return Page{}, err
-	}
-	if err := s.attachStreamText(ctx, page.Messages); err != nil {
+	if err := s.decorate(ctx, page.Messages, true); err != nil {
 		return Page{}, err
 	}
 	return page, nil
@@ -307,7 +444,7 @@ func (s *Service) ListMessagesForAgent(ctx context.Context, agentID, conversatio
 	if err != nil {
 		return Page{}, err
 	}
-	if err := s.attachStreamText(ctx, page.Messages); err != nil {
+	if err := s.decorate(ctx, page.Messages, false); err != nil {
 		return Page{}, err
 	}
 	return page, nil

@@ -17,7 +17,10 @@ type replyJSON struct {
 		ID     string `json:"id"`
 		Status string `json:"status"`
 		Body   struct {
-			Text string `json:"text"`
+			Text    string `json:"text"`
+			Buttons [][]struct {
+				ID string `json:"id"`
+			} `json:"buttons"`
 		} `json:"body"`
 		Truncated bool `json:"truncated"`
 	} `json:"message"`
@@ -51,6 +54,7 @@ type phoneFrame struct {
 	Data struct {
 		MessageID string `json:"message_id"`
 		Text      string `json:"text"`
+		State     string `json:"state"`
 		Message   struct {
 			ID     string `json:"id"`
 			Status string `json:"status"`
@@ -115,6 +119,27 @@ func TestStreamOverSocket(t *testing.T) {
 	if fr := readPhone(t, phone); fr.Type != "message.completed" || fr.Data.Message.Body.Text != "I can see it." {
 		t.Errorf("phone got %+v, want message.completed with the whole text", fr)
 	}
+
+	t.Run("typing reaches the phone", func(t *testing.T) {
+		send(t, agent, map[string]any{"op": "typing", "cid": "t1", "conversation_id": f.dmID, "state": "start"})
+		if r := readReply(t, agent); !r.OK || r.ReplyToCID != "t1" {
+			t.Errorf("typing reply = %+v", r)
+		}
+		if fr := readPhone(t, phone); fr.Type != "typing" || fr.Data.State != "start" {
+			t.Errorf("phone got %+v, want a typing frame", fr)
+		}
+	})
+
+	t.Run("send with buttons", func(t *testing.T) {
+		send(t, agent, map[string]any{
+			"op": "send", "cid": "b1", "conversation_id": f.dmID, "text": "Which?",
+			"buttons": [][]map[string]any{{{"id": "a", "label": "A"}}},
+		})
+		if r := readReply(t, agent); !r.OK || r.Message == nil || len(r.Message.Body.Buttons) != 1 {
+			t.Errorf("send with buttons reply = %+v", r)
+		}
+		readPhone(t, phone)
+	})
 
 	t.Run("errors are answered", func(t *testing.T) {
 		send(t, agent, map[string]any{"op": "stream.delta", "message_id": id, "text": "late"})

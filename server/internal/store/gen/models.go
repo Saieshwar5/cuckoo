@@ -41,16 +41,17 @@ type Conversation struct {
 }
 
 type Message struct {
-	ID             uuid.UUID
-	ConversationID uuid.UUID
-	SenderKind     string
-	SenderUserID   *uuid.UUID
-	SenderAgentID  *uuid.UUID
-	Body           []byte
-	CreatedAt      time.Time
-	IdempotencyKey *string
-	Status         string
-	Truncated      bool
+	ID               uuid.UUID
+	ConversationID   uuid.UUID
+	SenderKind       string
+	SenderUserID     *uuid.UUID
+	SenderAgentID    *uuid.UUID
+	Body             []byte
+	CreatedAt        time.Time
+	IdempotencyKey   *string
+	Status           string
+	Truncated        bool
+	ReplyToMessageID *uuid.UUID
 }
 
 type MessageDelivery struct {

@@ -229,10 +229,7 @@ func (s *Service) hydrate(ctx context.Context, rows []gen.Conversation) ([]Conve
 		}
 		previews = append(previews, msg)
 	}
-	if err := s.attachDeliveryStatus(ctx, previews); err != nil {
-		return nil, err
-	}
-	if err := s.attachStreamText(ctx, previews); err != nil {
+	if err := s.decorate(ctx, previews, true); err != nil {
 		return nil, err
 	}
 	for i := range previews {

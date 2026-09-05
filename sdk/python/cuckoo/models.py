@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .agent import Agent, Stream
+    from .agent import Agent, Buttons, Stream
 
 
 @dataclass(frozen=True)
@@ -30,8 +30,26 @@ class Participant:
 
 
 @dataclass(frozen=True)
+class Action:
+    """A tap: which button, on which of your messages."""
+
+    button_id: str
+    source_message_id: str
+
+
+@dataclass(frozen=True)
+class ReplyRef:
+    """The message a message answers, with a preview of it."""
+
+    id: str
+    sender_kind: str
+    text_preview: str
+
+
+@dataclass(frozen=True)
 class Message:
-    """One thing said in a conversation."""
+    """One thing said in a conversation. ``action`` is set when the person
+    tapped one of your buttons; ``text`` is then the button's label."""
 
     id: str
     conversation_id: str
@@ -40,6 +58,8 @@ class Message:
     created_at: str
     status: str = "complete"
     truncated: bool = False
+    action: Action | None = None
+    reply_to: ReplyRef | None = None
     event_id: str | None = None
 
     @classmethod
@@ -47,6 +67,9 @@ class Message:
         cls, data: dict[str, Any], conversation_id: str, event_id: str | None = None
     ) -> Message:
         sender = data.get("sender") or {}
+        body = data.get("body") or {}
+        action = body.get("action")
+        reply = data.get("reply_to")
         return cls(
             id=data["id"],
             conversation_id=conversation_id,
@@ -59,6 +82,12 @@ class Message:
             created_at=data.get("created_at", ""),
             status=data.get("status", "complete"),
             truncated=bool(data.get("truncated")),
+            action=Action(action["button_id"], action["source_message_id"]) if action else None,
+            reply_to=ReplyRef(
+                reply["id"], reply.get("sender_kind", ""), reply.get("text_preview", "")
+            )
+            if reply
+            else None,
             event_id=event_id,
         )
 
@@ -92,19 +121,54 @@ class Conversation:
             _agent=agent,
         )
 
-    async def send(self, text: str, *, idempotency_key: str | None = None) -> Message:
-        """Say something in this conversation."""
-        if self._agent is None:
-            raise RuntimeError("this conversation is not attached to an agent")
-        return await self._agent.send(self.id, text, idempotency_key=idempotency_key)
+    async def send(
+        self,
+        text: str,
+        *,
+        buttons: Buttons | None = None,
+        quick_replies: list[str] | None = None,
+        reply_to: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> Message:
+        """Say something in this conversation.
 
-    def stream(self) -> Stream:
+        ``buttons`` is rows of ``(id, label)`` or ``(id, label, style)``; the
+        person's tap comes back as a message whose ``action.button_id`` is
+        the id. ``quick_replies`` are suggested answers sent as plain text.
+        """
+        return await self._attached().send(
+            self.id,
+            text,
+            buttons=buttons,
+            quick_replies=quick_replies,
+            reply_to=reply_to,
+            idempotency_key=idempotency_key,
+        )
+
+    def stream(
+        self,
+        *,
+        reply_to: str | None = None,
+        buttons: Buttons | None = None,
+        quick_replies: list[str] | None = None,
+    ) -> Stream:
         """Begin a reply that arrives piece by piece::
 
-        async with conv.stream() as reply:
-            async for token in model.generate(prompt):
-                await reply.append(token)
+            async with conv.stream() as reply:
+                async for token in model.generate(prompt):
+                    await reply.append(token)
+
+        Buttons and quick replies are attached when the stream finishes.
         """
+        return self._attached().stream(
+            self.id, reply_to=reply_to, buttons=buttons, quick_replies=quick_replies
+        )
+
+    async def typing(self, state: str = "start") -> None:
+        """Show, or hide, the "working" indicator. A stream shows it by itself."""
+        await self._attached().typing(self.id, state)
+
+    def _attached(self) -> Agent:
         if self._agent is None:
             raise RuntimeError("this conversation is not attached to an agent")
-        return self._agent.stream(self.id)
+        return self._agent

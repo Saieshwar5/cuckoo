@@ -40,13 +40,17 @@ const (
 // inboundFrame is anything a backend sends: an ack, or an operation. One
 // shape, so the reader needs one decode.
 type inboundFrame struct {
-	Ack            string `json:"ack"`
-	Op             string `json:"op"`
-	CID            string `json:"cid"`
-	ConversationID string `json:"conversation_id"`
-	MessageID      string `json:"message_id"`
-	Text           string `json:"text"`
-	IdempotencyKey string `json:"idempotency_key"`
+	Ack            string            `json:"ack"`
+	Op             string            `json:"op"`
+	CID            string            `json:"cid"`
+	ConversationID string            `json:"conversation_id"`
+	MessageID      string            `json:"message_id"`
+	Text           string            `json:"text"`
+	IdempotencyKey string            `json:"idempotency_key"`
+	ReplyTo        string            `json:"reply_to"`
+	Buttons        [][]buttonInput   `json:"buttons"`
+	QuickReplies   []quickReplyInput `json:"quick_replies"`
+	State          string            `json:"state"`
 }
 
 type openedPayload struct {

@@ -49,6 +49,7 @@ type Message struct {
 	ID        string    `json:"id"`
 	Sender    Sender    `json:"sender"`
 	Body      Body      `json:"body"`
+	ReplyTo   *ReplyTo  `json:"reply_to"`
 	Status    string    `json:"status"`
 	Truncated bool      `json:"truncated"`
 	CreatedAt time.Time `json:"created_at"`
@@ -62,9 +63,74 @@ type Sender struct {
 	DisplayName string `json:"display_name"`
 }
 
-// Body is the message content.
+// Body is the message content. Buttons and QuickReplies are what an agent
+// offered; Action is what a person's tap chose; SelectedButtonID, on the
+// offering message, is the button that was taken.
 type Body struct {
-	Text string `json:"text,omitempty"`
+	Text             string       `json:"text,omitempty"`
+	Buttons          [][]Button   `json:"buttons,omitempty"`
+	QuickReplies     []QuickReply `json:"quick_replies,omitempty"`
+	Action           *Action      `json:"action,omitempty"`
+	SelectedButtonID string       `json:"selected_button_id,omitempty"`
+}
+
+// Button is a choice offered to a person.
+type Button struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Style string `json:"style"`
+}
+
+// QuickReply is a suggested answer.
+type QuickReply struct {
+	Label string `json:"label"`
+}
+
+// Action is a tap: which button, on which message.
+type Action struct {
+	ButtonID        string `json:"button_id"`
+	SourceMessageID string `json:"source_message_id"`
+}
+
+// ReplyTo is the message a message answers, with enough to draw the quote.
+type ReplyTo struct {
+	ID          string `json:"id"`
+	SenderKind  string `json:"sender_kind"`
+	TextPreview string `json:"text_preview"`
+}
+
+// BodyOf is the wire form of a message body.
+func BodyOf(b conversations.Body) Body {
+	out := Body{Text: b.Text, SelectedButtonID: b.SelectedButtonID}
+	for _, row := range b.Buttons {
+		wire := make([]Button, 0, len(row))
+		for _, btn := range row {
+			wire = append(wire, Button{ID: btn.ID, Label: btn.Label, Style: btn.Style})
+		}
+		out.Buttons = append(out.Buttons, wire)
+	}
+	for _, q := range b.QuickReplies {
+		out.QuickReplies = append(out.QuickReplies, QuickReply{Label: q.Label})
+	}
+	if b.Action != nil {
+		out.Action = &Action{
+			ButtonID:        b.Action.ButtonID,
+			SourceMessageID: domain.FormatID(domain.PrefixMessage, b.Action.SourceMessageID),
+		}
+	}
+	return out
+}
+
+// ReplyToOf is the wire form of a quote, or nil.
+func ReplyToOf(r *conversations.ReplyRef) *ReplyTo {
+	if r == nil {
+		return nil
+	}
+	return &ReplyTo{
+		ID:          domain.FormatID(domain.PrefixMessage, r.ID),
+		SenderKind:  string(r.SenderKind),
+		TextPreview: r.TextPreview,
+	}
 }
 
 // Participant is a current member of the conversation. IsMe marks the
@@ -140,7 +206,8 @@ func MessageOf(msg conversations.Message, senderName string) Message {
 			ID:          formatParticipantID(msg.Sender.Kind, msg.Sender.ID),
 			DisplayName: senderName,
 		},
-		Body:      Body{Text: msg.Body.Text},
+		Body:      BodyOf(msg.Body),
+		ReplyTo:   ReplyToOf(msg.ReplyTo),
 		Status:    string(msg.Status),
 		Truncated: msg.Truncated,
 		CreatedAt: msg.CreatedAt,

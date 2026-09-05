@@ -94,16 +94,25 @@ func (s *Service) AppendStream(ctx context.Context, agentID, messageID uuid.UUID
 }
 
 // FinishStream ends a stream the agent started: the buffered text becomes
-// the message's body in one update, the agents in the conversation are told
-// about the whole message, and the person's device is told it is final.
-// Finishing twice returns the finished message.
-func (s *Service) FinishStream(ctx context.Context, agentID, messageID uuid.UUID) (Message, error) {
-	return s.finishStream(ctx, agentID, messageID, false)
+// the message's body in one update, with any buttons or quick replies, the
+// agents in the conversation are told about the whole message, and the
+// person's device is told it is final. Finishing twice returns the finished
+// message.
+func (s *Service) FinishStream(ctx context.Context, agentID, messageID uuid.UUID, in FinishInput) (Message, error) {
+	buttons, err := validateButtons(in.Buttons)
+	if err != nil {
+		return Message{}, err
+	}
+	quick, err := validateQuickReplies(in.QuickReplies)
+	if err != nil {
+		return Message{}, err
+	}
+	return s.finishStream(ctx, agentID, messageID, FinishInput{Buttons: buttons, QuickReplies: quick}, false)
 }
 
 var errAlreadyFinished = errors.New("stream: already finished")
 
-func (s *Service) finishStream(ctx context.Context, agentID, messageID uuid.UUID, cutOff bool) (Message, error) {
+func (s *Service) finishStream(ctx context.Context, agentID, messageID uuid.UUID, in FinishInput, cutOff bool) (Message, error) {
 	if s.streams == nil {
 		return Message{}, domain.Internal(errors.New("streaming is not configured"))
 	}
@@ -113,7 +122,7 @@ func (s *Service) finishStream(ctx context.Context, agentID, messageID uuid.UUID
 		return Message{}, domain.Internal(err)
 	}
 	text, clamped := clampText(text)
-	body, err := json.Marshal(Body{Text: text})
+	body, err := json.Marshal(Body{Text: text, Buttons: in.Buttons, QuickReplies: in.QuickReplies})
 	if err != nil {
 		return Message{}, domain.Internal(fmt.Errorf("encode message body: %w", err))
 	}
@@ -151,10 +160,14 @@ func (s *Service) finishStream(ctx context.Context, agentID, messageID uuid.UUID
 	if err := s.streams.remove(ctx, ref); err != nil {
 		slog.WarnContext(ctx, "stream: buffer not removed after finish", "message", messageID, "error", err)
 	}
+	final := []Message{msg}
+	if err := s.decorate(ctx, final, true); err != nil {
+		return Message{}, err
+	}
 	s.notify(ctx, EventMessageCompleted, msg.ConversationID,
-		MessageCreatedEvent{ConversationID: msg.ConversationID, Message: msg})
+		MessageCreatedEvent{ConversationID: msg.ConversationID, Message: final[0]})
 	s.nudge(ctx, pending)
-	return msg, nil
+	return final[0], nil
 }
 
 // ownFinishedMessage answers a repeated finish: the message, if it is this
@@ -204,7 +217,7 @@ func (s *Service) SweepStreams(ctx context.Context, idleFor time.Duration) (int,
 
 	finished := 0
 	for _, ref := range refs {
-		if _, err := s.finishStream(ctx, ref.AgentID, ref.MessageID, true); err != nil {
+		if _, err := s.finishStream(ctx, ref.AgentID, ref.MessageID, FinishInput{}, true); err != nil {
 			// Already finished by the agent between listing and now, or by
 			// another instance's sweep: forget the bookkeeping and move on.
 			_ = s.streams.remove(ctx, ref)

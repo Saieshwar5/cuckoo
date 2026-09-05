@@ -31,6 +31,33 @@ _REPLY_TIMEOUT = 30.0
 
 Handler = Callable[[Message, Conversation], Awaitable[None]]
 
+# Rows of buttons: each button is (id, label) or (id, label, style), or a
+# dict with those keys.
+Buttons = list[list[tuple[str, str] | tuple[str, str, str] | dict[str, str]]]
+
+
+def _buttons_json(buttons: Buttons | None) -> list[list[dict[str, str]]] | None:
+    if not buttons:
+        return None
+    rows = []
+    for row in buttons:
+        wire = []
+        for b in row:
+            if isinstance(b, dict):
+                wire.append(
+                    {"id": b["id"], "label": b["label"], "style": b.get("style", "default")}
+                )
+            else:
+                wire.append({"id": b[0], "label": b[1], "style": b[2] if len(b) > 2 else "default"})
+        rows.append(wire)
+    return rows
+
+
+def _quick_replies_json(labels: list[str] | None) -> list[dict[str, str]] | None:
+    if not labels:
+        return None
+    return [{"label": label} for label in labels]
+
 
 class ProtocolError(Exception):
     """The hub refused an operation. ``code`` is the stable error code."""
@@ -194,21 +221,50 @@ class Agent:
     # -- sending ----------------------------------------------------------
 
     async def send(
-        self, conversation_id: str, text: str, *, idempotency_key: str | None = None
+        self,
+        conversation_id: str,
+        text: str,
+        *,
+        buttons: Buttons | None = None,
+        quick_replies: list[str] | None = None,
+        reply_to: str | None = None,
+        idempotency_key: str | None = None,
     ) -> Message:
         """Say something in a conversation the agent is in."""
         if self._http is None:
             raise RuntimeError("send is only available while the agent is running")
+        body: dict[str, Any] = {
+            "text": text,
+            "idempotency_key": idempotency_key or str(uuid.uuid4()),
+        }
+        if reply_to:
+            body["reply_to"] = reply_to
+        if wire := _buttons_json(buttons):
+            body["buttons"] = wire
+        if wire := _quick_replies_json(quick_replies):
+            body["quick_replies"] = wire
         response = await self._http.post(
-            f"/v1/agent/conversations/{conversation_id}/messages",
-            json={"text": text, "idempotency_key": idempotency_key or str(uuid.uuid4())},
+            f"/v1/agent/conversations/{conversation_id}/messages", json=body
         )
         response.raise_for_status()
         return Message.from_wire(response.json()["message"], conversation_id)
 
-    def stream(self, conversation_id: str) -> Stream:
+    def stream(
+        self,
+        conversation_id: str,
+        *,
+        reply_to: str | None = None,
+        buttons: Buttons | None = None,
+        quick_replies: list[str] | None = None,
+    ) -> Stream:
         """Begin a message that arrives piece by piece. Use as ``async with``."""
-        return Stream(self, conversation_id)
+        return Stream(
+            self, conversation_id, reply_to=reply_to, buttons=buttons, quick_replies=quick_replies
+        )
+
+    async def typing(self, conversation_id: str, state: str = "start") -> None:
+        """Show, or hide, the "working" indicator on the person's device."""
+        await self._call("typing", conversation_id=conversation_id, state=state)
 
     # -- socket operations ------------------------------------------------
 
@@ -247,14 +303,28 @@ class Stream:
     """A message being written. Entering starts it; ``append`` adds text;
     leaving finishes it, even after an exception, with what was sent."""
 
-    def __init__(self, agent: Agent, conversation_id: str):
+    def __init__(
+        self,
+        agent: Agent,
+        conversation_id: str,
+        *,
+        reply_to: str | None = None,
+        buttons: Buttons | None = None,
+        quick_replies: list[str] | None = None,
+    ):
         self._agent = agent
         self.conversation_id = conversation_id
+        self.reply_to = reply_to
+        self.buttons = buttons
+        self.quick_replies = quick_replies
         self.message_id: str | None = None
         self.message: Message | None = None
 
     async def __aenter__(self) -> Self:
-        reply = await self._agent._call("stream.start", conversation_id=self.conversation_id)
+        fields: dict[str, Any] = {"conversation_id": self.conversation_id}
+        if self.reply_to:
+            fields["reply_to"] = self.reply_to
+        reply = await self._agent._call("stream.start", **fields)
         self.message_id = reply["message"]["id"]
         return self
 
@@ -266,6 +336,11 @@ class Stream:
 
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> bool:
         if self.message_id is not None:
-            reply = await self._agent._call("stream.end", message_id=self.message_id)
+            fields: dict[str, Any] = {"message_id": self.message_id}
+            if wire := _buttons_json(self.buttons):
+                fields["buttons"] = wire
+            if wire := _quick_replies_json(self.quick_replies):
+                fields["quick_replies"] = wire
+            reply = await self._agent._call("stream.end", **fields)
             self.message = Message.from_wire(reply["message"], self.conversation_id)
         return False

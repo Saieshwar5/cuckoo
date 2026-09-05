@@ -2,6 +2,7 @@ package conversations
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -20,7 +21,104 @@ const (
 	// idempotencyKeyMaxLen leaves room for a UUID, a prefix and some
 	// namespace, and no room for a key that is really a payload.
 	idempotencyKeyMaxLen = 200
+
+	// Button and quick-reply limits are the protocol's. A phone screen fits
+	// three short buttons across; more rows or longer labels stop being a
+	// choice and start being a form, which is a different feature.
+	buttonRowsMax    = 3
+	buttonsPerRowMax = 3
+	quickRepliesMax  = 6
+	labelMaxLen      = 40
+	previewMaxLen    = 100
 )
+
+// buttonIDPattern: something a backend generates and matches on, not prose.
+var buttonIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+
+// validateButtons normalises and checks rows of buttons. Ids are unique
+// within the message, since a tap names one of them.
+func validateButtons(rows [][]Button) ([][]Button, error) {
+	invalid := func(msg string) error { return domain.InvalidField("buttons", "invalid_buttons", msg) }
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	if len(rows) > buttonRowsMax {
+		return nil, invalid(fmt.Sprintf("At most %d rows of buttons.", buttonRowsMax))
+	}
+	seen := map[string]bool{}
+	out := make([][]Button, 0, len(rows))
+	for _, row := range rows {
+		if len(row) == 0 || len(row) > buttonsPerRowMax {
+			return nil, invalid(fmt.Sprintf("Each row needs 1 to %d buttons.", buttonsPerRowMax))
+		}
+		clean := make([]Button, 0, len(row))
+		for _, b := range row {
+			if !buttonIDPattern.MatchString(b.ID) {
+				return nil, invalid("Button ids are 1 to 64 characters: letters, digits, _ . : or -.")
+			}
+			if seen[b.ID] {
+				return nil, invalid(fmt.Sprintf("Button id %q appears twice.", b.ID))
+			}
+			seen[b.ID] = true
+			label, err := validateLabel("buttons", "invalid_buttons", b.Label)
+			if err != nil {
+				return nil, err
+			}
+			style := b.Style
+			switch style {
+			case "":
+				style = ButtonDefault
+			case ButtonDefault, ButtonPrimary, ButtonDanger:
+			default:
+				return nil, invalid(`Button style must be "default", "primary" or "danger".`)
+			}
+			clean = append(clean, Button{ID: b.ID, Label: label, Style: style})
+		}
+		out = append(out, clean)
+	}
+	return out, nil
+}
+
+// validateQuickReplies normalises and checks suggested answers.
+func validateQuickReplies(in []QuickReply) ([]QuickReply, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	if len(in) > quickRepliesMax {
+		return nil, domain.InvalidField("quick_replies", "invalid_quick_replies",
+			fmt.Sprintf("At most %d quick replies.", quickRepliesMax))
+	}
+	out := make([]QuickReply, 0, len(in))
+	for _, q := range in {
+		label, err := validateLabel("quick_replies", "invalid_quick_replies", q.Label)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, QuickReply{Label: label})
+	}
+	return out, nil
+}
+
+// validateLabel checks the short text on a button or chip.
+func validateLabel(field, code, raw string) (string, error) {
+	label := strings.TrimSpace(raw)
+	if !utf8.ValidString(label) || strings.ContainsAny(label, "\n\r\t\x00") {
+		return "", domain.InvalidField(field, code, "Labels cannot contain line breaks or control characters.")
+	}
+	if n := utf8.RuneCountInString(label); n < 1 || n > labelMaxLen {
+		return "", domain.InvalidField(field, code, fmt.Sprintf("Labels must be 1 to %d characters.", labelMaxLen))
+	}
+	return label, nil
+}
+
+// previewOf is the short form of a message's text for a quote.
+func previewOf(text string) string {
+	text = strings.Join(strings.Fields(text), " ")
+	if utf8.RuneCountInString(text) <= previewMaxLen {
+		return text
+	}
+	return string([]rune(text)[:previewMaxLen]) + "…"
+}
 
 // validateIdempotencyKey returns nil for no key, so the column stays null and
 // the unique index ignores the row.

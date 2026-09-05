@@ -17,6 +17,7 @@ const (
 	opStreamStart = "stream.start"
 	opStreamDelta = "stream.delta"
 	opStreamEnd   = "stream.end"
+	opTyping      = "typing"
 )
 
 // replyFrame answers an operation. Operations that create or finish a
@@ -51,7 +52,14 @@ func (s *agentSocket) handleOp(ctx context.Context, op inboundFrame) bool {
 		if err != nil {
 			return s.reply(ctx, replyFrame{ReplyToCID: op.CID, Error: errorOf(err)})
 		}
-		in := conversations.SendInput{Text: op.Text, IdempotencyKey: op.IdempotencyKey}
+		replyTo, err := replyToOf(op.ReplyTo)
+		if err != nil {
+			return s.reply(ctx, replyFrame{ReplyToCID: op.CID, Error: errorOf(err)})
+		}
+		in := conversations.SendInput{
+			Text: op.Text, IdempotencyKey: op.IdempotencyKey, ReplyTo: replyTo,
+			Buttons: buttonsOf(op.Buttons), QuickReplies: quickRepliesOf(op.QuickReplies),
+		}
 		var res conversations.SendResult
 		if op.Op == opSend {
 			res, err = s.h.conversations.SendAsAgent(ctx, s.agentID, conversationID, in)
@@ -79,12 +87,27 @@ func (s *agentSocket) handleOp(ctx context.Context, op inboundFrame) bool {
 		if err != nil {
 			return s.reply(ctx, replyFrame{ReplyToCID: op.CID, MessageID: op.MessageID, Error: errorOf(err)})
 		}
-		finished, err := s.h.conversations.FinishStream(ctx, s.agentID, messageID)
+		finished, err := s.h.conversations.FinishStream(ctx, s.agentID, messageID, conversations.FinishInput{
+			Buttons: buttonsOf(op.Buttons), QuickReplies: quickRepliesOf(op.QuickReplies),
+		})
 		if err != nil {
 			return s.reply(ctx, replyFrame{ReplyToCID: op.CID, MessageID: op.MessageID, Error: errorOf(err)})
 		}
 		msg := events.MessageOf(finished, s.agentName)
 		return s.reply(ctx, replyFrame{ReplyToCID: op.CID, OK: true, Message: &msg})
+
+	case opTyping:
+		conversationID, err := domain.ParseID(domain.PrefixConv, op.ConversationID)
+		if err == nil {
+			err = s.h.conversations.Typing(ctx, s.agentID, conversationID, op.State)
+		}
+		if err != nil {
+			return s.reply(ctx, replyFrame{ReplyToCID: op.CID, Error: errorOf(err)})
+		}
+		if op.CID != "" {
+			return s.reply(ctx, replyFrame{ReplyToCID: op.CID, OK: true})
+		}
+		return true
 
 	default:
 		return s.reply(ctx, replyFrame{ReplyToCID: op.CID, Error: &errorDetail{
