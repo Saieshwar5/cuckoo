@@ -212,6 +212,27 @@ fails immediately rather than falling back to it.
 Postgres and Redis are published on **5433** and **6380**, off the default
 ports, so Cuckoo can run alongside another project's containers.
 
+### The app
+
+One command, and a phone with Expo Go on the same wifi:
+
+```bash
+make play EMAIL=you@example.com
+```
+
+That starts Postgres and Redis, builds and starts the hub, signs you in
+(reading the code from the hub's own log), creates an Echo agent and runs
+it, and starts the app's dev server with your laptop's wifi address filled
+in. Scan the QR code with Expo Go and sign in with the same email; the code
+is printed in green in that terminal. Then, from another terminal:
+
+```bash
+make say TEXT="hello from the laptop"
+```
+
+and watch the chat list on the phone update as the agent answers. Ctrl+C
+stops everything; `make stop` cleans up if something was left behind.
+
 ## Commands
 
 | Command | What it does |
@@ -251,7 +272,7 @@ server/          the hub: one Go binary, migrations embedded
     testutil/    test harness: transactional stores, HTTP client, fixtures
     agents/      agent identities and the bindings that connect them to backends
     users/       the first business package, and the pattern for the rest
-apps/mobile/     React Native app (not started)
+apps/mobile/     the app: React Native with Expo (see apps/mobile/README.md)
 sdk/python/      the Python SDK: connect, receive, reply
 protocol/        the published agent protocol spec (not started)
 examples/echo/   the reference agent, and the protocol's smoke test

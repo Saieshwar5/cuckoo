@@ -67,6 +67,14 @@ if command -v python3 >/dev/null 2>&1; then
 else
   skip "python syntax"          "python3 not installed"
 fi
+if [ -d apps/mobile/node_modules ]; then
+  step "mobile typecheck"       bash -c 'cd apps/mobile && npx tsc --noEmit'
+  step "mobile lint"            bash -c 'cd apps/mobile && npx eslint .'
+  step "mobile format"          bash -c 'cd apps/mobile && npx prettier --check "**/*.{ts,tsx,json,md}" >/dev/null'
+  step "mobile tests"           bash -c 'cd apps/mobile && npx jest --ci --silent >/dev/null 2>&1'
+else
+  skip "mobile checks"          "apps/mobile/node_modules missing, run make mobile-install"
+fi
 
 # ── Generated code matches its source ────────────────────────────────────────
 # Regenerate and compare the output with itself from a moment ago. Comparing

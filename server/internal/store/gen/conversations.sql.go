@@ -159,10 +159,14 @@ const listParticipants = `-- name: ListParticipants :many
 SELECT p.conversation_id, p.kind, p.user_id, p.agent_id, p.joined_at,
        u.display_name AS user_display_name,
        a.display_name AS agent_display_name,
-       a.handle       AS agent_handle
+       a.handle       AS agent_handle,
+       -- The dot on the avatar: the agent's live binding's health, or
+       -- nothing when no backend is connected.
+       b.status       AS agent_status
 FROM participants p
 LEFT JOIN users  u ON u.id = p.user_id
 LEFT JOIN agents a ON a.id = p.agent_id
+LEFT JOIN agent_bindings b ON b.agent_id = p.agent_id AND b.revoked_at IS NULL
 WHERE p.conversation_id = ANY($1::uuid[])
 ORDER BY p.conversation_id, p.joined_at, p.kind, p.user_id, p.agent_id
 `
@@ -176,6 +180,7 @@ type ListParticipantsRow struct {
 	UserDisplayName  *string
 	AgentDisplayName *string
 	AgentHandle      *string
+	AgentStatus      *string
 }
 
 // Members of a set of conversations with their current names. Deleted people
@@ -199,6 +204,7 @@ func (q *Queries) ListParticipants(ctx context.Context, conversationIds []uuid.U
 			&i.UserDisplayName,
 			&i.AgentDisplayName,
 			&i.AgentHandle,
+			&i.AgentStatus,
 		); err != nil {
 			return nil, err
 		}

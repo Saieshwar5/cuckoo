@@ -87,6 +87,32 @@ gen: ## Regenerate typed DB code from SQL (sqlc)
 fmt: ## Format Go code
 	cd $(SERVER_DIR) && go fmt ./...
 
+##@ Mobile
+
+.PHONY: mobile-install
+mobile-install: ## Install the app's dependencies
+	cd apps/mobile && npm install --no-audit --no-fund
+
+.PHONY: mobile
+mobile: ## Start the app (set CUCKOO_HUB_URL to the hub's address on your wifi)
+	cd apps/mobile && npx expo start
+
+.PHONY: mobile-check
+mobile-check: ## Typecheck, lint, format-check and test the app
+	cd apps/mobile && npm run check
+
+.PHONY: play
+play: ## Start everything for a phone test (make play EMAIL=you@example.com)
+	@scripts/play.sh $(EMAIL)
+
+.PHONY: say
+say: ## Send a message as yourself to your Echo agent (make say TEXT="hello")
+	@scripts/play.sh say "$(TEXT)"
+
+.PHONY: stop
+stop: ## Stop anything make play left running
+	@scripts/play.sh stop
+
 ##@ Verify
 
 .PHONY: test

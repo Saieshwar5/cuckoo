@@ -21,6 +21,10 @@ type participantResponse struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
 	Handle      string `json:"handle,omitempty"`
+	// Status is an agent's connection health: idle, connected or
+	// unreachable, and absent when no backend is connected. The dot on the
+	// avatar.
+	Status string `json:"status,omitempty"`
 }
 
 // conversationResponse is a row of the chat list. LastMessage is null until
@@ -54,6 +58,7 @@ func newConversationResponse(c conversations.Conversation) conversationResponse 
 			ID:          formatParticipantID(p.Kind, p.ID),
 			DisplayName: p.DisplayName,
 			Handle:      p.Handle,
+			Status:      p.Status,
 		})
 	}
 	if c.LastMessage != nil {

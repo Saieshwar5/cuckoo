@@ -81,3 +81,6 @@ __pycache__/
 *.pyc
 *.egg-info/
 .venv/
+
+# make play state and logs
+.play/

@@ -35,12 +35,14 @@ const (
 )
 
 // Participant is a member of a conversation as it should be shown: with the
-// name it goes by now. Handle is set only for agents.
+// name it goes by now. Handle and Status are set only for agents; Status is
+// the live binding's health, or empty when no backend is connected.
 type Participant struct {
 	Kind        ParticipantKind
 	ID          uuid.UUID
 	DisplayName string
 	Handle      string
+	Status      string
 	JoinedAt    time.Time
 }
 
@@ -251,6 +253,7 @@ func participantFromRow(r gen.ListParticipantsRow) Participant {
 		p.ID = derefID(r.AgentID)
 		p.DisplayName = derefString(r.AgentDisplayName)
 		p.Handle = derefString(r.AgentHandle)
+		p.Status = derefString(r.AgentStatus)
 	}
 	return p
 }
