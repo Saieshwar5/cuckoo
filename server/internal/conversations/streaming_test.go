@@ -74,7 +74,7 @@ func TestStreamLifecycle(t *testing.T) {
 		t.Errorf("agent's mid-stream history = %+v", theirs.Messages)
 	}
 
-	done, err := svc.FinishStream(ctx, f.agent.ID, started.ID)
+	done, err := svc.FinishStream(ctx, f.agent.ID, started.ID, conversations.FinishInput{})
 	if err != nil {
 		t.Fatalf("FinishStream: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestStreamLifecycle(t *testing.T) {
 		t.Errorf("history after finish = %+v, want the text in the row", page.Messages[0])
 	}
 
-	again, err := svc.FinishStream(ctx, f.agent.ID, started.ID)
+	again, err := svc.FinishStream(ctx, f.agent.ID, started.ID, conversations.FinishInput{})
 	if err != nil || again.ID != done.ID || again.Status != conversations.MessageComplete {
 		t.Errorf("second finish = %+v, %v; want the finished message again", again, err)
 	}
@@ -106,7 +106,7 @@ func TestStreamBelongsToItsAgent(t *testing.T) {
 	if err := svc.AppendStream(ctx, stranger.ID, started.ID, "mine now"); domain.CodeOf(err) != "not_streaming" {
 		t.Errorf("stranger append got %v, want not_streaming", err)
 	}
-	if _, err := svc.FinishStream(ctx, stranger.ID, started.ID); domain.CodeOf(err) != "stream_not_found" {
+	if _, err := svc.FinishStream(ctx, stranger.ID, started.ID, conversations.FinishInput{}); domain.CodeOf(err) != "stream_not_found" {
 		t.Errorf("stranger finish got %v, want stream_not_found", err)
 	}
 	if _, err := svc.StartStream(ctx, stranger.ID, f.dm.ID, conversations.SendInput{}); domain.CodeOf(err) != "not_participant" {
@@ -135,7 +135,7 @@ func TestStreamRejections(t *testing.T) {
 	if err := svc.AppendStream(ctx, f.agent.ID, started.ID, strings.Repeat("y", 8001)); err != nil {
 		t.Fatalf("append 8001: %v", err)
 	}
-	done, err := svc.FinishStream(ctx, f.agent.ID, started.ID)
+	done, err := svc.FinishStream(ctx, f.agent.ID, started.ID, conversations.FinishInput{})
 	if err != nil || len(done.Body.Text) != 8000 || !done.Truncated {
 		t.Errorf("finished = len %d truncated %v, %v; want 8000 and truncated", len(done.Body.Text), done.Truncated, err)
 	}
@@ -173,7 +173,7 @@ func TestSweepStreamsCutsOffIdleStreams(t *testing.T) {
 	if n, _ := svc.SweepStreams(ctx, 0); n != 0 {
 		t.Errorf("second sweep finished %d again", n)
 	}
-	if _, err := svc.FinishStream(ctx, f.agent.ID, started.ID); err != nil {
+	if _, err := svc.FinishStream(ctx, f.agent.ID, started.ID, conversations.FinishInput{}); err != nil {
 		t.Errorf("agent finishing after the sweep: %v, want the finished message", err)
 	}
 }

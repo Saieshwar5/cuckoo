@@ -57,6 +57,15 @@ type messageDeltaFrame struct {
 	Text           string `json:"text"`
 }
 
+// typingFrame says an agent is working. The app shows the indicator until
+// ExpiresAt, a stop frame, or a message, whichever comes first.
+type typingFrame struct {
+	ConversationID string    `json:"conversation_id"`
+	AgentID        string    `json:"agent_id"`
+	State          string    `json:"state"`
+	ExpiresAt      time.Time `json:"expires_at"`
+}
+
 // socket holds a live connection for the signed-in person and pushes them
 // every event in their conversations until they leave.
 //
@@ -156,6 +165,18 @@ func frameOf(ev realtime.Event) (frame, error) {
 			ConversationID: domain.FormatID(domain.PrefixConv, p.ConversationID),
 			MessageID:      domain.FormatID(domain.PrefixMessage, p.MessageID),
 			Text:           p.Text,
+		}}, nil
+
+	case conversations.EventTyping:
+		var p conversations.TypingEvent
+		if err := json.Unmarshal(ev.Payload, &p); err != nil {
+			return frame{}, err
+		}
+		return frame{Type: ev.Type, Data: typingFrame{
+			ConversationID: domain.FormatID(domain.PrefixConv, p.ConversationID),
+			AgentID:        domain.FormatID(domain.PrefixAgent, p.AgentID),
+			State:          p.State,
+			ExpiresAt:      p.ExpiresAt,
 		}}, nil
 
 	case conversations.EventDeliveryUpdated:

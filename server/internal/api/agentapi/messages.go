@@ -3,6 +3,8 @@ package agentapi
 import (
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
@@ -27,9 +29,60 @@ type messagePageEnvelope struct {
 // the message already created rather than a duplicate. Stream starts an
 // empty message to append to instead of sending text.
 type sendMessageRequest struct {
-	Text           string `json:"text"`
-	IdempotencyKey string `json:"idempotency_key"`
-	Stream         bool   `json:"stream"`
+	Text           string            `json:"text"`
+	IdempotencyKey string            `json:"idempotency_key"`
+	Stream         bool              `json:"stream"`
+	ReplyTo        string            `json:"reply_to"`
+	Buttons        [][]buttonInput   `json:"buttons"`
+	QuickReplies   []quickReplyInput `json:"quick_replies"`
+}
+
+type buttonInput struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Style string `json:"style"`
+}
+
+type quickReplyInput struct {
+	Label string `json:"label"`
+}
+
+func buttonsOf(in [][]buttonInput) [][]conversations.Button {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([][]conversations.Button, 0, len(in))
+	for _, row := range in {
+		btns := make([]conversations.Button, 0, len(row))
+		for _, b := range row {
+			btns = append(btns, conversations.Button{ID: b.ID, Label: b.Label, Style: b.Style})
+		}
+		out = append(out, btns)
+	}
+	return out
+}
+
+func quickRepliesOf(in []quickReplyInput) []conversations.QuickReply {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]conversations.QuickReply, 0, len(in))
+	for _, q := range in {
+		out = append(out, conversations.QuickReply{Label: q.Label})
+	}
+	return out
+}
+
+// replyToOf parses an optional quoted message id.
+func replyToOf(raw string) (*uuid.UUID, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	id, err := domain.ParseID(domain.PrefixMessage, raw)
+	if err != nil {
+		return nil, domain.InvalidField("reply_to", "invalid_id", "reply_to must be a message id.")
+	}
+	return &id, nil
 }
 
 // sendMessage posts a message from the agent into a conversation it is in.
@@ -51,7 +104,15 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	in := conversations.SendInput{Text: req.Text, IdempotencyKey: req.IdempotencyKey}
+	replyTo, err := replyToOf(req.ReplyTo)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	in := conversations.SendInput{
+		Text: req.Text, IdempotencyKey: req.IdempotencyKey, ReplyTo: replyTo,
+		Buttons: buttonsOf(req.Buttons), QuickReplies: quickRepliesOf(req.QuickReplies),
+	}
 	var res conversations.SendResult
 	if req.Stream {
 		res, err = h.conversations.StartStream(r.Context(), agentID, conversationID, in)

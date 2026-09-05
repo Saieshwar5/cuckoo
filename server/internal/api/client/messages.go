@@ -16,23 +16,74 @@ type senderResponse struct {
 }
 
 // bodyResponse is the message content. It is an object, not a string, so
-// attachments and buttons can join text without changing the shape.
+// attachments can join without changing the shape. Buttons and quick
+// replies are what an agent offered; Action is what the person's tap
+// chose; SelectedButtonID on the offering message is the button taken, so
+// the app can dim the row.
 type bodyResponse struct {
-	Text string `json:"text,omitempty"`
+	Text             string               `json:"text,omitempty"`
+	Buttons          [][]buttonResponse   `json:"buttons,omitempty"`
+	QuickReplies     []quickReplyResponse `json:"quick_replies,omitempty"`
+	Action           *actionResponse      `json:"action,omitempty"`
+	SelectedButtonID string               `json:"selected_button_id,omitempty"`
+}
+
+type buttonResponse struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Style string `json:"style"`
+}
+
+type quickReplyResponse struct {
+	Label string `json:"label"`
+}
+
+type actionResponse struct {
+	ButtonID        string `json:"button_id"`
+	SourceMessageID string `json:"source_message_id"`
+}
+
+// replyToResponse is the quoted message, enough to draw it.
+type replyToResponse struct {
+	ID          string `json:"id"`
+	SenderKind  string `json:"sender_kind"`
+	TextPreview string `json:"text_preview"`
+}
+
+func newBodyResponse(b conversations.Body) bodyResponse {
+	out := bodyResponse{Text: b.Text, SelectedButtonID: b.SelectedButtonID}
+	for _, row := range b.Buttons {
+		wire := make([]buttonResponse, 0, len(row))
+		for _, btn := range row {
+			wire = append(wire, buttonResponse{ID: btn.ID, Label: btn.Label, Style: btn.Style})
+		}
+		out.Buttons = append(out.Buttons, wire)
+	}
+	for _, q := range b.QuickReplies {
+		out.QuickReplies = append(out.QuickReplies, quickReplyResponse{Label: q.Label})
+	}
+	if b.Action != nil {
+		out.Action = &actionResponse{
+			ButtonID:        b.Action.ButtonID,
+			SourceMessageID: domain.FormatID(domain.PrefixMessage, b.Action.SourceMessageID),
+		}
+	}
+	return out
 }
 
 // messageResponse is a message as the app shows it. DeliveryStatus is the
 // tick mark: pending, delivered or failed for a message the caller sent to
 // agents, and null for one with nobody to deliver to.
 type messageResponse struct {
-	ID             string         `json:"id"`
-	ConversationID string         `json:"conversation_id"`
-	Sender         senderResponse `json:"sender"`
-	Body           bodyResponse   `json:"body"`
-	Status         string         `json:"status"`
-	Truncated      bool           `json:"truncated"`
-	DeliveryStatus *string        `json:"delivery_status"`
-	CreatedAt      time.Time      `json:"created_at"`
+	ID             string           `json:"id"`
+	ConversationID string           `json:"conversation_id"`
+	Sender         senderResponse   `json:"sender"`
+	Body           bodyResponse     `json:"body"`
+	ReplyTo        *replyToResponse `json:"reply_to"`
+	Status         string           `json:"status"`
+	Truncated      bool             `json:"truncated"`
+	DeliveryStatus *string          `json:"delivery_status"`
+	CreatedAt      time.Time        `json:"created_at"`
 }
 
 type messageEnvelope struct {
@@ -56,7 +107,7 @@ func newMessageResponse(m conversations.Message) messageResponse {
 			Kind: string(m.Sender.Kind),
 			ID:   formatParticipantID(m.Sender.Kind, m.Sender.ID),
 		},
-		Body:      bodyResponse{Text: m.Body.Text},
+		Body:      newBodyResponse(m.Body),
 		Status:    string(m.Status),
 		Truncated: m.Truncated,
 		CreatedAt: m.CreatedAt,
@@ -65,15 +116,30 @@ func newMessageResponse(m conversations.Message) messageResponse {
 		status := string(m.DeliveryStatus)
 		resp.DeliveryStatus = &status
 	}
+	if m.ReplyTo != nil {
+		resp.ReplyTo = &replyToResponse{
+			ID:          domain.FormatID(domain.PrefixMessage, m.ReplyTo.ID),
+			SenderKind:  string(m.ReplyTo.SenderKind),
+			TextPreview: m.ReplyTo.TextPreview,
+		}
+	}
 	return resp
 }
 
 // sendMessageRequest is a send. The idempotency key is optional on the wire
 // and always sent by the app: a retry after a dropped response returns the
-// message already created rather than a duplicate bubble.
+// message already created rather than a duplicate bubble. Action, instead
+// of text, is a tap on a button an agent offered.
 type sendMessageRequest struct {
-	Text           string `json:"text"`
-	IdempotencyKey string `json:"idempotency_key"`
+	Text           string         `json:"text"`
+	IdempotencyKey string         `json:"idempotency_key"`
+	ReplyTo        string         `json:"reply_to"`
+	Action         *actionRequest `json:"action"`
+}
+
+type actionRequest struct {
+	ButtonID        string `json:"button_id"`
+	SourceMessageID string `json:"source_message_id"`
 }
 
 func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
@@ -94,10 +160,24 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.conversations.SendAsUser(r.Context(), userID, conversationID, conversations.SendInput{
-		Text:           req.Text,
-		IdempotencyKey: req.IdempotencyKey,
-	})
+	in := conversations.SendInput{Text: req.Text, IdempotencyKey: req.IdempotencyKey}
+	if req.ReplyTo != "" {
+		id, err := domain.ParseID(domain.PrefixMessage, req.ReplyTo)
+		if err != nil {
+			httpx.Error(w, r, domain.InvalidField("reply_to", "invalid_id", "reply_to must be a message id."))
+			return
+		}
+		in.ReplyTo = &id
+	}
+	if req.Action != nil {
+		source, err := domain.ParseID(domain.PrefixMessage, req.Action.SourceMessageID)
+		if err != nil {
+			httpx.Error(w, r, domain.InvalidField("action", "invalid_id", "action.source_message_id must be a message id."))
+			return
+		}
+		in.Action = &conversations.Action{ButtonID: req.Action.ButtonID, SourceMessageID: source}
+	}
+	res, err := h.conversations.SendAsUser(r.Context(), userID, conversationID, in)
 	if err != nil {
 		httpx.Error(w, r, err)
 		return

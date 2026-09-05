@@ -32,7 +32,7 @@ func TestSendText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListMessages: %v", err)
 	}
-	if len(page.Messages) != 1 || page.Messages[0] != msg.Message {
+	if len(page.Messages) != 1 || page.Messages[0].ID != msg.ID || page.Messages[0].Body.Text != msg.Body.Text {
 		t.Errorf("history = %+v, want exactly the sent message", page.Messages)
 	}
 	if page.NextBefore != nil {

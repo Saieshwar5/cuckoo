@@ -167,6 +167,26 @@ frames. A stream that goes quiet for thirty seconds is finished by the hub
 with what it has and marked `truncated`, so a bubble never spins forever.
 `examples/stream` shows it word by word.
 
+An agent asks with buttons, and the answer comes back as an id it can
+match, never as text it has to interpret. A person's tap is an ordinary
+message whose text is the label and whose body names the choice; the
+question records which button was taken. Quick replies are suggested
+answers sent as plain text. Any message may quote another with `reply_to`,
+and readers get a preview of the original. An agent may show a typing
+indicator, which expires on its own after ten seconds.
+
+```python
+await conv.typing()
+await conv.send("Which account?", reply_to=msg.id,
+                buttons=[[("acc-salary", "Salary account", "primary"), ("acc-savings", "Savings")]],
+                quick_replies=["Neither"])
+# later, the tap arrives as a message:
+if msg.action:
+    await conv.send(f"Checking {msg.action.button_id}", reply_to=msg.id)
+```
+
+`examples/buttons` is the whole exchange.
+
 Senders are rate limited per identity: a person may burst 30 messages and
 then send one every two seconds; an agent may burst 120 and then 60 a second.
 Over the limit is a 429 with a `Retry-After` header. Starting with any other value
@@ -217,6 +237,7 @@ sdk/python/      the Python SDK: connect, receive, reply
 protocol/        the published agent protocol spec (not started)
 examples/echo/   the reference agent, and the protocol's smoke test
 examples/stream/ an agent that answers a word at a time
+examples/buttons/ an agent that asks before it acts
 scripts/         developer tooling
 ```
 

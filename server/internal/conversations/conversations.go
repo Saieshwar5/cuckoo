@@ -68,7 +68,18 @@ const (
 	EventMessageStarted   = "message.started"
 	EventMessageDelta     = "message.delta"
 	EventMessageCompleted = "message.completed"
+	// EventTyping: an agent is working on a reply, or has stopped.
+	EventTyping = "typing"
 )
+
+// TypingEvent tells a device an agent is working. It expires on its own:
+// the device clears the indicator at ExpiresAt unless told again.
+type TypingEvent struct {
+	ConversationID uuid.UUID `json:"conversation_id"`
+	AgentID        uuid.UUID `json:"agent_id"`
+	State          string    `json:"state"`
+	ExpiresAt      time.Time `json:"expires_at"`
+}
 
 // MessageDeltaEvent is one piece of a streaming message's text.
 type MessageDeltaEvent struct {
@@ -111,10 +122,52 @@ type Sender struct {
 
 // Body is the content of a message, stored as one JSON object.
 //
-// It is text alone today. Attachments, buttons and quick replies are further
-// fields of this same object, which is why it is a document and not a column.
+// Attachments will be further fields of this same object, which is why it is
+// a document and not a column. Buttons and quick replies are what an agent
+// offers; Action is what a person's tap produced; SelectedButtonID records
+// on the offering message which button was taken.
 type Body struct {
-	Text string `json:"text,omitempty"`
+	Text             string       `json:"text,omitempty"`
+	Buttons          [][]Button   `json:"buttons,omitempty"`
+	QuickReplies     []QuickReply `json:"quick_replies,omitempty"`
+	Action           *Action      `json:"action,omitempty"`
+	SelectedButtonID string       `json:"selected_button_id,omitempty"`
+}
+
+// Button is something a person can tap. The backend chooses the id and gets
+// it back exactly, which is the whole point: a choice it can match rather
+// than text it has to interpret.
+type Button struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Style string `json:"style,omitempty"`
+}
+
+// Button styles.
+const (
+	ButtonDefault = "default"
+	ButtonPrimary = "primary"
+	ButtonDanger  = "danger"
+)
+
+// QuickReply is a suggested answer, sent as plain text when tapped.
+type QuickReply struct {
+	Label string `json:"label"`
+}
+
+// Action is what a tap produced: which button, on which message.
+type Action struct {
+	ButtonID        string    `json:"button_id"`
+	SourceMessageID uuid.UUID `json:"source_message_id"`
+}
+
+// ReplyRef names the message a message answers, with enough of it to draw
+// the quote. The preview is read from the original at read time, never
+// copied, so it is always the original as it stands.
+type ReplyRef struct {
+	ID          uuid.UUID
+	SenderKind  ParticipantKind
+	TextPreview string
 }
 
 // MessageStatus says whether a message is still being written.
@@ -134,6 +187,7 @@ type Message struct {
 	ConversationID uuid.UUID
 	Sender         Sender
 	Body           Body
+	ReplyTo        *ReplyRef
 	Status         MessageStatus
 	Truncated      bool
 	DeliveryStatus DeliveryStatus
@@ -142,10 +196,22 @@ type Message struct {
 
 // SendInput is what a sender supplies. IdempotencyKey is optional: a sender
 // that retries after a lost response sends the same key and gets the same
-// message back instead of a duplicate.
+// message back instead of a duplicate. Buttons and QuickReplies are for
+// agents; Action is for a person tapping a button, instead of text.
 type SendInput struct {
 	Text           string
 	IdempotencyKey string
+	ReplyTo        *uuid.UUID
+	Buttons        [][]Button
+	QuickReplies   []QuickReply
+	Action         *Action
+}
+
+// FinishInput is what an agent may add when it finishes a stream. Buttons
+// only make sense on a message that is final.
+type FinishInput struct {
+	Buttons      [][]Button
+	QuickReplies []QuickReply
 }
 
 // SendResult is the message a send produced. Created is false when the
@@ -205,7 +271,7 @@ func messageFromRow(r gen.Message) (Message, error) {
 		sender.ID = derefID(r.SenderAgentID)
 	}
 
-	return Message{
+	msg := Message{
 		ID:             r.ID,
 		ConversationID: r.ConversationID,
 		Sender:         sender,
@@ -213,7 +279,11 @@ func messageFromRow(r gen.Message) (Message, error) {
 		Status:         MessageStatus(r.Status),
 		Truncated:      r.Truncated,
 		CreatedAt:      r.CreatedAt,
-	}, nil
+	}
+	if r.ReplyToMessageID != nil {
+		msg.ReplyTo = &ReplyRef{ID: *r.ReplyToMessageID}
+	}
+	return msg, nil
 }
 
 // The database guarantees these pointers are set for the kind that needs them;

@@ -46,6 +46,7 @@ func (h *Handler) Routes() chi.Router {
 		r.Get("/", h.getConversation)
 		r.Get("/messages", h.listMessages)
 		r.Post("/messages", h.sendMessage)
+		r.Post("/typing", h.typing)
 	})
 
 	r.Route("/messages/{id}", func(r chi.Router) {
