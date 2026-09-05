@@ -216,6 +216,12 @@ start_app() {
     say_hdr "Installing the app's packages (once)"
     (cd "$ROOT/apps/mobile" && npm install --no-audit --no-fund)
   fi
+  # A host firewall silently drops the phone's requests; Expo Go then loads
+  # forever. Reading the rules needs root, so just say what to check.
+  if command -v ufw >/dev/null 2>&1 && systemctl is-active --quiet ufw 2>/dev/null; then
+    printf '\n\033[1;33mufw is active on this laptop. If the phone keeps loading, allow the two ports once:\033[0m\n'
+    printf '  sudo ufw allow %s/tcp && sudo ufw allow 8081/tcp\n' "$PORT"
+  fi
   say_hdr "Everything is running"
   echo "  The phone will reach the hub at http://$host:$PORT"
   cat <<MSG
