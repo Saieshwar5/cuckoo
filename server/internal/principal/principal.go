@@ -23,16 +23,23 @@ const (
 )
 
 // Principal is the authenticated caller. Exactly one identifier is set,
-// according to Kind.
+// according to Kind. SessionID is set for a person who authenticated with a
+// session token, and is what signing out revokes.
 type Principal struct {
-	Kind    Kind
-	UserID  uuid.UUID
-	AgentID uuid.UUID
+	Kind      Kind
+	UserID    uuid.UUID
+	AgentID   uuid.UUID
+	SessionID uuid.UUID
 }
 
 // User builds a principal for a person using the app.
 func User(id uuid.UUID) Principal {
 	return Principal{Kind: KindUser, UserID: id}
+}
+
+// UserSession builds a principal for a person holding a session.
+func UserSession(userID, sessionID uuid.UUID) Principal {
+	return Principal{Kind: KindUser, UserID: userID, SessionID: sessionID}
 }
 
 // Agent builds a principal for an agent backend.
@@ -70,6 +77,16 @@ func UserID(ctx context.Context) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return p.UserID, true
+}
+
+// SessionID returns the session the calling person holds, reporting false
+// when the caller is not a person or did not authenticate with a session.
+func SessionID(ctx context.Context) (uuid.UUID, bool) {
+	p, ok := FromContext(ctx)
+	if !ok || !p.IsUser() || p.SessionID == uuid.Nil {
+		return uuid.Nil, false
+	}
+	return p.SessionID, true
 }
 
 // AgentID returns the calling agent's identifier, reporting false for an

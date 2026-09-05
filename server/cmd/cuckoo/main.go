@@ -28,8 +28,10 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/config"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
+	"github.com/Saieshwar5/cuckoo/server/internal/mail"
 	"github.com/Saieshwar5/cuckoo/server/internal/ratelimit"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
+	"github.com/Saieshwar5/cuckoo/server/internal/signin"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -53,12 +55,7 @@ func run() error {
 
 	log := newLogger(cfg)
 	slog.SetDefault(log)
-	log.Info("starting cuckoo", "env", cfg.Env, "hub_domain", cfg.HubDomain, "addr", cfg.HTTPAddr)
-
-	authenticator, err := newAuthenticator(cfg)
-	if err != nil {
-		return err
-	}
+	log.Info("starting cuckoo", "env", cfg.Env, "hub_domain", cfg.HubDomain, "addr", cfg.HTTPAddr, "mail", cfg.Mail)
 
 	// Signals cancel this context, which unwinds startup and then triggers a
 	// graceful shutdown of the running server.
@@ -90,18 +87,23 @@ func run() error {
 		return err
 	}
 
+	limits := ratelimit.NewRedis(redisClient, "cuckoo:")
+	signinService := signin.New(db, mail.NewConsole(log), signin.WithLimiter(limits))
+	userAuth := newUserAuthenticator(cfg, signinService)
+
 	agentService := agents.New(db)
 	conversationService := conversations.New(db,
-		conversations.WithLimiter(ratelimit.NewRedis(redisClient, "cuckoo:")),
+		conversations.WithLimiter(limits),
 		conversations.WithPublisher(bus),
 		conversations.WithStreams(conversations.NewStreamStore(redisClient, "cuckoo:")))
 	deliveryService := delivery.New(db, conversationService)
 
 	router := api.NewRouter(api.Deps{
 		Logger:        log,
-		UserAuth:      authenticator,
+		UserAuth:      userAuth,
 		AgentAuth:     auth.NewBinding(agentService),
 		Users:         users.New(db),
+		SignIn:        signinService,
 		Agents:        agentService,
 		Conversations: conversationService,
 		Delivery:      deliveryService,
@@ -187,18 +189,18 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, handler htt
 	return nil
 }
 
-// newAuthenticator selects how callers are identified.
+// newUserAuthenticator selects how people are identified.
 //
-// Production has no authenticator yet, and startup fails rather than falling
-// back to the development header. A security bypass that a misconfiguration can
-// reach is not a bypass, it is a vulnerability with a scheduled release date.
-func newAuthenticator(cfg config.Config) (middleware.Authenticator, error) {
-	if !cfg.IsDev() {
-		return nil, fmt.Errorf(
-			"no authenticator available for CUCKOO_ENV=%s: real authentication is not implemented yet, "+
-				"so only CUCKOO_ENV=dev can start", cfg.Env)
+// Everywhere, a session token. In development, also the header that names
+// a user outright, so curl works without signing in. The header is never
+// wired outside development: a bypass a misconfiguration can reach is not a
+// bypass, it is a vulnerability with a scheduled release date.
+func newUserAuthenticator(cfg config.Config, s *signin.Service) middleware.Authenticator {
+	session := auth.NewSession(s)
+	if cfg.IsDev() {
+		return auth.NewDevOrSession(auth.NewDev(), session)
 	}
-	return auth.NewDev(), nil
+	return session
 }
 
 func newRedis(redisURL string) (*redis.Client, error) {

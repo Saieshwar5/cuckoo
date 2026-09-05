@@ -33,9 +33,26 @@ curl -s localhost:8080/healthz
 # {"status":"ok","components":{"postgres":"ok","redis":"ok"}}
 ```
 
-Real authentication is not built yet. In development the server accepts an
-`X-Dev-User` header naming the caller, so the API can be exercised with `curl`
-long before there is an inbox or a login screen:
+Sign in with an email code. In development the code is printed to the
+server log (`CUCKOO_MAIL=console`) instead of being sent, so nothing outside
+this machine is involved:
+
+```bash
+curl -s -X POST localhost:8080/v1/auth/email/start -H 'Content-Type: application/json' \
+  -d '{"email":"priya@example.com"}'
+# read the six-digit code off the server log, then:
+curl -s -X POST localhost:8080/v1/auth/email/verify -H 'Content-Type: application/json' \
+  -d '{"email":"priya@example.com","code":"482913","device_name":"laptop"}'
+# → {"token":"ses_tok_...","user":{...},"is_new":true}
+export H="Authorization: Bearer ses_tok_..."
+curl -s -H "$H" localhost:8080/v1/client/me
+```
+
+A new address becomes a new account. Signing in on another device signs the
+first one out. `POST /v1/auth/logout` ends the session.
+
+In development the server also accepts an `X-Dev-User` header naming any user,
+so scripts can skip signing in:
 
 ```bash
 export H="X-Dev-User: usr_..."
@@ -55,8 +72,8 @@ curl -s -H "$H" -X POST localhost:8080/v1/client/conversations/cnv_.../messages 
 curl -s -H "$H" "localhost:8080/v1/client/conversations/cnv_.../messages?limit=50"
 ```
 
-This bypass exists only when `CUCKOO_ENV=dev`.
-
+That header exists only when `CUCKOO_ENV=dev`; in any other environment only
+session tokens are accepted.
 ### Live updates for the app
 
 The app holds one WebSocket at `/v1/client/socket`, authenticated like any
@@ -220,6 +237,8 @@ server/          the hub: one Go binary, migrations embedded
   internal/
     api/         HTTP: routing, middleware, request and response handling
     auth/        credentials to caller
+    signin/      email codes and sessions
+    mail/        sending the few emails the hub sends
     config/      environment to typed settings
     conversations/ conversations, participants and messages
     delivery/    the outbox worker: webhook delivery, retries, catch-up

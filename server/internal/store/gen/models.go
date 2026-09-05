@@ -75,6 +75,26 @@ type Participant struct {
 	JoinedAt       time.Time
 }
 
+type Session struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	TokenHash  []byte
+	DeviceName string
+	ExpiresAt  time.Time
+	CreatedAt  time.Time
+	RevokedAt  *time.Time
+}
+
+type SignInCode struct {
+	ID        uuid.UUID
+	Email     string
+	CodeHash  []byte
+	Attempts  int32
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	CreatedAt time.Time
+}
+
 type User struct {
 	ID          uuid.UUID
 	DisplayName string
@@ -82,4 +102,13 @@ type User struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	DeletedAt   *time.Time
+}
+
+type UserIdentity struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	Kind       string
+	Value      string
+	VerifiedAt *time.Time
+	CreatedAt  time.Time
 }

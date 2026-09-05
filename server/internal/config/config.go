@@ -35,7 +35,15 @@ type Config struct {
 
 	LogLevel        slog.Level
 	ShutdownTimeout time.Duration
+
+	// Mail is how sign-in codes are delivered. "console" prints them to the
+	// log, which is right for development and for a private hub whose
+	// operator is its only user; it is never assumed in production.
+	Mail string
 }
+
+// Mail modes.
+const MailConsole = "console"
 
 // IsDev reports whether development-only behaviour is permitted.
 func (c Config) IsDev() bool { return c.Env == EnvDev }
@@ -55,6 +63,17 @@ func Load() (Config, error) {
 		RedisURL:        l.str("CUCKOO_REDIS_URL", "redis://localhost:6380/0"),
 		LogLevel:        l.logLevel("CUCKOO_LOG_LEVEL", slog.LevelInfo),
 		ShutdownTimeout: l.duration("CUCKOO_SHUTDOWN_TIMEOUT", 15*time.Second),
+		Mail:            l.str("CUCKOO_MAIL", ""),
+	}
+
+	switch {
+	case cfg.Mail == "" && cfg.Env == EnvProd:
+		l.fail("CUCKOO_MAIL must be set when CUCKOO_ENV=prod: sign-in codes have to go somewhere. " +
+			"The only mode today is console, which prints them to the log; set it deliberately or not at all")
+	case cfg.Mail == "":
+		cfg.Mail = MailConsole
+	case cfg.Mail != MailConsole:
+		l.fail("CUCKOO_MAIL must be console (got %q)", cfg.Mail)
 	}
 
 	if cfg.Env == EnvProd {

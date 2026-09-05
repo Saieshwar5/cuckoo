@@ -11,6 +11,7 @@ import (
 // it before it reaches a public repository.
 const (
 	PrefixBindingSecret = "bnd_sec"
+	PrefixSessionToken  = "ses_tok"
 )
 
 // secretBytes is the entropy in every generated secret. 256 bits: not
