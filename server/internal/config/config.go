@@ -40,6 +40,10 @@ type Config struct {
 	// log, which is right for development and for a private hub whose
 	// operator is its only user; it is never assumed in production.
 	Mail string
+
+	// CORSOrigins are the browser origins allowed to call the API. Any
+	// origin in development, none in production unless listed.
+	CORSOrigins []string
 }
 
 // Mail modes.
@@ -64,6 +68,10 @@ func Load() (Config, error) {
 		LogLevel:        l.logLevel("CUCKOO_LOG_LEVEL", slog.LevelInfo),
 		ShutdownTimeout: l.duration("CUCKOO_SHUTDOWN_TIMEOUT", 15*time.Second),
 		Mail:            l.str("CUCKOO_MAIL", ""),
+		CORSOrigins:     l.list("CUCKOO_CORS_ORIGINS"),
+	}
+	if len(cfg.CORSOrigins) == 0 && cfg.Env == EnvDev {
+		cfg.CORSOrigins = []string{"*"}
 	}
 
 	switch {
@@ -107,6 +115,17 @@ func (l *loader) str(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// list reads a comma-separated value; empty means an empty list.
+func (l *loader) list(key string) []string {
+	var out []string
+	for _, v := range strings.Split(l.str(key, ""), ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func (l *loader) oneOf(key, def string, allowed ...string) string {

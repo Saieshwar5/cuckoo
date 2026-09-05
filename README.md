@@ -233,6 +233,19 @@ make say TEXT="hello from the laptop"
 and watch the chat list on the phone update as the agent answers. Ctrl+C
 stops everything; `make stop` cleans up if something was left behind.
 
+The same command runs the app elsewhere:
+
+| Command | Where the app runs |
+|---|---|
+| `make play EMAIL=...` | your phone, through Expo Go |
+| `make web EMAIL=...` | a tab in this laptop's browser, for building |
+| `make play EMAIL=... TARGET=emulator` | the Android emulator |
+
+The emulator is a one-time install with no Android Studio and no sudo:
+`make emulator-install` downloads a Java runtime, the SDK tools and one
+Android 15 image (about 5 GB) into your home directory and creates a
+device. `make emulator` boots it; `make emulator-stop` closes it.
+
 ## Commands
 
 | Command | What it does |

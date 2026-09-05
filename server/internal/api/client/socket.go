@@ -18,6 +18,10 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 )
 
+// socketSubprotocol is the name a browser client offers alongside its token;
+// the hub selects it so the browser completes the handshake.
+const socketSubprotocol = "cuckoo"
+
 const (
 	// pingInterval keeps the connection alive through proxies and tells us
 	// when a phone has silently gone. A ping unanswered within pingTimeout
@@ -81,8 +85,12 @@ func (h *Handler) socket(w http.ResponseWriter, r *http.Request) {
 
 	// Any origin is accepted: callers authenticate with a header the app
 	// sets explicitly, never with a cookie a browser would attach on its
-	// own, so there is no cross-site request to defend against here.
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
+	// own, so there is no cross-site request to defend against here. The
+	// "cuckoo" subprotocol is how a browser client carries its token.
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{"*"},
+		Subprotocols:   []string{socketSubprotocol},
+	})
 	if err != nil {
 		// Accept has already written the failure response.
 		return

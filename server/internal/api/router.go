@@ -48,7 +48,10 @@ type Deps struct {
 	Delivery      *delivery.Service
 	Hub           *realtime.Hub
 	Bus           realtime.Publisher
-	Health        map[string]HealthCheck
+	// CORSOrigins are the browser origins allowed to call the API; empty
+	// means browsers are not served at all.
+	CORSOrigins []string
+	Health      map[string]HealthCheck
 }
 
 // NewRouter builds the server's HTTP handler.
@@ -64,6 +67,7 @@ func NewRouter(d Deps) http.Handler {
 	// configure and trust by name, not from a header we accept from anyone.
 	r.Use(middleware.Recoverer(d.Logger))
 	r.Use(middleware.Logger(d.Logger))
+	r.Use(middleware.CORS(d.CORSOrigins))
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, domain.NotFound("route_not_found", "No such endpoint."))
