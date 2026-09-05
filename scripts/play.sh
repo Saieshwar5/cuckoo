@@ -197,14 +197,27 @@ watch_codes() {
   pids+=("$!")
 }
 
+# lan_address is the laptop's address on the network the phone is on: the
+# one the laptop itself uses to reach the internet, failing that the first
+# real interface, never a Docker bridge.
+lan_address() {
+  local a
+  a=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") print $(i + 1)}' | head -1 || true)
+  [ -n "$a" ] && { echo "$a"; return; }
+  a=$(ip -4 -o addr show scope global 2>/dev/null | grep -v -E ' (docker|br-|veth|virbr)' | awk '{print $4}' | cut -d/ -f1 | head -1 || true)
+  [ -n "$a" ] && { echo "$a"; return; }
+  hostname -I 2>/dev/null | awk '{print $1}' || true
+}
+
 start_app() {
-  local host="${CUCKOO_HUB_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
-  [ -n "$host" ] || die "could not detect your wifi address; set CUCKOO_HUB_HOST"
+  local host="${CUCKOO_HUB_HOST:-$(lan_address)}"
+  [ -n "$host" ] || die "could not detect your wifi address; is the laptop connected? Or set CUCKOO_HUB_HOST=<address>"
   if [ ! -d "$ROOT/apps/mobile/node_modules" ]; then
     say_hdr "Installing the app's packages (once)"
     (cd "$ROOT/apps/mobile" && npm install --no-audit --no-fund)
   fi
   say_hdr "Everything is running"
+  echo "  The phone will reach the hub at http://$host:$PORT"
   cat <<MSG
   1. Open Expo Go on your phone (same wifi) and scan the QR code below.
   2. Sign in with $1. The code will be printed here in green.
