@@ -33,6 +33,30 @@ type AgentBinding struct {
 	RevokedAt  *time.Time
 }
 
+type Conversation struct {
+	ID        uuid.UUID
+	Kind      string
+	CreatedAt time.Time
+}
+
+type Message struct {
+	ID             uuid.UUID
+	ConversationID uuid.UUID
+	SenderKind     string
+	SenderUserID   *uuid.UUID
+	SenderAgentID  *uuid.UUID
+	Body           []byte
+	CreatedAt      time.Time
+}
+
+type Participant struct {
+	ConversationID uuid.UUID
+	Kind           string
+	UserID         *uuid.UUID
+	AgentID        *uuid.UUID
+	JoinedAt       time.Time
+}
+
 type User struct {
 	ID          uuid.UUID
 	DisplayName string

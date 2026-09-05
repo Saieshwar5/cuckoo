@@ -25,6 +25,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/api/middleware"
 	"github.com/Saieshwar5/cuckoo/server/internal/auth"
 	"github.com/Saieshwar5/cuckoo/server/internal/config"
+	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -79,11 +80,12 @@ func run() error {
 	agentService := agents.New(db)
 
 	router := api.NewRouter(api.Deps{
-		Logger:    log,
-		UserAuth:  authenticator,
-		AgentAuth: auth.NewBinding(agentService),
-		Users:     users.New(db),
-		Agents:    agentService,
+		Logger:        log,
+		UserAuth:      authenticator,
+		AgentAuth:     auth.NewBinding(agentService),
+		Users:         users.New(db),
+		Agents:        agentService,
+		Conversations: conversations.New(db),
 		Health: map[string]api.HealthCheck{
 			"postgres": db.Ping,
 			"redis":    func(ctx context.Context) error { return redisClient.Ping(ctx).Err() },

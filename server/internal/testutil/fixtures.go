@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
+	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -98,4 +99,24 @@ func BindAgent(t *testing.T, db *store.Store, agent agents.Agent) (agents.Bindin
 		t.Fatalf("testutil: bind agent fixture: %v", err)
 	}
 	return binding, secret
+}
+
+// OwnerDM returns the conversation between an agent and its owner, which
+// creating the agent opened.
+func OwnerDM(t *testing.T, db *store.Store, agent agents.Agent) conversations.Conversation {
+	t.Helper()
+
+	list, err := conversations.New(db).ListMine(context.Background(), agent.OwnerID)
+	if err != nil {
+		t.Fatalf("testutil: list owner conversations: %v", err)
+	}
+	for _, c := range list {
+		for _, p := range c.Participants {
+			if p.Kind == conversations.ParticipantAgent && p.ID == agent.ID {
+				return c
+			}
+		}
+	}
+	t.Fatalf("testutil: agent %s has no DM with its owner", agent.ID)
+	return conversations.Conversation{}
 }

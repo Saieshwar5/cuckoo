@@ -38,7 +38,21 @@ Real authentication is not built yet. In development the server accepts an
 long before there is an inbox or a login screen:
 
 ```bash
-curl -s -H "X-Dev-User: usr_..." localhost:8080/v1/client/me
+export H="X-Dev-User: usr_..."
+curl -s -H "$H" localhost:8080/v1/client/me
+
+# Create an agent; this also opens the DM between you and it.
+curl -s -H "$H" -X POST localhost:8080/v1/mgmt/agents \
+  -H 'Content-Type: application/json' \
+  -d '{"handle":"helper","display_name":"Helper"}'
+
+# The chat list, most recently active first.
+curl -s -H "$H" localhost:8080/v1/client/conversations
+
+# Send a message and page the history back, newest first.
+curl -s -H "$H" -X POST localhost:8080/v1/client/conversations/cnv_.../messages \
+  -H 'Content-Type: application/json' -d '{"text":"hello"}'
+curl -s -H "$H" "localhost:8080/v1/client/conversations/cnv_.../messages?limit=50"
 ```
 
 This bypass exists only when `CUCKOO_ENV=dev`. Starting with any other value
@@ -73,10 +87,12 @@ server/          the hub: one Go binary, migrations embedded
     api/         HTTP: routing, middleware, request and response handling
     auth/        credentials to caller
     config/      environment to typed settings
+    conversations/ conversations, participants and messages
     domain/      shared error model and identifiers
     principal/   who is calling
     store/       database access, migrations, generated queries
     testutil/    test harness: transactional stores, HTTP client, fixtures
+    agents/      agent identities and the bindings that connect them to backends
     users/       the first business package, and the pattern for the rest
 apps/mobile/     React Native app (not started)
 sdk/             agent SDKs, Python first (not started)

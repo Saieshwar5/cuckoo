@@ -19,6 +19,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/mgmt"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/middleware"
+	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -36,9 +37,10 @@ type Deps struct {
 	UserAuth  middleware.Authenticator
 	AgentAuth middleware.Authenticator
 
-	Users  *users.Service
-	Agents *agents.Service
-	Health map[string]HealthCheck
+	Users         *users.Service
+	Agents        *agents.Service
+	Conversations *conversations.Service
+	Health        map[string]HealthCheck
 }
 
 // NewRouter builds the server's HTTP handler.
@@ -68,7 +70,7 @@ func NewRouter(d Deps) http.Handler {
 	// The app's API. Every route below requires a signed-in person.
 	r.Route("/v1/client", func(r chi.Router) {
 		r.Use(middleware.RequireUser(d.UserAuth))
-		r.Mount("/", client.New(d.Users).Routes())
+		r.Mount("/", client.New(d.Users, d.Conversations).Routes())
 	})
 
 	// Agent management: owners creating agents and connecting backends.
