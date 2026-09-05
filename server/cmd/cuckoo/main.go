@@ -109,6 +109,7 @@ func run() error {
 		Delivery:      deliveryService,
 		Hub:           hub,
 		Bus:           bus,
+		CORSOrigins:   cfg.CORSOrigins,
 		Health: map[string]api.HealthCheck{
 			"postgres": db.Ping,
 			"redis":    func(ctx context.Context) error { return redisClient.Ping(ctx).Err() },

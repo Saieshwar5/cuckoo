@@ -129,6 +129,30 @@ func TestSocketRelaysDeliveryAndReplies(t *testing.T) {
 	}
 }
 
+// A browser cannot set headers on a WebSocket, so it offers the token as a
+// subprotocol and the hub selects "cuckoo".
+func TestSocketAcceptsTokenAsSubprotocol(t *testing.T) {
+	f := setupChat(t)
+	token := f.srv.SignIn(t, "browser@example.com")
+	url := "ws" + strings.TrimPrefix(f.srv.URL, "http") + "/v1/client/socket"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c, resp, err := websocket.Dial(ctx, url, &websocket.DialOptions{Subprotocols: []string{"cuckoo", token}})
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	if err != nil {
+		t.Fatalf("dial with subprotocol token: %v", err)
+	}
+	defer func() { _ = c.CloseNow() }()
+	if c.Subprotocol() != "cuckoo" {
+		t.Errorf("selected subprotocol = %q, want cuckoo", c.Subprotocol())
+	}
+	if fr := readFrame(t, c); fr.Type != "ready" {
+		t.Errorf("first frame = %s, want ready", fr.Type)
+	}
+}
+
 func TestSocketRequiresAUser(t *testing.T) {
 	f := setupChat(t)
 	if _, err := f.srv.DialSocket(t, "/v1/client/socket", http.Header{}); err == nil || !strings.Contains(err.Error(), "401") {

@@ -94,6 +94,7 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 		Delivery:      delivery.New(db, conversationService),
 		Hub:           hub,
 		Bus:           bus,
+		CORSOrigins:   []string{"*"},
 		Health:        map[string]api.HealthCheck{},
 	})
 
@@ -112,6 +113,20 @@ func (s *Server) AsSession(t *testing.T, token string) *Client {
 		baseURL: s.URL,
 		headers: map[string]string{"Authorization": "Bearer " + token},
 	}
+}
+
+// SignIn signs a person in through the real endpoints and returns their
+// session token.
+func (s *Server) SignIn(t *testing.T, email string) string {
+	t.Helper()
+	anon := s.Anonymous(t)
+	anon.Post("/v1/auth/email/start", map[string]any{"email": email}).ExpectStatus(http.StatusNoContent)
+	var v struct {
+		Token string `json:"token"`
+	}
+	anon.Post("/v1/auth/email/verify", map[string]any{"email": email, "code": s.LastCode(t, strings.ToLower(email))}).
+		ExpectStatus(http.StatusOK).Decode(&v)
+	return v.Token
 }
 
 // LastCode reads the sign-in code most recently mailed to an address.
@@ -234,6 +249,9 @@ func (c *Client) Patch(path string, body any) *Response {
 
 // Delete issues a DELETE request.
 func (c *Client) Delete(path string) *Response { return c.do(http.MethodDelete, path, nil) }
+
+// Options issues an OPTIONS request, as a browser's preflight does.
+func (c *Client) Options(path string) *Response { return c.do(http.MethodOptions, path, nil) }
 
 // PatchRaw issues a PATCH request with a body sent exactly as given, for
 // testing malformed JSON.

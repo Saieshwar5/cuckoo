@@ -27,12 +27,11 @@ export interface SocketHandle {
   close(): void;
 }
 
-// React Native's WebSocket accepts headers as a third argument, which is how
-// the session token travels.
+// The token travels as a WebSocket subprotocol: "cuckoo" plus the token.
+// Browsers cannot set headers on a WebSocket and this is the one thing they
+// let a page send; it works the same on a phone, so there is one path.
 const nativeFactory: SocketFactory = (url, token) =>
-  new (WebSocket as unknown as new (u: string, p?: unknown, o?: unknown) => SocketLike)(url, undefined, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  new WebSocket(url, ['cuckoo', token]) as unknown as SocketLike;
 
 // connectSocket holds one live-update connection and reconnects with
 // backoff when it drops. A connection that lasted a while earns a fresh

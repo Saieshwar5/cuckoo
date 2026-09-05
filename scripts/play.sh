@@ -11,6 +11,10 @@
 # your wifi filled in. Sign-in codes for the phone are printed here as they
 # happen. Ctrl+C stops all of it.
 #
+# Where the app runs is TARGET: phone (default; a QR code for Expo Go),
+# web (a tab in this laptop's browser), or emulator (the Android emulator,
+# installed with make emulator-install).
+#
 # Settings: CUCKOO_HUB_PORT (default 8080), CUCKOO_HUB_HOST (your wifi
 # address; detected), PLAY_NO_APP=1 to start only the servers.
 set -euo pipefail
@@ -210,7 +214,14 @@ lan_address() {
 }
 
 start_app() {
-  local host="${CUCKOO_HUB_HOST:-$(lan_address)}"
+  local target="${TARGET:-phone}" host
+  case "$target" in
+    web) host="localhost" ;;
+    # 10.0.2.2 is how an Android emulator names the machine it runs on.
+    emulator) host="10.0.2.2" ;;
+    phone) host="${CUCKOO_HUB_HOST:-$(lan_address)}" ;;
+    *) die "TARGET must be phone, web or emulator (got $target)" ;;
+  esac
   [ -n "$host" ] || die "could not detect your wifi address; is the laptop connected? Or set CUCKOO_HUB_HOST=<address>"
   if [ ! -d "$ROOT/apps/mobile/node_modules" ]; then
     say_hdr "Installing the app's packages (once)"
@@ -223,8 +234,30 @@ start_app() {
     printf '  sudo ufw allow %s/tcp && sudo ufw allow 8081/tcp\n' "$PORT"
   fi
   say_hdr "Everything is running"
-  echo "  The phone will reach the hub at http://$host:$PORT"
-  cat <<MSG
+  echo "  The app will reach the hub at http://$host:$PORT"
+  case "$target" in
+    web) cat <<MSG
+  1. A browser tab opens with the app (or open http://localhost:8081).
+  2. Sign in with $1. The code will be printed here in green.
+  3. In another terminal:  make say TEXT="hello from the laptop"
+  Ctrl+C here stops everything.
+
+MSG
+      cd "$ROOT/apps/mobile"
+      EXPO_PUBLIC_HUB_URL="http://$host:$PORT" npx expo start --web ;;
+    emulator) cat <<MSG
+  1. The Android emulator boots (a minute), then the app opens in it.
+  2. Sign in with $1. The code will be printed here in green.
+  3. In another terminal:  make say TEXT="hello from the laptop"
+  Ctrl+C here stops everything but the emulator; make emulator-stop closes it.
+
+MSG
+      # shellcheck disable=SC1090
+      eval "$("$ROOT/scripts/emulator.sh" env)"
+      "$ROOT/scripts/emulator.sh" start
+      cd "$ROOT/apps/mobile"
+      EXPO_PUBLIC_HUB_URL="http://$host:$PORT" npx expo start --android ;;
+    phone) cat <<MSG
   1. Open Expo Go on your phone (same wifi) and scan the QR code below.
   2. Sign in with $1. The code will be printed here in green.
   3. In another terminal:  make say TEXT="hello from the laptop"
@@ -232,8 +265,9 @@ start_app() {
   Ctrl+C here stops everything.
 
 MSG
-  cd "$ROOT/apps/mobile"
-  CUCKOO_HUB_URL="http://$host:$PORT" npx expo start
+      cd "$ROOT/apps/mobile"
+      EXPO_PUBLIC_HUB_URL="http://$host:$PORT" npx expo start ;;
+  esac
 }
 
 start() {
