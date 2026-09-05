@@ -43,6 +43,10 @@ func TestSendMessage(t *testing.T) {
 	if m.CreatedAt == "" {
 		t.Error("created_at missing")
 	}
+	// The fixture agent has no backend, so the tick is "failed" at once.
+	if m.DeliveryStatus == nil || *m.DeliveryStatus != "failed" {
+		t.Errorf("delivery_status = %v, want failed for an agent with no backend", m.DeliveryStatus)
+	}
 
 	// The chat list now previews it.
 	var env struct {
@@ -51,6 +55,26 @@ func TestSendMessage(t *testing.T) {
 	f.srv.AsUser(t, f.owner).Get("/v1/client/conversations").ExpectStatus(http.StatusOK).Decode(&env)
 	if lm := env.Conversations[0].LastMessage; lm == nil || lm.ID != m.ID {
 		t.Errorf("last_message = %+v, want the message just sent", lm)
+	}
+}
+
+// With a backend connected the message waits for the worker, and the chat
+// list preview carries the same tick.
+func TestSendMessageIsPendingWhenBackendConnected(t *testing.T) {
+	f := setupChat(t)
+	testutil.BindWebhook(t, f.db, f.agent, "https://example.com/cuckoo")
+
+	m := send(t, f.srv.AsUser(t, f.owner), f.dmID, "hello")
+	if m.DeliveryStatus == nil || *m.DeliveryStatus != "pending" {
+		t.Errorf("delivery_status = %v, want pending", m.DeliveryStatus)
+	}
+
+	var env struct {
+		Conversations []conversationJSON `json:"conversations"`
+	}
+	f.srv.AsUser(t, f.owner).Get("/v1/client/conversations").ExpectStatus(http.StatusOK).Decode(&env)
+	if lm := env.Conversations[0].LastMessage; lm == nil || lm.DeliveryStatus == nil || *lm.DeliveryStatus != "pending" {
+		t.Errorf("last_message = %+v, want delivery_status pending", lm)
 	}
 }
 

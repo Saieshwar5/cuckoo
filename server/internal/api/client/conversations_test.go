@@ -8,6 +8,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/testutil"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -29,7 +30,8 @@ type messageJSON struct {
 	Body struct {
 		Text string `json:"text"`
 	} `json:"body"`
-	CreatedAt string `json:"created_at"`
+	DeliveryStatus *string `json:"delivery_status"`
+	CreatedAt      string  `json:"created_at"`
 }
 
 type conversationJSON struct {
@@ -40,6 +42,7 @@ type conversationJSON struct {
 }
 
 type chatFixture struct {
+	db    *store.Store
 	srv   *testutil.Server
 	owner users.User
 	other users.User
@@ -52,6 +55,7 @@ func setupChat(t *testing.T) *chatFixture {
 	t.Helper()
 	db := testutil.NewStore(t)
 	f := &chatFixture{
+		db:    db,
 		srv:   testutil.NewServer(t, db),
 		owner: testutil.CreateUser(t, db, testutil.WithDisplayName("Priya")),
 		other: testutil.CreateUser(t, db, testutil.WithDisplayName("Other")),
