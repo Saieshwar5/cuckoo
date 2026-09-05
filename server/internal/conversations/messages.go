@@ -92,7 +92,10 @@ func (s *Service) send(ctx context.Context, sender Sender, conversationID uuid.U
 		params.SenderAgentID = &sender.ID
 	}
 
-	var msg Message
+	var (
+		msg     Message
+		pending []uuid.UUID
+	)
 	err = s.store.WithTx(ctx, func(tx *store.Store) error {
 		row, err := tx.CreateMessage(ctx, params)
 		if err != nil {
@@ -101,7 +104,8 @@ func (s *Service) send(ctx context.Context, sender Sender, conversationID uuid.U
 		if msg, err = messageFromRow(row); err != nil {
 			return err
 		}
-		return fanOut(ctx, tx, msg)
+		pending, err = fanOut(ctx, tx, msg)
+		return err
 	})
 	if err != nil {
 		// Two retries of the same send raced; the other one won. Hand back
@@ -123,6 +127,7 @@ func (s *Service) send(ctx context.Context, sender Sender, conversationID uuid.U
 	}
 	s.notify(ctx, EventMessageCreated, conversationID,
 		MessageCreatedEvent{ConversationID: conversationID, Message: sent[0]})
+	s.nudge(ctx, pending)
 	return SendResult{Message: sent[0], Created: true}, nil
 }
 

@@ -12,6 +12,89 @@ import (
 	"github.com/google/uuid"
 )
 
+const ackDelivery = `-- name: AckDelivery :one
+UPDATE message_deliveries
+SET status = 'delivered', delivered_at = now(), last_error = NULL
+WHERE id = $1 AND agent_id = $2 AND status = 'pending'
+RETURNING message_id
+`
+
+type AckDeliveryParams struct {
+	ID      uuid.UUID
+	AgentID uuid.UUID
+}
+
+// A backend acknowledging an event over its socket. Scoped to the agent so
+// a backend can only ever acknowledge its own.
+func (q *Queries) AckDelivery(ctx context.Context, arg AckDeliveryParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, ackDelivery, arg.ID, arg.AgentID)
+	var message_id uuid.UUID
+	err := row.Scan(&message_id)
+	return message_id, err
+}
+
+const claimDueSocketDeliveries = `-- name: ClaimDueSocketDeliveries :many
+UPDATE message_deliveries d
+SET attempts        = d.attempts + 1,
+    next_attempt_at = now() + interval '30 seconds'
+WHERE d.id IN (
+    SELECT due.id
+    FROM message_deliveries due
+    WHERE due.agent_id = $1
+      AND due.status = 'pending'
+      AND due.next_attempt_at <= now()
+      AND EXISTS (
+          SELECT 1 FROM agent_bindings b
+          WHERE b.agent_id = due.agent_id
+            AND b.revoked_at IS NULL
+            AND b.mode = 'socket'
+      )
+    ORDER BY due.id
+    LIMIT $2
+    FOR UPDATE OF due SKIP LOCKED
+)
+RETURNING d.id, d.message_id, d.agent_id, d.event_type, d.status, d.attempts, d.next_attempt_at, d.last_error, d.delivered_at, d.created_at
+`
+
+type ClaimDueSocketDeliveriesParams struct {
+	AgentID   uuid.UUID
+	BatchSize int32
+}
+
+// Leases one agent's due deliveries to the socket holding it, oldest first,
+// with the same thirty-second lease the webhook worker uses: a pushed event
+// that is not acknowledged in time comes due again and is pushed again.
+func (q *Queries) ClaimDueSocketDeliveries(ctx context.Context, arg ClaimDueSocketDeliveriesParams) ([]MessageDelivery, error) {
+	rows, err := q.db.Query(ctx, claimDueSocketDeliveries, arg.AgentID, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MessageDelivery{}
+	for rows.Next() {
+		var i MessageDelivery
+		if err := rows.Scan(
+			&i.ID,
+			&i.MessageID,
+			&i.AgentID,
+			&i.EventType,
+			&i.Status,
+			&i.Attempts,
+			&i.NextAttemptAt,
+			&i.LastError,
+			&i.DeliveredAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const claimDueWebhookDeliveries = `-- name: ClaimDueWebhookDeliveries :many
 UPDATE message_deliveries d
 SET attempts        = d.attempts + 1,

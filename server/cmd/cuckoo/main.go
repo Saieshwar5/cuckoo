@@ -89,7 +89,6 @@ func run() error {
 	if err := hub.Start(ctx, bus); err != nil {
 		return err
 	}
-	defer hub.Close()
 
 	agentService := agents.New(db)
 	conversationService := conversations.New(db,
@@ -106,6 +105,7 @@ func run() error {
 		Conversations: conversationService,
 		Delivery:      deliveryService,
 		Hub:           hub,
+		Bus:           bus,
 		Health: map[string]api.HealthCheck{
 			"postgres": db.Ping,
 			"redis":    func(ctx context.Context) error { return redisClient.Ping(ctx).Err() },
@@ -129,6 +129,13 @@ func run() error {
 	err = serve(ctx, cfg, log, router)
 	stop()
 	wg.Wait()
+	// Sockets are hijacked connections the HTTP shutdown does not wait for.
+	hub.Close()
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer waitCancel()
+	if werr := hub.Wait(waitCtx); werr != nil {
+		log.Warn("some socket connections did not finish before shutdown", "error", werr)
+	}
 	return err
 }
 

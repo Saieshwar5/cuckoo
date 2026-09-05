@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
@@ -26,6 +28,7 @@ type messageJSON struct {
 
 type chatFixture struct {
 	db          *store.Store
+	tx          pgx.Tx
 	srv         *testutil.Server
 	owner       users.User
 	agent       agents.Agent
@@ -36,8 +39,8 @@ type chatFixture struct {
 
 func setupChat(t *testing.T) *chatFixture {
 	t.Helper()
-	db := testutil.NewStore(t)
-	f := &chatFixture{db: db, srv: testutil.NewServer(t, db)}
+	db, tx := testutil.NewStoreTx(t)
+	f := &chatFixture{db: db, tx: tx, srv: testutil.NewServer(t, db)}
 	f.owner = testutil.CreateUser(t, db, testutil.WithDisplayName("Priya"))
 	f.agent = testutil.CreateAgent(t, db, f.owner, testutil.WithHandle("sbi-support"), testutil.WithAgentName("SBI Support"))
 	_, f.secret = testutil.BindWebhook(t, db, f.agent, "https://example.com/cuckoo")

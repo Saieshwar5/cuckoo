@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -24,10 +25,17 @@ import (
 // Exactly one of pool or tx is set. A pool-backed Store opens real
 // transactions; a tx-backed Store — every test, and the inside of WithTx —
 // nests with savepoints.
+//
+// A transaction is one connection, and a connection serves one query at a
+// time, so a tx-backed Store serialises its callers through mu. That is what
+// lets a test run the real server, whose socket handlers and workers do
+// database work off the request goroutine, against a single rolled-back
+// transaction. A pool-backed Store has no such lock; the pool is the lock.
 type Store struct {
 	*gen.Queries
 	pool *pgxpool.Pool
 	tx   pgx.Tx
+	mu   *sync.Mutex
 }
 
 // Open connects to Postgres and verifies the connection.
@@ -53,11 +61,12 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 // NewFromDBTX builds a Store over any pgx executor — a pool, a connection, or a
 // transaction. Tests use it to run against a transaction that is rolled back.
 func NewFromDBTX(db gen.DBTX) *Store {
-	s := &Store{Queries: gen.New(db)}
-	if tx, ok := db.(pgx.Tx); ok {
-		s.tx = tx
+	tx, ok := db.(pgx.Tx)
+	if !ok {
+		return &Store{Queries: gen.New(db)}
 	}
-	return s
+	mu := &sync.Mutex{}
+	return &Store{Queries: gen.New(&lockedDBTX{db: tx, mu: mu}), tx: tx, mu: mu}
 }
 
 // Ping reports whether the database is reachable. Used by /healthz.
@@ -95,6 +104,10 @@ func (s *Store) WithTx(ctx context.Context, fn func(*Store) error) error {
 	)
 	switch {
 	case s.tx != nil:
+		if s.mu != nil {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+		}
 		tx, err = s.tx.Begin(ctx) // pgx: a nested Begin is a savepoint
 	case s.pool != nil:
 		tx, err = s.pool.Begin(ctx)
@@ -110,7 +123,12 @@ func (s *Store) WithTx(ctx context.Context, fn func(*Store) error) error {
 		_ = tx.Rollback(ctx)
 	}()
 
-	if err := fn(NewFromDBTX(tx)); err != nil {
+	// Inside a savepoint the connection belongs to fn until it returns:
+	// any other caller of the outer Store waits. The nested Store is
+	// unlocked, since the lock is already held for it, and a nested WithTx
+	// inside fn therefore takes no lock either.
+	inner := &Store{Queries: gen.New(tx), tx: tx}
+	if err := fn(inner); err != nil {
 		return err
 	}
 

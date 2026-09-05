@@ -111,6 +111,30 @@ curl -s -H "Authorization: Bearer bnd_sec_..." \
 In production the hub refuses to post to private, loopback and link-local
 addresses. `http://localhost` works only with `CUCKOO_ENV=dev`.
 
+A backend that cannot receive a webhook, such as a laptop behind a router,
+connects outward instead. Set a socket binding and open a WebSocket at
+`/v1/agent/socket` with the same bearer header. Everything pending is pushed
+first, in order; then events arrive as they happen. Acknowledge each one, or
+it is pushed again after thirty seconds:
+
+```json
+{"ack": "evt_..."}
+```
+
+The Python SDK does all of this, and `examples/echo` is the whole of an agent:
+
+```python
+from cuckoo import Agent
+
+agent = Agent(secret="bnd_sec_...", hub="http://localhost:8080")
+
+@agent.on_message
+async def handle(msg, conv):
+    await conv.send(f"You said: {msg.text}")
+
+agent.run()
+```
+
 To reply, post into the conversation the event named. Send an
 `idempotency_key` and a retry after a lost response returns the same message
 (200) instead of creating another (201). History starts from when the agent
@@ -171,9 +195,9 @@ server/          the hub: one Go binary, migrations embedded
     agents/      agent identities and the bindings that connect them to backends
     users/       the first business package, and the pattern for the rest
 apps/mobile/     React Native app (not started)
-sdk/             agent SDKs, Python first (not started)
+sdk/python/      the Python SDK: connect, receive, reply
 protocol/        the published agent protocol spec (not started)
-examples/        reference agents (not started)
+examples/echo/   the reference agent, and the protocol's smoke test
 scripts/         developer tooling
 ```
 

@@ -11,6 +11,7 @@ package delivery
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -111,6 +112,56 @@ func (s *Service) ListEvents(ctx context.Context, agentID uuid.UUID, in ListEven
 		ds = append(ds, fromRow(r))
 	}
 	return s.envelopes(ctx, ds)
+}
+
+// socketBatch bounds one replay pass; a full batch means more may wait and
+// the socket goes straight round again.
+const socketBatch = 100
+
+// ClaimForSocket leases the agent's due deliveries to the socket calling it
+// and returns them as envelopes, oldest first. More reports whether a full
+// batch came back.
+//
+// It is the socket transport's half of the outbox: the same rows, the same
+// thirty-second lease, so an event pushed and not acknowledged comes due
+// again and is pushed again, and a reconnecting backend receives in order
+// everything it never acknowledged.
+func (s *Service) ClaimForSocket(ctx context.Context, agentID uuid.UUID) (envelopes []events.Envelope, more bool, err error) {
+	var rows []gen.MessageDelivery
+	err = s.store.WithTx(ctx, func(tx *store.Store) error {
+		var err error
+		rows, err = tx.ClaimDueSocketDeliveries(ctx, gen.ClaimDueSocketDeliveriesParams{
+			AgentID: agentID, BatchSize: socketBatch,
+		})
+		return err
+	})
+	if err != nil {
+		return nil, false, domain.Internal(fmt.Errorf("claim socket deliveries of %s: %w", agentID, err))
+	}
+	// An UPDATE's RETURNING order is not guaranteed; replay order is.
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ID.String() < rows[j].ID.String() })
+
+	ds := make([]Delivery, 0, len(rows))
+	for _, r := range rows {
+		ds = append(ds, fromRow(r))
+	}
+	envelopes, err = s.envelopes(ctx, ds)
+	return envelopes, len(rows) == socketBatch, err
+}
+
+// Ack records that the agent's backend has an event. It reports false for an
+// event that is not pending for this agent, which a retrying backend and a
+// mistaken one both produce and neither needs told about. The sender's tick
+// mark is announced on success.
+func (s *Service) Ack(ctx context.Context, agentID, eventID uuid.UUID) (bool, error) {
+	messageID, err := s.store.AckDelivery(ctx, gen.AckDeliveryParams{ID: eventID, AgentID: agentID})
+	if err != nil {
+		if store.IsNoRows(err) {
+			return false, nil
+		}
+		return false, domain.Internal(fmt.Errorf("ack %s for %s: %w", eventID, agentID, err))
+	}
+	return true, s.conversations.DeliveryChanged(ctx, messageID)
 }
 
 // envelopes builds the wire form of a batch of deliveries, in order, loading

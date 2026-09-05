@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -18,8 +19,9 @@ const subscriptionBuffer = 64
 type Hub struct {
 	log *slog.Logger
 
-	mu   sync.Mutex
-	subs map[uuid.UUID]map[*Subscription]struct{}
+	mu     sync.Mutex
+	subs   map[uuid.UUID]map[*Subscription]struct{}
+	closed bool
 }
 
 // NewHub builds an idle hub. Start it to receive from a bus.
@@ -30,25 +32,32 @@ func NewHub(log *slog.Logger) *Hub {
 	return &Hub{log: log.With("component", "realtime"), subs: map[uuid.UUID]map[*Subscription]struct{}{}}
 }
 
-// Subscription is one connection's view of the events for one person.
+// Subscription is one connection's view of the events for one principal.
 //
 // C closes when the hub is closed, or when the subscription was dropped for
 // not keeping up; either way the connection should end and the client will
-// reconnect and catch up.
+// reconnect and catch up. The connection stays registered until it calls
+// Close itself, which is how Wait knows the connection has finished.
 type Subscription struct {
-	C      <-chan Event
-	c      chan Event
-	userID uuid.UUID
-	hub    *Hub
-	once   sync.Once
+	C          <-chan Event
+	c          chan Event
+	userID     uuid.UUID
+	hub        *Hub
+	signalOnce sync.Once
+	detachOnce sync.Once
 }
 
-// Close detaches the subscription. Safe to call more than once.
+// Close detaches the subscription. Safe to call more than once. A
+// connection defers this last, after any bookkeeping it does on the way
+// out, so that Wait returning means that bookkeeping is done too.
 func (s *Subscription) Close() {
-	s.once.Do(func() {
-		s.hub.detach(s)
-		close(s.c)
-	})
+	s.detachOnce.Do(func() { s.hub.detach(s) })
+	s.signal()
+}
+
+// signal ends C without detaching.
+func (s *Subscription) signal() {
+	s.signalOnce.Do(func() { close(s.c) })
 }
 
 // Subscribe attaches a connection for the given person.
@@ -91,13 +100,17 @@ func (h *Hub) Start(ctx context.Context, bus Bus) error {
 	return nil
 }
 
-// Dispatch hands an event to every connection of every person it names.
+// Dispatch hands an event to every connection of every principal it names.
 // A connection that cannot take it is dropped rather than waited for.
 func (h *Hub) Dispatch(ev Event) {
 	var slow []*Subscription
 
 	h.mu.Lock()
-	for _, userID := range ev.UserIDs {
+	if h.closed {
+		h.mu.Unlock()
+		return
+	}
+	for _, userID := range ev.Recipients {
 		for s := range h.subs[userID] {
 			select {
 			case s.c <- ev:
@@ -114,9 +127,11 @@ func (h *Hub) Dispatch(ev Event) {
 	}
 }
 
-// Close drops every connection, for shutdown.
+// Close tells every connection to end, for shutdown. Nothing is dispatched
+// afterwards. Connections detach themselves as they finish; Wait for them.
 func (h *Hub) Close() {
 	h.mu.Lock()
+	h.closed = true
 	var all []*Subscription
 	for _, set := range h.subs {
 		for s := range set {
@@ -126,6 +141,27 @@ func (h *Hub) Close() {
 	h.mu.Unlock()
 
 	for _, s := range all {
-		s.Close()
+		s.signal()
+	}
+}
+
+// Wait blocks until every connection has detached, or ctx ends.
+//
+// A server's HTTP shutdown does not wait for hijacked connections, so
+// without this a socket handler could still be finishing its bookkeeping
+// after the process, or a test, believes everything has stopped.
+func (h *Hub) Wait(ctx context.Context) error {
+	for {
+		h.mu.Lock()
+		n := len(h.subs)
+		h.mu.Unlock()
+		if n == 0 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 }

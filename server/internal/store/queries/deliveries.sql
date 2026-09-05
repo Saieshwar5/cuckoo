@@ -40,6 +40,39 @@ WHERE d.id IN (
 )
 RETURNING d.*;
 
+-- name: ClaimDueSocketDeliveries :many
+-- Leases one agent's due deliveries to the socket holding it, oldest first,
+-- with the same thirty-second lease the webhook worker uses: a pushed event
+-- that is not acknowledged in time comes due again and is pushed again.
+UPDATE message_deliveries d
+SET attempts        = d.attempts + 1,
+    next_attempt_at = now() + interval '30 seconds'
+WHERE d.id IN (
+    SELECT due.id
+    FROM message_deliveries due
+    WHERE due.agent_id = sqlc.arg('agent_id')
+      AND due.status = 'pending'
+      AND due.next_attempt_at <= now()
+      AND EXISTS (
+          SELECT 1 FROM agent_bindings b
+          WHERE b.agent_id = due.agent_id
+            AND b.revoked_at IS NULL
+            AND b.mode = 'socket'
+      )
+    ORDER BY due.id
+    LIMIT sqlc.arg('batch_size')
+    FOR UPDATE OF due SKIP LOCKED
+)
+RETURNING d.*;
+
+-- name: AckDelivery :one
+-- A backend acknowledging an event over its socket. Scoped to the agent so
+-- a backend can only ever acknowledge its own.
+UPDATE message_deliveries
+SET status = 'delivered', delivered_at = now(), last_error = NULL
+WHERE id = sqlc.arg('id') AND agent_id = sqlc.arg('agent_id') AND status = 'pending'
+RETURNING message_id;
+
 -- name: MarkDelivered :exec
 UPDATE message_deliveries
 SET status = 'delivered', delivered_at = now(), last_error = NULL

@@ -58,8 +58,8 @@ func TestSendAnnouncesToParticipants(t *testing.T) {
 		t.Fatalf("SendAsUser: %v", err)
 	}
 	ev := rec.last(t, conversations.EventMessageCreated)
-	if len(ev.UserIDs) != 1 || ev.UserIDs[0] != f.owner.ID {
-		t.Errorf("recipients = %v, want just the owner", ev.UserIDs)
+	if len(ev.Recipients) != 1 || ev.Recipients[0] != f.owner.ID {
+		t.Errorf("recipients = %v, want just the owner", ev.Recipients)
 	}
 	var p conversations.MessageCreatedEvent
 	if err := json.Unmarshal(ev.Payload, &p); err != nil {
@@ -73,8 +73,8 @@ func TestSendAnnouncesToParticipants(t *testing.T) {
 	// The agent's reply reaches the person too.
 	reply, _ := svc.SendAsAgent(ctx, f.agent.ID, f.dm.ID, conversations.SendInput{Text: "hi"})
 	ev = rec.last(t, conversations.EventMessageCreated)
-	if len(ev.UserIDs) != 1 || ev.UserIDs[0] != f.owner.ID {
-		t.Errorf("reply recipients = %v, want the owner", ev.UserIDs)
+	if len(ev.Recipients) != 1 || ev.Recipients[0] != f.owner.ID {
+		t.Errorf("reply recipients = %v, want the owner", ev.Recipients)
 	}
 	_ = json.Unmarshal(ev.Payload, &p)
 	if p.Message.ID != reply.ID || p.Message.Sender.Kind != conversations.ParticipantAgent {
@@ -87,6 +87,29 @@ func TestSendAnnouncesToParticipants(t *testing.T) {
 	svc.SendAsUser(ctx, f.owner.ID, f.dm.ID, conversations.SendInput{Text: "once", IdempotencyKey: "k"}) //nolint:errcheck
 	if got := rec.count() - before; got != 1 {
 		t.Errorf("two sends under one key published %d events, want 1", got)
+	}
+}
+
+// A send nudges the sockets of agents that now have something pending, and
+// nobody else: an agent with no backend has a failed row and nothing to read.
+func TestSendNudgesSocketBoundAgents(t *testing.T) {
+	ctx := context.Background()
+	f := setup(t)
+	rec := &recorder{}
+	svc := conversations.New(f.db, conversations.WithPublisher(rec))
+
+	svc.SendAsUser(ctx, f.owner.ID, f.dm.ID, conversations.SendInput{Text: "nobody home"}) //nolint:errcheck
+	for _, ev := range rec.events {
+		if ev.Type == conversations.EventDeliveryPending {
+			t.Errorf("nudged an agent with no backend: %+v", ev)
+		}
+	}
+
+	testutil.BindAgent(t, f.db, f.agent)
+	svc.SendAsUser(ctx, f.owner.ID, f.dm.ID, conversations.SendInput{Text: "hello"}) //nolint:errcheck
+	ev := rec.last(t, conversations.EventDeliveryPending)
+	if len(ev.Recipients) != 1 || ev.Recipients[0] != f.agent.ID {
+		t.Errorf("nudge recipients = %v, want the agent", ev.Recipients)
 	}
 }
 
