@@ -1,6 +1,5 @@
 import { t } from '@/i18n';
-import { avatarColors } from '@/theme/tokens';
-import { colorFor, initials } from '@/util/avatar';
+import { avatarIndex, initials } from '@/util/avatar';
 import { formatClock, formatCountdown, formatDay, formatListTime, sameDay } from '@/util/time';
 
 describe('strings', () => {
@@ -48,12 +47,13 @@ describe('avatars', () => {
     expect(initials('  ')).toBe('?');
   });
 
-  it('gives a name the same colour every time, from the palette', () => {
-    expect(colorFor('Echo')).toBe(colorFor('echo '));
-    expect(avatarColors).toContain(colorFor('Echo'));
+  it('gives a name the same shade every time, spread across the shades', () => {
+    expect(avatarIndex('Echo', 5)).toBe(avatarIndex('echo ', 5));
+    expect(avatarIndex('Echo', 5)).toBeLessThan(5);
     const seen = new Set(
-      ['Echo', 'SBI Support', 'Priya', 'Helper', 'Weather', 'IRCTC', 'Ravi'].map(colorFor),
+      ['Echo', 'SBI Support', 'Priya', 'Helper', 'Weather', 'IRCTC', 'Ravi'].map((n) => avatarIndex(n, 5)),
     );
-    expect(seen.size).toBeGreaterThan(3);
+    expect(seen.size).toBeGreaterThan(2);
+    expect(avatarIndex('Echo', 0)).toBe(0);
   });
 });

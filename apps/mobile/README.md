@@ -45,11 +45,15 @@ and `make play EMAIL=... TARGET=emulator` opens the app in it.
 
 ## The look
 
-Dark first, following the phone's setting, in the language of the chat apps
-people already have: a near-black ground, one green accent, ash surfaces,
-coloured initials for avatars, a floating action button, tabs with a tinted
-pill behind the active one. `src/theme/tokens.ts` holds both palettes and
-the type scale. `ThemeProvider` at the root reads the phone's setting once;
+Dark first, following the phone's setting, and only white, grey and black:
+our messages are ink on paper, the agent's are paper on ink, avatars are
+shades of grey, and the one thing that gets a colour is an error. The
+layout is the one people already know from their chat apps: a floating
+action button, tabs with a tinted pill behind the active one, bubbles with
+a tail, a pill between days. The mark is a bird whose body is a speech
+bubble (`assets/logo-*.png`, `src/components/Logo.tsx`); it is the app
+icon, the splash, the favicon, and sits beside the name on the chat list.
+`src/theme/tokens.ts` holds both palettes and the type scale. `ThemeProvider` at the root reads the phone's setting once;
 screens take colours from `useTheme()` and build their styles with
 `useStyles(make)`, so no screen knows which theme is on. The platform's own
 typeface is used on purpose: Roboto on Android, San Francisco on iOS.

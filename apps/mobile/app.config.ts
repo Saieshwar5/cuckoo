@@ -16,7 +16,7 @@ const config: ExpoConfig = {
   ios: { supportsTablet: false },
   android: {
     adaptiveIcon: {
-      backgroundColor: '#0B141A',
+      backgroundColor: '#000000',
       foregroundImage: './assets/android-icon-foreground.png',
       backgroundImage: './assets/android-icon-background.png',
       monochromeImage: './assets/android-icon-monochrome.png',
@@ -24,7 +24,19 @@ const config: ExpoConfig = {
     predictiveBackGestureEnabled: false,
   },
   web: { bundler: 'metro', output: 'single', favicon: './assets/favicon.png' },
-  plugins: ['expo-router', 'expo-secure-store'],
+  plugins: [
+    'expo-router',
+    'expo-secure-store',
+    [
+      'expo-splash-screen',
+      {
+        image: './assets/splash-icon.png',
+        imageWidth: 160,
+        resizeMode: 'contain',
+        backgroundColor: '#000000',
+      },
+    ],
+  ],
   extra: { hubUrl },
 };
 

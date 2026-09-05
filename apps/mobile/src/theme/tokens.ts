@@ -1,9 +1,9 @@
 import { Platform, type TextStyle } from 'react-native';
 
 // The visual language, as tokens. Two palettes with the same shape, dark
-// first because that is how the phones this is built for are set. The look
-// is the one people already know from WhatsApp on Android: near-black
-// ground, a green accent, ash surfaces, one hairline, no shadows.
+// first because that is how the phones this is built for are set. Only
+// white, greys and black: our messages are ink on paper, the agent's are
+// paper on ink, and the one thing that gets a colour is an error.
 
 export interface Palette {
   // Backgrounds, from the page up.
@@ -14,7 +14,7 @@ export interface Palette {
   // Text.
   text: string;
   textSecondary: string;
-  // The one accent, and what sits on it.
+  // The accent is the opposite of the ground: black on white, white on black.
   accent: string;
   accentStrong: string;
   accentTint: string;
@@ -24,80 +24,88 @@ export interface Palette {
   wallpaper: string;
   bubbleMine: string;
   bubbleTheirs: string;
-  bubbleText: string;
+  bubbleBorder: string;
+  bubbleTextMine: string;
+  bubbleTextTheirs: string;
   bubbleMetaMine: string;
   bubbleMetaTheirs: string;
-  bubbleQuote: string;
-  quoteBar: string;
+  bubbleQuoteMine: string;
+  bubbleQuoteTheirs: string;
+  quoteBarMine: string;
+  quoteBarTheirs: string;
   tickRead: string;
   // The dot on every agent avatar.
   statusConnected: string;
   statusIdle: string;
   statusUnreachable: string;
+  // Avatar discs: shades of grey a name is mapped onto, and the initials on them.
+  avatars: readonly string[];
+  onAvatar: string;
 }
 
 export const dark: Palette = {
-  ground: '#0B141A',
-  surface: '#1F2C34',
-  surfaceStrong: '#2A3942',
-  hairline: '#222E35',
-  text: '#E9EDEF',
-  textSecondary: '#8696A0',
-  accent: '#00A884',
-  accentStrong: '#25D366',
-  accentTint: '#103529',
-  onAccent: '#0B141A',
-  danger: '#F15C6D',
-  wallpaper: '#0B141A',
-  bubbleMine: '#005C4B',
-  bubbleTheirs: '#202C33',
-  bubbleText: '#E9EDEF',
-  bubbleMetaMine: 'rgba(233, 237, 239, 0.65)',
-  bubbleMetaTheirs: '#8696A0',
-  bubbleQuote: 'rgba(0, 0, 0, 0.25)',
-  quoteBar: '#25D366',
-  tickRead: '#53BDEB',
-  statusConnected: '#25D366',
-  statusIdle: '#8696A0',
-  statusUnreachable: '#F5A524',
+  ground: '#000000',
+  surface: '#1A1A1A',
+  surfaceStrong: '#2A2A2A',
+  hairline: '#262626',
+  text: '#F2F2F2',
+  textSecondary: '#8E8E8E',
+  accent: '#F2F2F2',
+  accentStrong: '#F2F2F2',
+  accentTint: '#2A2A2A',
+  onAccent: '#000000',
+  danger: '#FF5A50',
+  wallpaper: '#000000',
+  bubbleMine: '#E8E8E8',
+  bubbleTheirs: '#1A1A1A',
+  bubbleBorder: '#262626',
+  bubbleTextMine: '#111111',
+  bubbleTextTheirs: '#F2F2F2',
+  bubbleMetaMine: '#5E5E5E',
+  bubbleMetaTheirs: '#8E8E8E',
+  bubbleQuoteMine: 'rgba(0, 0, 0, 0.08)',
+  bubbleQuoteTheirs: 'rgba(255, 255, 255, 0.08)',
+  quoteBarMine: '#111111',
+  quoteBarTheirs: '#F2F2F2',
+  tickRead: '#F2F2F2',
+  statusConnected: '#F2F2F2',
+  statusIdle: '#5E5E5E',
+  statusUnreachable: '#FF5A50',
+  avatars: ['#E8E8E8', '#C4C4C4', '#A0A0A0', '#7C7C7C', '#5A5A5A'],
+  onAvatar: '#000000',
 };
 
 export const light: Palette = {
   ground: '#FFFFFF',
-  surface: '#F0F2F5',
-  surfaceStrong: '#E4E8EB',
-  hairline: '#E9EDEF',
-  text: '#111B21',
-  textSecondary: '#667781',
-  accent: '#008069',
-  accentStrong: '#25D366',
-  accentTint: '#D9FDD3',
+  surface: '#F2F2F2',
+  surfaceStrong: '#E4E4E4',
+  hairline: '#E6E6E6',
+  text: '#111111',
+  textSecondary: '#6E6E6E',
+  accent: '#111111',
+  accentStrong: '#111111',
+  accentTint: '#EAEAEA',
   onAccent: '#FFFFFF',
-  danger: '#D23B47',
-  wallpaper: '#EFEAE2',
-  bubbleMine: '#D9FDD3',
+  danger: '#D0342C',
+  wallpaper: '#F6F6F6',
+  bubbleMine: '#111111',
   bubbleTheirs: '#FFFFFF',
-  bubbleText: '#111B21',
-  bubbleMetaMine: '#667781',
-  bubbleMetaTheirs: '#667781',
-  bubbleQuote: 'rgba(0, 0, 0, 0.06)',
-  quoteBar: '#008069',
-  tickRead: '#53BDEB',
-  statusConnected: '#25D366',
-  statusIdle: '#8696A0',
-  statusUnreachable: '#D97706',
+  bubbleBorder: '#E6E6E6',
+  bubbleTextMine: '#FFFFFF',
+  bubbleTextTheirs: '#111111',
+  bubbleMetaMine: 'rgba(255, 255, 255, 0.6)',
+  bubbleMetaTheirs: '#8A8A8A',
+  bubbleQuoteMine: 'rgba(255, 255, 255, 0.14)',
+  bubbleQuoteTheirs: 'rgba(0, 0, 0, 0.05)',
+  quoteBarMine: '#FFFFFF',
+  quoteBarTheirs: '#111111',
+  tickRead: '#111111',
+  statusConnected: '#111111',
+  statusIdle: '#B0B0B0',
+  statusUnreachable: '#D0342C',
+  avatars: ['#111111', '#3A3A3A', '#5C5C5C', '#7A7A7A', '#9A9A9A'],
+  onAvatar: '#FFFFFF',
 };
-
-// Avatar colours, Telegram-style: a name always gets the same one.
-export const avatarColors = [
-  '#E17076',
-  '#FAA774',
-  '#A695E7',
-  '#7BC862',
-  '#6EC9CB',
-  '#65AADD',
-  '#EE7AAE',
-] as const;
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 

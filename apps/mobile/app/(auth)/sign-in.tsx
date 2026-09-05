@@ -1,21 +1,20 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ApiError } from '@/api/client';
 import { Button } from '@/components/Button';
+import { Logo } from '@/components/Logo';
 import { Screen } from '@/components/Screen';
 import { TextField } from '@/components/TextField';
 import { t } from '@/i18n';
 import { useSession } from '@/session/SessionProvider';
-import { radius, spacing, type, useStyles, useTheme, type Theme } from '@/theme';
+import { spacing, type, useStyles, type Theme } from '@/theme';
 
 // Sign in: an email, and a code on the next screen. Nothing else.
 export default function SignInScreen() {
   const { api } = useSession();
   const router = useRouter();
-  const { colors } = useTheme();
   const styles = useStyles(makeStyles);
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +39,7 @@ export default function SignInScreen() {
       <View style={styles.body}>
         <View style={styles.brand}>
           <View style={styles.mark}>
-            <Ionicons name="chatbubble-ellipses" size={40} color={colors.onAccent} />
+            <Logo size={80} />
           </View>
           <Text style={styles.name}>{t('app.name')}</Text>
           <Text style={styles.tagline}>{t('signin.tagline')}</Text>
@@ -95,15 +94,7 @@ const makeStyles = ({ colors }: Theme) =>
   StyleSheet.create({
     body: { flex: 1, justifyContent: 'center', paddingBottom: spacing.xxl },
     brand: { alignItems: 'center', marginBottom: spacing.xxl + spacing.md },
-    mark: {
-      width: 76,
-      height: 76,
-      borderRadius: radius.xl,
-      backgroundColor: colors.accent,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: spacing.lg,
-    },
+    mark: { marginBottom: spacing.lg },
     name: { ...type.display, fontSize: 32, color: colors.text },
     tagline: {
       ...type.body,

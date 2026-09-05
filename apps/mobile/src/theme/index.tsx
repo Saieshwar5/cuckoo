@@ -3,7 +3,7 @@ import { useColorScheme } from 'react-native';
 
 import { dark, light, type Palette } from './tokens';
 
-export { avatarColors, inputReset, radius, sizes, spacing, tapTarget, type } from './tokens';
+export { inputReset, radius, sizes, spacing, tapTarget, type } from './tokens';
 export type { Palette } from './tokens';
 
 export type Scheme = 'light' | 'dark';

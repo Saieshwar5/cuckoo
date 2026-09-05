@@ -25,7 +25,7 @@ export default function ChatsScreen() {
 
   return (
     <Screen padded={false}>
-      <Header title={t('chats.title')} subtitle={!connected && !loading ? t('chats.connecting') : null} />
+      <Header title={t('app.name')} mark subtitle={!connected && !loading ? t('chats.connecting') : null} />
       <SearchBar
         value={query}
         onChangeText={setQuery}
