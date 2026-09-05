@@ -88,6 +88,19 @@ func CreateAgent(t *testing.T, db *store.Store, owner users.User, opts ...AgentO
 	return agent
 }
 
+// BindWebhook gives an agent a webhook binding pointing at url and returns it
+// with its secret.
+func BindWebhook(t *testing.T, db *store.Store, agent agents.Agent, url string) (agents.Binding, string) {
+	t.Helper()
+
+	binding, secret, err := agents.New(db).SetBinding(context.Background(), agent.OwnerID, agent.ID,
+		agents.SetBindingInput{Mode: agents.ModeWebhook, WebhookURL: url})
+	if err != nil {
+		t.Fatalf("testutil: bind agent webhook fixture: %v", err)
+	}
+	return binding, secret
+}
+
 // BindAgent gives an agent a socket binding and returns it with its secret —
 // the one place outside the management API where the plaintext is visible.
 func BindAgent(t *testing.T, db *store.Store, agent agents.Agent) (agents.Binding, string) {

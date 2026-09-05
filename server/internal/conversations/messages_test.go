@@ -7,6 +7,7 @@ import (
 
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/testutil"
 )
 
 func TestSendText(t *testing.T) {
@@ -36,6 +37,39 @@ func TestSendText(t *testing.T) {
 	}
 	if page.NextBefore != nil {
 		t.Errorf("NextBefore set on a single-page history")
+	}
+}
+
+// Sending records who must hear the message in the same transaction. An
+// agent with no backend gets a delivery that has already failed, so the
+// sender is told now; an agent with one gets a pending delivery.
+func TestSendTextRecordsDeliveriesForAgents(t *testing.T) {
+	ctx := context.Background()
+	f := setup(t)
+
+	unheard, err := f.svc.SendText(ctx, f.owner.ID, f.dm.ID, "anyone?")
+	if err != nil {
+		t.Fatalf("SendText: %v", err)
+	}
+	if unheard.DeliveryStatus != conversations.DeliveryFailed {
+		t.Errorf("status with no backend = %q, want failed", unheard.DeliveryStatus)
+	}
+	rows, err := f.db.ListDeliveriesByMessage(ctx, unheard.ID)
+	if err != nil || len(rows) != 1 || rows[0].AgentID != f.agent.ID || rows[0].Status != "failed" {
+		t.Errorf("deliveries = %+v (%v), want one failed row for the agent", rows, err)
+	}
+
+	testutil.BindWebhook(t, f.db, f.agent, "https://example.com/cuckoo")
+	heard, err := f.svc.SendText(ctx, f.owner.ID, f.dm.ID, "hello")
+	if err != nil {
+		t.Fatalf("SendText: %v", err)
+	}
+	if heard.DeliveryStatus != conversations.DeliveryPending {
+		t.Errorf("status with a backend = %q, want pending", heard.DeliveryStatus)
+	}
+	list, _ := f.svc.ListMine(ctx, f.owner.ID)
+	if list[0].LastMessage == nil || list[0].LastMessage.DeliveryStatus != conversations.DeliveryPending {
+		t.Errorf("chat list preview = %+v, want pending status", list[0].LastMessage)
 	}
 }
 

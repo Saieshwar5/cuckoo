@@ -83,6 +83,59 @@ func (q *Queries) IsUserParticipant(ctx context.Context, arg IsUserParticipantPa
 	return exists, err
 }
 
+const listAgentParticipants = `-- name: ListAgentParticipants :many
+SELECT agent_id::uuid AS agent_id
+FROM participants
+WHERE conversation_id = $1 AND agent_id IS NOT NULL
+ORDER BY joined_at, agent_id
+`
+
+// The agents in a conversation: who must hear a message posted in it.
+func (q *Queries) ListAgentParticipants(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAgentParticipants, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var agent_id uuid.UUID
+		if err := rows.Scan(&agent_id); err != nil {
+			return nil, err
+		}
+		items = append(items, agent_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listConversationsByIDs = `-- name: ListConversationsByIDs :many
+SELECT id, kind, created_at FROM conversations
+WHERE id = ANY($1::uuid[])
+`
+
+func (q *Queries) ListConversationsByIDs(ctx context.Context, ids []uuid.UUID) ([]Conversation, error) {
+	rows, err := q.db.Query(ctx, listConversationsByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Conversation{}
+	for rows.Next() {
+		var i Conversation
+		if err := rows.Scan(&i.ID, &i.Kind, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listParticipants = `-- name: ListParticipants :many
 SELECT p.conversation_id, p.kind, p.user_id, p.agent_id, p.joined_at,
        u.display_name AS user_display_name,

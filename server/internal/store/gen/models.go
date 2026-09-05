@@ -22,15 +22,16 @@ type Agent struct {
 }
 
 type AgentBinding struct {
-	ID         uuid.UUID
-	AgentID    uuid.UUID
-	Mode       string
-	WebhookUrl *string
-	SecretHash []byte
-	Status     string
-	LastSeenAt *time.Time
-	CreatedAt  time.Time
-	RevokedAt  *time.Time
+	ID                     uuid.UUID
+	AgentID                uuid.UUID
+	Mode                   string
+	WebhookUrl             *string
+	SecretHash             []byte
+	Status                 string
+	LastSeenAt             *time.Time
+	CreatedAt              time.Time
+	RevokedAt              *time.Time
+	FailureStreakStartedAt *time.Time
 }
 
 type Conversation struct {
@@ -47,6 +48,19 @@ type Message struct {
 	SenderAgentID  *uuid.UUID
 	Body           []byte
 	CreatedAt      time.Time
+}
+
+type MessageDelivery struct {
+	ID            uuid.UUID
+	MessageID     uuid.UUID
+	AgentID       uuid.UUID
+	EventType     string
+	Status        string
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastError     *string
+	DeliveredAt   *time.Time
+	CreatedAt     time.Time
 }
 
 type Participant struct {

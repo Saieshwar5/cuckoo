@@ -2,7 +2,6 @@ package client
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
@@ -22,11 +21,15 @@ type bodyResponse struct {
 	Text string `json:"text,omitempty"`
 }
 
+// messageResponse is a message as the app shows it. DeliveryStatus is the
+// tick mark: pending, delivered or failed for a message the caller sent to
+// agents, and null for one with nobody to deliver to.
 type messageResponse struct {
 	ID             string         `json:"id"`
 	ConversationID string         `json:"conversation_id"`
 	Sender         senderResponse `json:"sender"`
 	Body           bodyResponse   `json:"body"`
+	DeliveryStatus *string        `json:"delivery_status"`
 	CreatedAt      time.Time      `json:"created_at"`
 }
 
@@ -42,7 +45,7 @@ type messagePageEnvelope struct {
 }
 
 func newMessageResponse(m conversations.Message) messageResponse {
-	return messageResponse{
+	resp := messageResponse{
 		ID:             domain.FormatID(domain.PrefixMessage, m.ID),
 		ConversationID: domain.FormatID(domain.PrefixConv, m.ConversationID),
 		Sender: senderResponse{
@@ -52,6 +55,11 @@ func newMessageResponse(m conversations.Message) messageResponse {
 		Body:      bodyResponse{Text: m.Body.Text},
 		CreatedAt: m.CreatedAt,
 	}
+	if m.DeliveryStatus != "" {
+		status := string(m.DeliveryStatus)
+		resp.DeliveryStatus = &status
+	}
+	return resp
 }
 
 type sendMessageRequest struct {
@@ -101,14 +109,10 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, err)
 		return
 	}
-	limit := 0
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		limit, err = strconv.Atoi(raw)
-		if err != nil {
-			httpx.Error(w, r, domain.InvalidField("limit", "invalid_limit",
-				"Limit must be a whole number."))
-			return
-		}
+	limit, err := httpx.QueryInt(r, "limit")
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
 	}
 
 	page, err := h.conversations.ListMessages(r.Context(), userID, conversationID,

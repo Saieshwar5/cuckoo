@@ -22,3 +22,22 @@ JOIN agents a ON a.id = b.agent_id
 WHERE b.secret_hash = $1
   AND b.revoked_at IS NULL
   AND a.deleted_at IS NULL;
+
+-- name: RecordBindingSuccess :exec
+-- A delivered event proves the backend is alive: any failure streak ends.
+UPDATE agent_bindings
+SET status = 'connected', last_seen_at = now(), failure_streak_started_at = NULL
+WHERE id = $1 AND revoked_at IS NULL;
+
+-- name: RecordBindingFailure :exec
+-- Starts a failure streak, or continues one; five minutes into a streak the
+-- binding is unreachable. Computed here so the rule holds under concurrent
+-- workers without a read-modify-write.
+UPDATE agent_bindings
+SET failure_streak_started_at = COALESCE(failure_streak_started_at, now()),
+    status = CASE
+        WHEN COALESCE(failure_streak_started_at, now()) <= now() - interval '5 minutes'
+            THEN 'unreachable'
+        ELSE status
+    END
+WHERE id = $1 AND revoked_at IS NULL;

@@ -45,7 +45,7 @@ func (q *Queries) AuthenticateBinding(ctx context.Context, secretHash []byte) (A
 const createBinding = `-- name: CreateBinding :one
 INSERT INTO agent_bindings (id, agent_id, mode, webhook_url, secret_hash)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, agent_id, mode, webhook_url, secret_hash, status, last_seen_at, created_at, revoked_at
+RETURNING id, agent_id, mode, webhook_url, secret_hash, status, last_seen_at, created_at, revoked_at, failure_streak_started_at
 `
 
 type CreateBindingParams struct {
@@ -75,12 +75,13 @@ func (q *Queries) CreateBinding(ctx context.Context, arg CreateBindingParams) (A
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.FailureStreakStartedAt,
 	)
 	return i, err
 }
 
 const getActiveBinding = `-- name: GetActiveBinding :one
-SELECT id, agent_id, mode, webhook_url, secret_hash, status, last_seen_at, created_at, revoked_at FROM agent_bindings
+SELECT id, agent_id, mode, webhook_url, secret_hash, status, last_seen_at, created_at, revoked_at, failure_streak_started_at FROM agent_bindings
 WHERE agent_id = $1 AND revoked_at IS NULL
 `
 
@@ -97,8 +98,40 @@ func (q *Queries) GetActiveBinding(ctx context.Context, agentID uuid.UUID) (Agen
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.FailureStreakStartedAt,
 	)
 	return i, err
+}
+
+const recordBindingFailure = `-- name: RecordBindingFailure :exec
+UPDATE agent_bindings
+SET failure_streak_started_at = COALESCE(failure_streak_started_at, now()),
+    status = CASE
+        WHEN COALESCE(failure_streak_started_at, now()) <= now() - interval '5 minutes'
+            THEN 'unreachable'
+        ELSE status
+    END
+WHERE id = $1 AND revoked_at IS NULL
+`
+
+// Starts a failure streak, or continues one; five minutes into a streak the
+// binding is unreachable. Computed here so the rule holds under concurrent
+// workers without a read-modify-write.
+func (q *Queries) RecordBindingFailure(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, recordBindingFailure, id)
+	return err
+}
+
+const recordBindingSuccess = `-- name: RecordBindingSuccess :exec
+UPDATE agent_bindings
+SET status = 'connected', last_seen_at = now(), failure_streak_started_at = NULL
+WHERE id = $1 AND revoked_at IS NULL
+`
+
+// A delivered event proves the backend is alive: any failure streak ends.
+func (q *Queries) RecordBindingSuccess(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, recordBindingSuccess, id)
+	return err
 }
 
 const revokeActiveBinding = `-- name: RevokeActiveBinding :execrows

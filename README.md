@@ -55,7 +55,41 @@ curl -s -H "$H" -X POST localhost:8080/v1/client/conversations/cnv_.../messages 
 curl -s -H "$H" "localhost:8080/v1/client/conversations/cnv_.../messages?limit=50"
 ```
 
-This bypass exists only when `CUCKOO_ENV=dev`. Starting with any other value
+This bypass exists only when `CUCKOO_ENV=dev`.
+
+### Receiving events as an agent backend
+
+Connect a webhook backend to an agent and the hub POSTs every message in the
+agent's conversations to it. The secret is shown once.
+
+```bash
+curl -s -H "$H" -X POST localhost:8080/v1/mgmt/agents/agt_.../binding \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"webhook","webhook_url":"http://localhost:9000/cuckoo"}'
+```
+
+Each request carries `X-Cuckoo-Event`, `X-Cuckoo-Event-Id`, `X-Cuckoo-Timestamp`
+and `X-Cuckoo-Signature: sha256=<hex HMAC-SHA256>` over
+`<timestamp>.<raw body>`. The signing key is the SHA-256 of the binding
+secret, so the plaintext secret is never stored on the hub:
+
+```python
+key = hashlib.sha256(secret.encode()).digest()
+expected = hmac.new(key, f"{ts}.{body}".encode(), hashlib.sha256).hexdigest()
+```
+
+Return any 2xx within ten seconds to acknowledge. Anything else is retried
+for a day: 1s, 5s, 30s, 2m, 10m, 1h, then hourly. Five minutes of failures
+marks the binding unreachable until the next success. A backend that was
+away reads what it missed, oldest first:
+
+```bash
+curl -s -H "Authorization: Bearer bnd_sec_..." \
+  "localhost:8080/v1/agent/events?since=evt_...&limit=100"
+```
+
+In production the hub refuses to post to private, loopback and link-local
+addresses. `http://localhost` works only with `CUCKOO_ENV=dev`. Starting with any other value
 fails immediately rather than falling back to it.
 
 Postgres and Redis are published on **5433** and **6380**, off the default
@@ -88,7 +122,9 @@ server/          the hub: one Go binary, migrations embedded
     auth/        credentials to caller
     config/      environment to typed settings
     conversations/ conversations, participants and messages
+    delivery/    the outbox worker: webhook delivery, retries, catch-up
     domain/      shared error model and identifiers
+    events/      what a backend receives: the event envelope and payloads
     principal/   who is calling
     store/       database access, migrations, generated queries
     testutil/    test harness: transactional stores, HTTP client, fixtures

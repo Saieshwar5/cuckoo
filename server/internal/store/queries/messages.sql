@@ -18,3 +18,7 @@ SELECT DISTINCT ON (conversation_id) *
 FROM messages
 WHERE conversation_id = ANY(sqlc.arg('conversation_ids')::uuid[])
 ORDER BY conversation_id, id DESC;
+
+-- name: ListMessagesByIDs :many
+SELECT * FROM messages
+WHERE id = ANY(sqlc.arg('ids')::uuid[]);

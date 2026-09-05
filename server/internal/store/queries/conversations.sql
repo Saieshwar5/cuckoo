@@ -46,3 +46,14 @@ LEFT JOIN users  u ON u.id = p.user_id
 LEFT JOIN agents a ON a.id = p.agent_id
 WHERE p.conversation_id = ANY(sqlc.arg('conversation_ids')::uuid[])
 ORDER BY p.conversation_id, p.joined_at, p.kind, p.user_id, p.agent_id;
+
+-- name: ListAgentParticipants :many
+-- The agents in a conversation: who must hear a message posted in it.
+SELECT agent_id::uuid AS agent_id
+FROM participants
+WHERE conversation_id = $1 AND agent_id IS NOT NULL
+ORDER BY joined_at, agent_id;
+
+-- name: ListConversationsByIDs :many
+SELECT * FROM conversations
+WHERE id = ANY(sqlc.arg('ids')::uuid[]);

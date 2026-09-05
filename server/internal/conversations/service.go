@@ -149,15 +149,36 @@ func (s *Service) hydrate(ctx context.Context, rows []gen.Conversation) ([]Conve
 	if err != nil {
 		return nil, domain.Internal(fmt.Errorf("list latest messages: %w", err))
 	}
+	previews := make([]Message, 0, len(latest))
 	for _, r := range latest {
 		msg, err := messageFromRow(r)
 		if err != nil {
 			return nil, err
 		}
-		out[index[r.ConversationID]].LastMessage = &msg
+		previews = append(previews, msg)
+	}
+	if err := s.attachDeliveryStatus(ctx, previews); err != nil {
+		return nil, err
+	}
+	for i := range previews {
+		out[index[previews[i].ConversationID]].LastMessage = &previews[i]
 	}
 
 	return out, nil
+}
+
+// GetConversations returns the given conversations, hydrated, in no
+// particular order, with no membership check.
+//
+// For callers with their own right to see them: the delivery layer builds an
+// agent's events from these, and it only ever does so for conversations the
+// agent is in.
+func (s *Service) GetConversations(ctx context.Context, ids []uuid.UUID) ([]Conversation, error) {
+	rows, err := s.store.ListConversationsByIDs(ctx, ids)
+	if err != nil {
+		return nil, domain.Internal(fmt.Errorf("list conversations by id: %w", err))
+	}
+	return s.hydrate(ctx, rows)
 }
 
 func errConversationNotFound() error {

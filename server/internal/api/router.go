@@ -20,6 +20,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/api/mgmt"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/middleware"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
+	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -40,6 +41,7 @@ type Deps struct {
 	Users         *users.Service
 	Agents        *agents.Service
 	Conversations *conversations.Service
+	Delivery      *delivery.Service
 	Health        map[string]HealthCheck
 }
 
@@ -84,7 +86,7 @@ func NewRouter(d Deps) http.Handler {
 	// The agent protocol. Only a binding secret gets in.
 	r.Route("/v1/agent", func(r chi.Router) {
 		r.Use(middleware.RequireAgent(d.AgentAuth))
-		r.Mount("/", agentapi.New(d.Agents).Routes())
+		r.Mount("/", agentapi.New(d.Agents, d.Delivery).Routes())
 	})
 
 	return r

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/auth"
 	"github.com/Saieshwar5/cuckoo/server/internal/config"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
+	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -78,6 +80,8 @@ func run() error {
 	defer func() { _ = redisClient.Close() }()
 
 	agentService := agents.New(db)
+	conversationService := conversations.New(db)
+	deliveryService := delivery.New(db, conversationService)
 
 	router := api.NewRouter(api.Deps{
 		Logger:        log,
@@ -85,14 +89,32 @@ func run() error {
 		AgentAuth:     auth.NewBinding(agentService),
 		Users:         users.New(db),
 		Agents:        agentService,
-		Conversations: conversations.New(db),
+		Conversations: conversationService,
+		Delivery:      deliveryService,
 		Health: map[string]api.HealthCheck{
 			"postgres": db.Ping,
 			"redis":    func(ctx context.Context) error { return redisClient.Ping(ctx).Err() },
 		},
 	})
 
-	return serve(ctx, cfg, log, router)
+	// The delivery worker runs beside the HTTP server in the same process:
+	// one binary is the whole hub. It stops with the same signal and is
+	// waited for, so an attempt in flight is recorded before exit.
+	worker := delivery.NewWorker(db, deliveryService, agentService, delivery.Options{
+		AllowLoopback: cfg.IsDev(),
+		Logger:        log,
+	})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		worker.Run(ctx)
+	}()
+
+	err = serve(ctx, cfg, log, router)
+	stop()
+	wg.Wait()
+	return err
 }
 
 // serve runs the HTTP server until the context is cancelled, then lets

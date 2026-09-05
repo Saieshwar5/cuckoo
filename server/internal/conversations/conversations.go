@@ -54,6 +54,20 @@ type Conversation struct {
 	CreatedAt    time.Time
 }
 
+// EventMessageCreated names the event an agent receives when a message is
+// posted in a conversation it belongs to. Recorded on every delivery row.
+const EventMessageCreated = "message.created"
+
+// DeliveryStatus summarises whether the backends a message was for have it.
+// Empty when the message had nobody to be delivered to.
+type DeliveryStatus string
+
+const (
+	DeliveryPending   DeliveryStatus = "pending"
+	DeliveryDelivered DeliveryStatus = "delivered"
+	DeliveryFailed    DeliveryStatus = "failed"
+)
+
 // Sender identifies who wrote a message.
 type Sender struct {
 	Kind ParticipantKind
@@ -74,6 +88,7 @@ type Message struct {
 	ConversationID uuid.UUID
 	Sender         Sender
 	Body           Body
+	DeliveryStatus DeliveryStatus
 	CreatedAt      time.Time
 }
 

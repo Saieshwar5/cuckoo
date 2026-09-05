@@ -127,3 +127,36 @@ func (q *Queries) ListMessagesBefore(ctx context.Context, arg ListMessagesBefore
 	}
 	return items, nil
 }
+
+const listMessagesByIDs = `-- name: ListMessagesByIDs :many
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at FROM messages
+WHERE id = ANY($1::uuid[])
+`
+
+func (q *Queries) ListMessagesByIDs(ctx context.Context, ids []uuid.UUID) ([]Message, error) {
+	rows, err := q.db.Query(ctx, listMessagesByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Message{}
+	for rows.Next() {
+		var i Message
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConversationID,
+			&i.SenderKind,
+			&i.SenderUserID,
+			&i.SenderAgentID,
+			&i.Body,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
