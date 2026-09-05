@@ -15,6 +15,7 @@ import (
 
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/agentapi"
+	"github.com/Saieshwar5/cuckoo/server/internal/api/authapi"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/client"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/mgmt"
@@ -23,6 +24,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
+	"github.com/Saieshwar5/cuckoo/server/internal/signin"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
@@ -40,6 +42,7 @@ type Deps struct {
 	AgentAuth middleware.Authenticator
 
 	Users         *users.Service
+	SignIn        *signin.Service
 	Agents        *agents.Service
 	Conversations *conversations.Service
 	Delivery      *delivery.Service
@@ -71,6 +74,12 @@ func NewRouter(d Deps) http.Handler {
 	})
 
 	r.Get("/healthz", healthHandler(d.Health))
+
+	// Signing in: the only routes a person reaches before they have a
+	// credential, plus signing out, which needs the one it ends.
+	r.Route("/v1/auth", func(r chi.Router) {
+		r.Mount("/", authapi.New(d.SignIn).Routes(middleware.RequireUser(d.UserAuth)))
+	})
 
 	// The app's API. Every route below requires a signed-in person.
 	r.Route("/v1/client", func(r chi.Router) {

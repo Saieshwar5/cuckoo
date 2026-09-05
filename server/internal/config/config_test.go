@@ -152,6 +152,7 @@ func TestProductionAcceptsExplicitSettings(t *testing.T) {
 	t.Setenv("CUCKOO_ENV", "prod")
 	t.Setenv("CUCKOO_HUB_DOMAIN", "cuckoo.example")
 	t.Setenv("CUCKOO_DATABASE_URL", "postgres://user:pass@db.internal:5432/cuckoo")
+	t.Setenv("CUCKOO_MAIL", "console")
 
 	cfg, err := Load()
 	if err != nil {

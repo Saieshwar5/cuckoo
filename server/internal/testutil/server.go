@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +22,9 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/mail"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
+	"github.com/Saieshwar5/cuckoo/server/internal/signin"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -39,6 +42,9 @@ type Server struct {
 	// live-update bus, for tests that need to drive it from outside a
 	// request — running the delivery worker, say.
 	Conversations *conversations.Service
+	// Mail holds every email the server "sent", so a test can read a
+	// sign-in code back.
+	Mail *mail.Memory
 }
 
 // NewServer builds the API against the given store.
@@ -69,6 +75,9 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 		}
 	})
 
+	mailer := mail.NewMemory()
+	signinService := signin.New(db, mailer, signin.WithLimiter(NewLimiter(t)))
+
 	agentService := agents.New(db)
 	conversationService := conversations.New(db,
 		conversations.WithLimiter(NewLimiter(t)),
@@ -76,9 +85,10 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 		conversations.WithStreams(NewStreamStore(t)))
 	handler := api.NewRouter(api.Deps{
 		Logger:        quiet,
-		UserAuth:      auth.NewDev(),
+		UserAuth:      auth.NewDevOrSession(auth.NewDev(), auth.NewSession(signinService)),
 		AgentAuth:     auth.NewBinding(agentService),
 		Users:         users.New(db),
+		SignIn:        signinService,
 		Agents:        agentService,
 		Conversations: conversationService,
 		Delivery:      delivery.New(db, conversationService),
@@ -90,8 +100,35 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
-	return &Server{Server: srv, Store: db, Conversations: conversationService}
+	return &Server{Server: srv, Store: db, Conversations: conversationService, Mail: mailer}
 }
+
+// AsSession returns a client authenticated with a session token, as the app
+// is once signed in.
+func (s *Server) AsSession(t *testing.T, token string) *Client {
+	t.Helper()
+	return &Client{
+		t:       t,
+		baseURL: s.URL,
+		headers: map[string]string{"Authorization": "Bearer " + token},
+	}
+}
+
+// LastCode reads the sign-in code most recently mailed to an address.
+func (s *Server) LastCode(t *testing.T, email string) string {
+	t.Helper()
+	m, ok := s.Mail.Last(email)
+	if !ok {
+		t.Fatalf("testutil: no mail was sent to %s", email)
+	}
+	code := codePattern.FindString(m.Text)
+	if code == "" {
+		t.Fatalf("testutil: no code in mail to %s: %q", email, m.Text)
+	}
+	return code
+}
+
+var codePattern = regexp.MustCompile(`\b[0-9]{6}\b`)
 
 // Socket opens the app's live-update socket as the given user. The
 // connection is closed when the test ends.

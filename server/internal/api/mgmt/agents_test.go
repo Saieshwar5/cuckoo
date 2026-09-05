@@ -171,12 +171,12 @@ func TestDeleteAgent(t *testing.T) {
 }
 
 // The management API accepts people, never agents. A binding secret presented
-// here is simply not a credential this API understands.
+// here is a bearer token that is not a session, and is refused as such.
 func TestManagementAPIRejectsAgentCredentials(t *testing.T) {
 	srv, owner, _ := setup(t)
 	agent := testutil.CreateAgent(t, srv.Store, owner)
 	_, secret := testutil.BindAgent(t, srv.Store, agent)
 
-	srv.AsAgent(t, secret).Get("/v1/mgmt/agents").ExpectError(http.StatusUnauthorized, "missing_credentials")
+	srv.AsAgent(t, secret).Get("/v1/mgmt/agents").ExpectError(http.StatusUnauthorized, "invalid_credentials")
 	srv.Anonymous(t).Get("/v1/mgmt/agents").ExpectError(http.StatusUnauthorized, "missing_credentials")
 }
