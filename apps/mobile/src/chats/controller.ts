@@ -1,6 +1,6 @@
 import type { Api } from '../api/client';
 import type { Conversation } from '../api/types';
-import { connectSocket, type SocketFactory, type SocketHandle } from '../realtime/socket';
+import type { Realtime } from '../realtime/realtime';
 import { applyFrame, empty, setConversations, type ChatsState } from './store';
 
 export interface ChatsSnapshot {
@@ -11,21 +11,20 @@ export interface ChatsSnapshot {
 }
 
 // ChatsController is the chat list as a thing outside React: loaded from the
-// hub, kept live by the socket, reloaded whenever the socket reconnects
-// because whatever happened while it was down is in the hub and not in any
-// frame. A screen subscribes to snapshots; nothing here knows about screens.
+// hub, kept live by the session's connection, reloaded whenever that
+// connection comes back because whatever happened while it was down is in
+// the hub and not in any frame. A screen subscribes to snapshots; nothing
+// here knows about screens.
 export class ChatsController {
   private state: ChatsState = empty;
   private snapshot: ChatsSnapshot = { conversations: [], loading: true, error: null, connected: false };
   private listeners = new Set<() => void>();
-  private socket: SocketHandle | null = null;
+  private unsubscribe: (() => void) | null = null;
   private stopped = false;
 
   constructor(
     private readonly api: Api,
-    private readonly socketUrl: string,
-    private readonly token: string,
-    private readonly factory?: SocketFactory,
+    private readonly realtime: Realtime,
   ) {}
 
   subscribe = (listener: () => void): (() => void) => {
@@ -35,15 +34,13 @@ export class ChatsController {
 
   getSnapshot = (): ChatsSnapshot => this.snapshot;
 
-  // start loads the list and opens the socket. Call stop when done.
+  // start loads the list and listens for frames. Call stop when done.
   start(): void {
     this.stopped = false;
+    this.patch({ connected: this.realtime.connected });
     void this.refresh();
-    this.socket = connectSocket({
-      url: this.socketUrl,
-      token: this.token,
-      factory: this.factory,
-      onFrame: (frame) => this.set({ ...this.state, ...applyFrame(this.state, frame) }),
+    this.unsubscribe = this.realtime.subscribe({
+      onFrame: (frame) => this.set(applyFrame(this.state, frame)),
       onOpen: (reconnect) => {
         this.patch({ connected: true });
         if (reconnect) void this.refresh();
@@ -54,8 +51,8 @@ export class ChatsController {
 
   stop(): void {
     this.stopped = true;
-    this.socket?.close();
-    this.socket = null;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
   }
 
   refresh = async (): Promise<void> => {

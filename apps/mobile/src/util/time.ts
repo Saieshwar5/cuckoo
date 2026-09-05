@@ -19,3 +19,32 @@ export function formatCountdown(seconds: number): string {
   const s = Math.max(0, Math.ceil(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+
+// sameDay says whether two timestamps fall on the same local day.
+export function sameDay(a: string, b: string): boolean {
+  const x = new Date(a);
+  const y = new Date(b);
+  return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate();
+}
+
+// formatClock is the time inside a bubble: 24-hour, as phones here show it.
+export function formatClock(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+// formatDay is the divider between days in a conversation.
+export function formatDay(
+  iso: string,
+  now: Date = new Date(),
+  labels: { today: string; yesterday: string } = { today: 'Today', yesterday: 'Yesterday' },
+): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  if (sameDay(iso, now.toISOString())) return labels.today;
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay(iso, yesterday.toISOString())) return labels.yesterday;
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+}

@@ -24,7 +24,11 @@ export interface Palette {
   wallpaper: string;
   bubbleMine: string;
   bubbleTheirs: string;
+  bubbleText: string;
+  bubbleMetaMine: string;
+  bubbleMetaTheirs: string;
   bubbleQuote: string;
+  quoteBar: string;
   tickRead: string;
   // The dot on every agent avatar.
   statusConnected: string;
@@ -47,7 +51,11 @@ export const dark: Palette = {
   wallpaper: '#0B141A',
   bubbleMine: '#005C4B',
   bubbleTheirs: '#202C33',
+  bubbleText: '#E9EDEF',
+  bubbleMetaMine: 'rgba(233, 237, 239, 0.65)',
+  bubbleMetaTheirs: '#8696A0',
   bubbleQuote: 'rgba(0, 0, 0, 0.25)',
+  quoteBar: '#25D366',
   tickRead: '#53BDEB',
   statusConnected: '#25D366',
   statusIdle: '#8696A0',
@@ -69,7 +77,11 @@ export const light: Palette = {
   wallpaper: '#EFEAE2',
   bubbleMine: '#D9FDD3',
   bubbleTheirs: '#FFFFFF',
-  bubbleQuote: 'rgba(0, 0, 0, 0.05)',
+  bubbleText: '#111B21',
+  bubbleMetaMine: '#667781',
+  bubbleMetaTheirs: '#667781',
+  bubbleQuote: 'rgba(0, 0, 0, 0.06)',
+  quoteBar: '#008069',
   tickRead: '#53BDEB',
   statusConnected: '#25D366',
   statusIdle: '#8696A0',

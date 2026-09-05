@@ -1,7 +1,7 @@
 import { t } from '@/i18n';
 import { avatarColors } from '@/theme/tokens';
 import { colorFor, initials } from '@/util/avatar';
-import { formatCountdown, formatListTime } from '@/util/time';
+import { formatClock, formatCountdown, formatDay, formatListTime, sameDay } from '@/util/time';
 
 describe('strings', () => {
   it('fills placeholders and shows a missing key rather than nothing', () => {
@@ -17,6 +17,18 @@ describe('list time', () => {
     expect(formatListTime('2026-09-04T23:59:00', now)).toBe('Yesterday');
     expect(formatListTime('2026-08-30T10:00:00', now)).toMatch(/30\/08\/26/);
     expect(formatListTime('garbage', now)).toBe('');
+  });
+});
+
+describe('conversation time', () => {
+  const now = new Date('2026-09-05T15:30:00');
+  it('labels days and shows the clock inside a bubble', () => {
+    expect(formatDay('2026-09-05T09:05:00', now)).toBe('Today');
+    expect(formatDay('2026-09-04T23:59:00', now)).toBe('Yesterday');
+    expect(formatDay('2026-08-15T10:00:00', now)).toBe('15 August 2026');
+    expect(formatClock('2026-09-05T09:05:00')).toMatch(/09:05/);
+    expect(sameDay('2026-09-05T00:10:00', '2026-09-05T23:50:00')).toBe(true);
+    expect(sameDay('2026-09-05T23:50:00', '2026-09-06T00:10:00')).toBe(false);
   });
 });
 

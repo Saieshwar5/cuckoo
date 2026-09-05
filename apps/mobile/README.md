@@ -56,8 +56,27 @@ typeface is used on purpose: Roboto on Android, San Francisco on iOS.
 
 The components under `src/components` are the vocabulary: `Screen`,
 `Header`, `SearchBar`, `Fab`, `EmptyState`, `Button` (primary, outline,
-plain), `TextField`, `CodeInput`, `Avatar`, `IconButton`, `ChatRow`. A screen
-composes those and holds no rules.
+plain), `TextField`, `CodeInput`, `Avatar`, `IconButton`, `ChatRow`, and
+under `chat/` the conversation's parts: `ChatHeader`, `Bubble` (text, quote,
+buttons, time and ticks, the streaming caret), `TypingBubble`, `DayDivider`,
+`QuickReplies`, `Composer`. A screen composes those and holds no rules.
+
+## The conversation
+
+`app/chat/[id].tsx` is an inverted list over `useChat(id)`: newest at the
+bottom where the eye is, older pages loading above without moving what is
+on screen. `src/chat/store.ts` is the pure reducer (paging, live frames,
+streaming deltas, typing with expiry, our own sends before the hub confirms
+them) and `src/chat/controller.ts` drives it: load, catch up after a
+reconnect from the newest message it has, send with an idempotency key and
+retry a failure with the same key. One live connection per session
+(`src/realtime/realtime.ts`, opened by `RealtimeProvider`) feeds both the
+chat list and the open chat.
+
+Long-press a bubble to reply to it. A tap on an agent's button sends the
+choice as an action; quick replies are chips above the composer, shown while
+the agent's question is the last word. In a browser, Enter sends and
+Shift+Enter makes a new line.
 
 To see the other theme in the browser: DevTools → Rendering → "Emulate CSS
 media feature prefers-color-scheme". Without a window, `scripts/webshot.py`

@@ -1,21 +1,27 @@
-import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 
-import { socketUrl } from '../config';
-import { useSession } from '../session/SessionProvider';
-import { ChatsController } from './controller';
+import type { Conversation } from '../api/types';
+import { useChatsController } from './ChatsProvider';
+import type { ChatsSnapshot } from './controller';
 
-// useChats hands a screen the chat list and keeps it live for as long as the
-// screen is mounted.
+const idle: ChatsSnapshot = { conversations: [], loading: true, error: null, connected: false };
+const never = () => () => {};
+const idleSnapshot = () => idle;
+
+// useChats hands a screen the chat list, live for as long as the session.
 export function useChats() {
-  const { api, token } = useSession();
-  const controller = useMemo(() => new ChatsController(api, socketUrl, token ?? ''), [api, token]);
+  const controller = useChatsController();
+  const snapshot = useSyncExternalStore(
+    controller?.subscribe ?? never,
+    controller?.getSnapshot ?? idleSnapshot,
+    controller?.getSnapshot ?? idleSnapshot,
+  );
+  return { ...snapshot, refresh: controller?.refresh ?? (async () => {}) };
+}
 
-  useEffect(() => {
-    if (!token) return;
-    controller.start();
-    return () => controller.stop();
-  }, [controller, token]);
-
-  const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
-  return { ...snapshot, refresh: controller.refresh };
+// useConversation is one entry of the list, by id: null until the list has
+// loaded, or if there is no such chat.
+export function useConversation(id: string): Conversation | null {
+  const { conversations } = useChats();
+  return conversations.find((c) => c.id === id) ?? null;
 }
