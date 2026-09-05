@@ -11,6 +11,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
@@ -40,6 +41,13 @@ type frame struct {
 
 type readyFrame struct {
 	UserID string `json:"user_id"`
+}
+
+// agentStatusFrame says an agent's backend came, went, or stopped answering:
+// connected, idle, unreachable, or none when there is no binding at all.
+type agentStatusFrame struct {
+	AgentID string `json:"agent_id"`
+	Status  string `json:"status"`
 }
 
 type messageCreatedFrame struct {
@@ -198,6 +206,15 @@ func frameOf(ev realtime.Event) (frame, error) {
 			DeliveryStatus: string(p.DeliveryStatus),
 		}}, nil
 
+	case agents.EventAgentStatus:
+		var p agents.AgentStatusEvent
+		if err := json.Unmarshal(ev.Payload, &p); err != nil {
+			return frame{}, err
+		}
+		return frame{Type: ev.Type, Data: agentStatusFrame{
+			AgentID: domain.FormatID(domain.PrefixAgent, p.AgentID),
+			Status:  p.Status,
+		}}, nil
 	default:
 		return frame{}, fmt.Errorf("unknown event type %q", ev.Type)
 	}

@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { AgentsProvider } from '@/agents/AgentsProvider';
 import { ChatsProvider } from '@/chats/ChatsProvider';
 import { RealtimeProvider } from '@/realtime/RealtimeProvider';
 import { SessionProvider, useSession } from '@/session/SessionProvider';
@@ -16,7 +17,9 @@ export default function RootLayout() {
       <SessionProvider>
         <RealtimeProvider>
           <ChatsProvider>
-            <Routes />
+            <AgentsProvider>
+              <Routes />
+            </AgentsProvider>
           </ChatsProvider>
         </RealtimeProvider>
       </SessionProvider>
@@ -47,6 +50,7 @@ function Routes() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="profile-setup" />
           <Stack.Screen name="chat/[id]" />
+          <Stack.Screen name="agent" />
         </Stack.Protected>
       </Stack>
     </>

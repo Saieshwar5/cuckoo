@@ -86,6 +86,8 @@ func (s *Service) SetBinding(ctx context.Context, callerID, agentID uuid.UUID, i
 		return Binding{}, "", err
 	}
 
+	// A fresh binding is idle until its backend speaks.
+	s.announce(ctx, agentID, string(StatusIdle))
 	return bindingFromRow(created), secret, nil
 }
 
@@ -103,6 +105,7 @@ func (s *Service) RevokeBinding(ctx context.Context, callerID, agentID uuid.UUID
 	if n == 0 {
 		return domain.NotFound("no_binding", "This agent has no backend connected.")
 	}
+	s.announce(ctx, agentID, StatusNone)
 	return nil
 }
 

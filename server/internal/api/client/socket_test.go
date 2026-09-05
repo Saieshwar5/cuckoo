@@ -180,3 +180,47 @@ func TestCatchUpAfterCursor(t *testing.T) {
 	c.Get("/v1/client/conversations/"+f.dmID+"/messages?after="+last.ID+"&before="+last.ID).
 		ExpectError(http.StatusUnprocessableEntity, "invalid_cursor")
 }
+
+// A person's device hears when one of their agents' backends comes and goes:
+// a new binding is idle, a socket makes it connected, revoking ends it.
+func TestSocketAnnouncesAgentStatus(t *testing.T) {
+	f := setupChat(t)
+	sock := f.srv.Socket(t, f.owner)
+	if fr := readFrame(t, sock); fr.Type != "ready" {
+		t.Fatalf("first frame = %s, want ready", fr.Type)
+	}
+
+	agentID := domain.FormatID(domain.PrefixAgent, f.agent.ID)
+	var set struct {
+		Secret string `json:"secret"`
+	}
+	f.srv.AsUser(t, f.owner).Post("/v1/mgmt/agents/"+agentID+"/binding", map[string]string{"mode": "socket"}).
+		ExpectStatus(http.StatusCreated).Decode(&set)
+
+	expectStatus := func(want string) {
+		t.Helper()
+		fr := readFrame(t, sock)
+		if fr.Type != "agent.status" {
+			t.Fatalf("frame = %s %s, want agent.status", fr.Type, fr.Data)
+		}
+		var data struct {
+			AgentID string `json:"agent_id"`
+			Status  string `json:"status"`
+		}
+		if err := json.Unmarshal(fr.Data, &data); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if data.AgentID != agentID || data.Status != want {
+			t.Errorf("agent.status = %+v, want %s for %s", data, want, agentID)
+		}
+	}
+	expectStatus("idle")
+
+	f.srv.AgentSocket(t, set.Secret)
+	expectStatus("connected")
+
+	// Idle on close is covered in the agents package; here the binding is
+	// revoked outright and everyone with a chat hears it has gone.
+	f.srv.AsUser(t, f.owner).Delete("/v1/mgmt/agents/" + agentID + "/binding").ExpectStatus(http.StatusNoContent)
+	expectStatus("none")
+}

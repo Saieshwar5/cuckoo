@@ -91,7 +91,7 @@ func run() error {
 	signinService := signin.New(db, mail.NewConsole(log), signin.WithLimiter(limits))
 	userAuth := newUserAuthenticator(cfg, signinService)
 
-	agentService := agents.New(db)
+	agentService := agents.New(db, agents.WithPublisher(bus))
 	conversationService := conversations.New(db,
 		conversations.WithLimiter(limits),
 		conversations.WithPublisher(bus),

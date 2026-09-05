@@ -1,9 +1,12 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import React from 'react';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
-import type { Agent, AgentStatus } from '@/api/types';
+import { useAgents } from '@/agents/AgentsProvider';
+import type { AgentStatus } from '@/api/types';
 import { Avatar } from '@/components/Avatar';
 import { EmptyState } from '@/components/EmptyState';
+import { Fab } from '@/components/Fab';
 import { Header } from '@/components/Header';
 import { IconButton } from '@/components/IconButton';
 import { Screen } from '@/components/Screen';
@@ -11,35 +14,15 @@ import { t } from '@/i18n';
 import { useSession } from '@/session/SessionProvider';
 import { radius, spacing, type, useStyles, useTheme, type Palette, type Theme } from '@/theme';
 
-// Agents: the ones you own, with their connection state. Creating and
-// connecting them is the next step; signing out lives here for now.
+// Agents: the ones you own, with their connection state, live. Tap one for
+// its profile; the button makes a new one. Signing out lives here for now.
 export default function AgentsScreen() {
-  const { api, signOut } = useSession();
+  const { signOut } = useSession();
+  const { agents, loading, controller } = useAgents();
   const { colors } = useTheme();
   const styles = useStyles(makeStyles);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // State changes only inside the promise's callbacks: the effect itself
-  // just starts the request, which is what an effect is for.
-  const load = useCallback(
-    () =>
-      api.listAgents().then(
-        (list) => {
-          setAgents(list);
-          setLoading(false);
-        },
-        () => {
-          // The list stays as it was; pull to refresh tries again.
-          setLoading(false);
-        },
-      ),
-    [api],
-  );
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const router = useRouter();
+  const create = () => router.push('/agent/new');
 
   return (
     <Screen padded={false}>
@@ -54,7 +37,12 @@ export default function AgentsScreen() {
         keyExtractor={(a) => a.id}
         ListHeaderComponent={agents.length ? <Text style={styles.section}>{t('agents.yours')}</Text> : null}
         renderItem={({ item }) => (
-          <View style={styles.row}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/agent/[id]', params: { id: item.id } })}
+            style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surface }]}
+            testID={`agent-row-${item.id}`}
+          >
             <Avatar name={item.display_name} status={item.binding?.status ?? null} />
             <View style={styles.body}>
               <Text style={styles.name} numberOfLines={1}>
@@ -65,10 +53,14 @@ export default function AgentsScreen() {
               </Text>
             </View>
             <StatusChip status={item.binding?.status ?? null} colors={colors} />
-          </View>
+          </Pressable>
         )}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={colors.accent} />
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={() => void controller?.refresh()}
+            tintColor={colors.accent}
+          />
         }
         ListEmptyComponent={
           loading ? null : (
@@ -76,11 +68,13 @@ export default function AgentsScreen() {
               icon="sparkles-outline"
               title={t('agents.empty.title')}
               subtitle={t('agents.empty.subtitle')}
+              action={{ title: t('agents.empty.action'), onPress: create }}
             />
           )
         }
-        contentContainerStyle={agents.length === 0 ? styles.grow : undefined}
+        contentContainerStyle={agents.length === 0 ? styles.grow : styles.padded}
       />
+      <Fab icon="add" label={t('agents.new')} onPress={create} testID="new-agent" />
     </Screen>
   );
 }
@@ -144,4 +138,5 @@ const makeStyles = ({ colors }: Theme) =>
     name: { ...type.headline, color: colors.text },
     handle: { ...type.secondary, color: colors.textSecondary },
     grow: { flexGrow: 1 },
+    padded: { paddingBottom: 96 },
   });

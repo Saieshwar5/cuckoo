@@ -281,3 +281,33 @@ func (q *Queries) ListUserParticipants(ctx context.Context, conversationID uuid.
 	}
 	return items, nil
 }
+
+const listUsersSharingAgent = `-- name: ListUsersSharingAgent :many
+SELECT DISTINCT p.user_id::uuid AS user_id
+FROM participants ap
+JOIN participants p ON p.conversation_id = ap.conversation_id AND p.user_id IS NOT NULL
+WHERE ap.agent_id = $1::uuid
+`
+
+// Everyone who has a conversation with an agent: who is told, live, when
+// the agent's backend comes and goes. Today that is its owner; once agents
+// are handed out it is everyone who added one.
+func (q *Queries) ListUsersSharingAgent(ctx context.Context, dollar_1 uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUsersSharingAgent, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var user_id uuid.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

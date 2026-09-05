@@ -8,6 +8,7 @@ import (
 
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/store/gen"
 )
@@ -20,11 +21,27 @@ import (
 // real thing. Packages without transactions may keep naming their queries in an
 // interface, as users does.
 type Service struct {
-	store *store.Store
+	store     *store.Store
+	publisher realtime.Publisher
+}
+
+// Option configures a Service.
+type Option func(*Service)
+
+// WithPublisher sets where status changes are announced. Without one, they
+// are recorded and nobody is told.
+func WithPublisher(p realtime.Publisher) Option {
+	return func(s *Service) { s.publisher = p }
 }
 
 // New builds the service.
-func New(st *store.Store) *Service { return &Service{store: st} }
+func New(st *store.Store, opts ...Option) *Service {
+	s := &Service{store: st, publisher: realtime.Discard{}}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
 
 // Create brings an agent into existence, owned by the caller, and opens the
 // DM between them: the chat the owner will find the agent in.
@@ -165,7 +182,7 @@ func (s *Service) Delete(ctx context.Context, callerID, id uuid.UUID) error {
 		return err
 	}
 
-	return s.store.WithTx(ctx, func(tx *store.Store) error {
+	err := s.store.WithTx(ctx, func(tx *store.Store) error {
 		if _, err := tx.RevokeActiveBinding(ctx, id); err != nil {
 			return domain.Internal(fmt.Errorf("revoke bindings of %s: %w", id, err))
 		}
@@ -178,6 +195,11 @@ func (s *Service) Delete(ctx context.Context, callerID, id uuid.UUID) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.announce(ctx, id, StatusNone)
+	return nil
 }
 
 func errAgentNotFound() error {

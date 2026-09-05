@@ -103,48 +103,84 @@ func (q *Queries) GetActiveBinding(ctx context.Context, agentID uuid.UUID) (Agen
 	return i, err
 }
 
-const markBindingIdle = `-- name: MarkBindingIdle :exec
+const markBindingIdle = `-- name: MarkBindingIdle :one
 UPDATE agent_bindings
 SET status = 'idle'
 WHERE id = $1 AND revoked_at IS NULL AND status = 'connected'
+RETURNING agent_id, status
 `
 
-// A socket closed: the backend is no longer connected, and nothing is known
-// about its health until it comes back.
-func (q *Queries) MarkBindingIdle(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, markBindingIdle, id)
-	return err
+type MarkBindingIdleRow struct {
+	AgentID uuid.UUID
+	Status  string
 }
 
-const recordBindingFailure = `-- name: RecordBindingFailure :exec
-UPDATE agent_bindings
-SET failure_streak_started_at = COALESCE(failure_streak_started_at, now()),
+// A socket closed: the backend is no longer connected, and nothing is known
+// about its health until it comes back. No row means nothing changed.
+func (q *Queries) MarkBindingIdle(ctx context.Context, id uuid.UUID) (MarkBindingIdleRow, error) {
+	row := q.db.QueryRow(ctx, markBindingIdle, id)
+	var i MarkBindingIdleRow
+	err := row.Scan(&i.AgentID, &i.Status)
+	return i, err
+}
+
+const recordBindingFailure = `-- name: RecordBindingFailure :one
+WITH before AS (
+    SELECT status FROM agent_bindings WHERE id = $1
+)
+UPDATE agent_bindings b
+SET failure_streak_started_at = COALESCE(b.failure_streak_started_at, now()),
     status = CASE
-        WHEN COALESCE(failure_streak_started_at, now()) <= now() - interval '5 minutes'
+        WHEN COALESCE(b.failure_streak_started_at, now()) <= now() - interval '5 minutes'
             THEN 'unreachable'
-        ELSE status
+        ELSE b.status
     END
-WHERE id = $1 AND revoked_at IS NULL
+FROM before
+WHERE b.id = $1 AND b.revoked_at IS NULL
+RETURNING b.agent_id, before.status AS previous_status, b.status
 `
+
+type RecordBindingFailureRow struct {
+	AgentID        uuid.UUID
+	PreviousStatus string
+	Status         string
+}
 
 // Starts a failure streak, or continues one; five minutes into a streak the
 // binding is unreachable. Computed here so the rule holds under concurrent
 // workers without a read-modify-write.
-func (q *Queries) RecordBindingFailure(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, recordBindingFailure, id)
-	return err
+func (q *Queries) RecordBindingFailure(ctx context.Context, id uuid.UUID) (RecordBindingFailureRow, error) {
+	row := q.db.QueryRow(ctx, recordBindingFailure, id)
+	var i RecordBindingFailureRow
+	err := row.Scan(&i.AgentID, &i.PreviousStatus, &i.Status)
+	return i, err
 }
 
-const recordBindingSuccess = `-- name: RecordBindingSuccess :exec
-UPDATE agent_bindings
+const recordBindingSuccess = `-- name: RecordBindingSuccess :one
+WITH before AS (
+    SELECT status FROM agent_bindings WHERE id = $1
+)
+UPDATE agent_bindings b
 SET status = 'connected', last_seen_at = now(), failure_streak_started_at = NULL
-WHERE id = $1 AND revoked_at IS NULL
+FROM before
+WHERE b.id = $1 AND b.revoked_at IS NULL
+RETURNING b.agent_id, before.status AS previous_status, b.status
 `
 
+type RecordBindingSuccessRow struct {
+	AgentID        uuid.UUID
+	PreviousStatus string
+	Status         string
+}
+
 // A delivered event proves the backend is alive: any failure streak ends.
-func (q *Queries) RecordBindingSuccess(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, recordBindingSuccess, id)
-	return err
+// Returns the status before and after, so a caller can tell a change from
+// the thousandth confirmation of the same thing.
+func (q *Queries) RecordBindingSuccess(ctx context.Context, id uuid.UUID) (RecordBindingSuccessRow, error) {
+	row := q.db.QueryRow(ctx, recordBindingSuccess, id)
+	var i RecordBindingSuccessRow
+	err := row.Scan(&i.AgentID, &i.PreviousStatus, &i.Status)
+	return i, err
 }
 
 const revokeActiveBinding = `-- name: RevokeActiveBinding :execrows

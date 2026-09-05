@@ -63,6 +63,23 @@ export function applyFrame(state: ChatsState, frame: Frame): ChatsState {
         return { ...c, last_message: { ...last, delivery_status } };
       });
     }
+    case 'agent.status': {
+      const { agent_id, status } = frame.data;
+      let changed = false;
+      const next = state.conversations.map((c) => {
+        if (!c.participants.some((p) => p.kind === 'agent' && p.id === agent_id)) return c;
+        changed = true;
+        return {
+          ...c,
+          participants: c.participants.map((p) =>
+            p.kind === 'agent' && p.id === agent_id
+              ? { ...p, status: status === 'none' ? undefined : status }
+              : p,
+          ),
+        };
+      });
+      return changed ? { conversations: next } : state;
+    }
     default:
       return state;
   }

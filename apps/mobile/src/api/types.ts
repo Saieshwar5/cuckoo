@@ -68,14 +68,30 @@ export interface Page {
   next_after: string | null;
 }
 
+export type BindingMode = 'socket' | 'webhook';
+
+export interface Binding {
+  id: string;
+  mode: BindingMode;
+  webhook_url: string | null;
+  status: AgentStatus;
+  last_seen_at: string | null;
+  created_at: string;
+}
+
 export interface Agent {
   id: string;
   handle: string;
   display_name: string;
   description: string;
   created_at: string;
-  binding: { id: string; mode: 'socket' | 'webhook'; status: AgentStatus } | null;
+  updated_at: string;
+  binding: Binding | null;
 }
+
+// What an agent's backend is doing, as the hub announces it: a binding
+// status, or none when there is no binding at all.
+export type AgentLiveStatus = AgentStatus | 'none';
 
 // Frames on the live-update socket.
 export type Frame =
@@ -92,4 +108,5 @@ export type Frame =
   | {
       type: 'typing';
       data: { conversation_id: string; agent_id: string; state: 'start' | 'stop'; expires_at: string };
-    };
+    }
+  | { type: 'agent.status'; data: { agent_id: string; status: AgentLiveStatus } };
