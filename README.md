@@ -214,14 +214,20 @@ ports, so Cuckoo can run alongside another project's containers.
 
 ### The app
 
+Three terminals and a phone with Expo Go on the same wifi.
+
 ```bash
-make mobile-install
-CUCKOO_HUB_URL=http://<your laptop's wifi address>:8080 make mobile
+make run                                   # terminal 1: the hub; sign-in codes print here
+make demo EMAIL=you@example.com            # terminal 2: asks for the code, then runs an echo agent for you
+CUCKOO_HUB_URL=http://<laptop wifi address>:8080 make mobile   # terminal 3: shows a QR code
 ```
 
-Open it in Expo Go on a phone on the same wifi. The hub already listens on
-every interface, so nothing on the server changes. Sign in with any email
-and read the code off the hub's log.
+Scan the QR code with Expo Go, sign in with the same email (a new code
+prints in terminal 1), and the chat list shows your Echo agent. Then, from
+any terminal, `make say TEXT="hello"` sends a message as you and the list
+updates live as the agent answers. `hostname -I` prints the laptop's
+address. The hub already listens on every interface, so nothing on the
+server changes.
 
 ## Commands
 
