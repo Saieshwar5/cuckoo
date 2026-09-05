@@ -98,7 +98,7 @@ func TestListMineOrdersByLatestActivity(t *testing.T) {
 		t.Fatalf("newest conversation is not first: %v then %v", list[0].ID, list[1].ID)
 	}
 
-	if _, err := f.svc.SendText(ctx, f.owner.ID, f.dm.ID, "hello again"); err != nil {
+	if _, err := f.svc.SendAsUser(ctx, f.owner.ID, f.dm.ID, conversations.SendInput{Text: "hello again"}); err != nil {
 		t.Fatalf("SendText: %v", err)
 	}
 	list, _ = f.svc.ListMine(ctx, f.owner.ID)

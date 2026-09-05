@@ -86,7 +86,7 @@ func NewRouter(d Deps) http.Handler {
 	// The agent protocol. Only a binding secret gets in.
 	r.Route("/v1/agent", func(r chi.Router) {
 		r.Use(middleware.RequireAgent(d.AgentAuth))
-		r.Mount("/", agentapi.New(d.Agents, d.Delivery).Routes())
+		r.Mount("/", agentapi.New(d.Agents, d.Delivery, d.Conversations).Routes())
 	})
 
 	return r

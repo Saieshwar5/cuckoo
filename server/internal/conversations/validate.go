@@ -16,7 +16,26 @@ const (
 
 	defaultPageSize int32 = 50
 	maxPageSize     int32 = 100
+
+	// idempotencyKeyMaxLen leaves room for a UUID, a prefix and some
+	// namespace, and no room for a key that is really a payload.
+	idempotencyKeyMaxLen = 200
 )
+
+// validateIdempotencyKey returns nil for no key, so the column stays null and
+// the unique index ignores the row.
+func validateIdempotencyKey(raw string) (*string, error) {
+	key := strings.TrimSpace(raw)
+	if key == "" {
+		return nil, nil
+	}
+	if !utf8.ValidString(key) || strings.ContainsRune(key, 0) ||
+		utf8.RuneCountInString(key) > idempotencyKeyMaxLen {
+		return nil, domain.InvalidField("idempotency_key", "invalid_idempotency_key",
+			fmt.Sprintf("Idempotency key must be at most %d characters.", idempotencyKeyMaxLen))
+	}
+	return &key, nil
+}
 
 // validateText normalises and checks message text.
 func validateText(raw string) (string, error) {

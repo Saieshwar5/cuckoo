@@ -17,7 +17,7 @@ func TestConstructorsSetKindAndCode(t *testing.T) {
 		{"forbidden", Forbidden("nope", "no"), KindForbidden},
 		{"not found", NotFound("gone", "no"), KindNotFound},
 		{"conflict", Conflict("clash", "no"), KindConflict},
-		{"rate limited", RateLimited("slow_down", "no"), KindRateLimited},
+		{"rate limited", RateLimited("slow_down", "no", 0), KindRateLimited},
 		{"internal", Internal(errors.New("boom")), KindInternal},
 	}
 

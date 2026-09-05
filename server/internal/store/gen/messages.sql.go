@@ -12,9 +12,9 @@ import (
 )
 
 const createMessage = `-- name: CreateMessage :one
-INSERT INTO messages (id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at
+INSERT INTO messages (id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, idempotency_key)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key
 `
 
 type CreateMessageParams struct {
@@ -24,6 +24,7 @@ type CreateMessageParams struct {
 	SenderUserID   *uuid.UUID
 	SenderAgentID  *uuid.UUID
 	Body           []byte
+	IdempotencyKey *string
 }
 
 func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error) {
@@ -34,6 +35,7 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		arg.SenderUserID,
 		arg.SenderAgentID,
 		arg.Body,
+		arg.IdempotencyKey,
 	)
 	var i Message
 	err := row.Scan(
@@ -44,12 +46,65 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		&i.SenderAgentID,
 		&i.Body,
 		&i.CreatedAt,
+		&i.IdempotencyKey,
+	)
+	return i, err
+}
+
+const getMessageByAgentKey = `-- name: GetMessageByAgentKey :one
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key FROM messages
+WHERE sender_agent_id = $1::uuid AND idempotency_key = $2::text
+`
+
+type GetMessageByAgentKeyParams struct {
+	SenderAgentID  uuid.UUID
+	IdempotencyKey string
+}
+
+func (q *Queries) GetMessageByAgentKey(ctx context.Context, arg GetMessageByAgentKeyParams) (Message, error) {
+	row := q.db.QueryRow(ctx, getMessageByAgentKey, arg.SenderAgentID, arg.IdempotencyKey)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.ConversationID,
+		&i.SenderKind,
+		&i.SenderUserID,
+		&i.SenderAgentID,
+		&i.Body,
+		&i.CreatedAt,
+		&i.IdempotencyKey,
+	)
+	return i, err
+}
+
+const getMessageByUserKey = `-- name: GetMessageByUserKey :one
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key FROM messages
+WHERE sender_user_id = $1::uuid AND idempotency_key = $2::text
+`
+
+type GetMessageByUserKeyParams struct {
+	SenderUserID   uuid.UUID
+	IdempotencyKey string
+}
+
+func (q *Queries) GetMessageByUserKey(ctx context.Context, arg GetMessageByUserKeyParams) (Message, error) {
+	row := q.db.QueryRow(ctx, getMessageByUserKey, arg.SenderUserID, arg.IdempotencyKey)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.ConversationID,
+		&i.SenderKind,
+		&i.SenderUserID,
+		&i.SenderAgentID,
+		&i.Body,
+		&i.CreatedAt,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
 const listLatestMessages = `-- name: ListLatestMessages :many
-SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at
+SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key
 FROM messages
 WHERE conversation_id = ANY($1::uuid[])
 ORDER BY conversation_id, id DESC
@@ -73,6 +128,7 @@ func (q *Queries) ListLatestMessages(ctx context.Context, conversationIds []uuid
 			&i.SenderAgentID,
 			&i.Body,
 			&i.CreatedAt,
+			&i.IdempotencyKey,
 		); err != nil {
 			return nil, err
 		}
@@ -85,7 +141,7 @@ func (q *Queries) ListLatestMessages(ctx context.Context, conversationIds []uuid
 }
 
 const listMessagesBefore = `-- name: ListMessagesBefore :many
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at FROM messages
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key FROM messages
 WHERE conversation_id = $1
   AND ($2::uuid IS NULL OR id < $2::uuid)
 ORDER BY id DESC
@@ -117,6 +173,60 @@ func (q *Queries) ListMessagesBefore(ctx context.Context, arg ListMessagesBefore
 			&i.SenderAgentID,
 			&i.Body,
 			&i.CreatedAt,
+			&i.IdempotencyKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMessagesBeforeForAgent = `-- name: ListMessagesBeforeForAgent :many
+SELECT m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key FROM messages m
+JOIN participants p ON p.conversation_id = m.conversation_id AND p.agent_id = $1::uuid
+WHERE m.conversation_id = $2
+  AND m.created_at >= p.joined_at
+  AND ($3::uuid IS NULL OR m.id < $3::uuid)
+ORDER BY m.id DESC
+LIMIT $4
+`
+
+type ListMessagesBeforeForAgentParams struct {
+	AgentID        uuid.UUID
+	ConversationID uuid.UUID
+	Before         *uuid.UUID
+	PageSize       int32
+}
+
+// History as an agent sees it: only from the moment it joined. An agent
+// added to a group later must not be handed everything said before it.
+func (q *Queries) ListMessagesBeforeForAgent(ctx context.Context, arg ListMessagesBeforeForAgentParams) ([]Message, error) {
+	rows, err := q.db.Query(ctx, listMessagesBeforeForAgent,
+		arg.AgentID,
+		arg.ConversationID,
+		arg.Before,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Message{}
+	for rows.Next() {
+		var i Message
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConversationID,
+			&i.SenderKind,
+			&i.SenderUserID,
+			&i.SenderAgentID,
+			&i.Body,
+			&i.CreatedAt,
+			&i.IdempotencyKey,
 		); err != nil {
 			return nil, err
 		}
@@ -129,7 +239,7 @@ func (q *Queries) ListMessagesBefore(ctx context.Context, arg ListMessagesBefore
 }
 
 const listMessagesByIDs = `-- name: ListMessagesByIDs :many
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at FROM messages
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key FROM messages
 WHERE id = ANY($1::uuid[])
 `
 
@@ -150,6 +260,7 @@ func (q *Queries) ListMessagesByIDs(ctx context.Context, ids []uuid.UUID) ([]Mes
 			&i.SenderAgentID,
 			&i.Body,
 			&i.CreatedAt,
+			&i.IdempotencyKey,
 		); err != nil {
 			return nil, err
 		}

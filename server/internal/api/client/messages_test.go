@@ -78,6 +78,40 @@ func TestSendMessageIsPendingWhenBackendConnected(t *testing.T) {
 	}
 }
 
+// A retry with the same key is answered with the same message and a 200.
+func TestSendMessageIdempotencyKey(t *testing.T) {
+	f := setupChat(t)
+	c := f.srv.AsUser(t, f.owner)
+	path := "/v1/client/conversations/" + f.dmID + "/messages"
+	body := map[string]any{"text": "once", "idempotency_key": "app-7"}
+
+	var first, again struct {
+		Message messageJSON `json:"message"`
+	}
+	c.Post(path, body).ExpectStatus(http.StatusCreated).Decode(&first)
+	c.Post(path, body).ExpectStatus(http.StatusOK).Decode(&again)
+	if again.Message.ID != first.Message.ID {
+		t.Errorf("retry created %s, want %s again", again.Message.ID, first.Message.ID)
+	}
+}
+
+// The burst is 30; the 31st message in a row is refused with a Retry-After.
+func TestSendMessageRateLimited(t *testing.T) {
+	f := setupChat(t)
+	c := f.srv.AsUser(t, f.owner)
+	path := "/v1/client/conversations/" + f.dmID + "/messages"
+
+	for i := range 30 {
+		c.Post(path, map[string]any{"text": "burst"}).ExpectStatus(http.StatusCreated)
+		_ = i
+	}
+	resp := c.Post(path, map[string]any{"text": "one too many"}).
+		ExpectError(http.StatusTooManyRequests, "rate_limited")
+	if ra := resp.Header.Get("Retry-After"); ra == "" || ra == "0" {
+		t.Errorf("Retry-After = %q, want a positive number of seconds", ra)
+	}
+}
+
 func TestSendMessageRejections(t *testing.T) {
 	f := setupChat(t)
 	c := f.srv.AsUser(t, f.owner)

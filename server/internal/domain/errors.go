@@ -10,6 +10,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"time"
 )
 
 // Kind classifies a failure. It determines the HTTP status at the edge.
@@ -34,7 +35,10 @@ type Error struct {
 	Code    string // stable identifier, e.g. "user_not_found"
 	Message string // human readable, safe to expose
 	Field   string // optional: the offending input field
-	wrapped error
+	// RetryAfter, when set on a rate-limited error, tells the caller how
+	// long to wait. It becomes the Retry-After header at the edge.
+	RetryAfter time.Duration
+	wrapped    error
 }
 
 func (e *Error) Error() string {
@@ -94,9 +98,10 @@ func Conflict(code, message string) *Error {
 	return &Error{Kind: KindConflict, Code: code, Message: message}
 }
 
-// RateLimited reports that the caller is sending too much.
-func RateLimited(code, message string) *Error {
-	return &Error{Kind: KindRateLimited, Code: code, Message: message}
+// RateLimited reports that the caller is sending too much, and when it may
+// try again.
+func RateLimited(code, message string, retryAfter time.Duration) *Error {
+	return &Error{Kind: KindRateLimited, Code: code, Message: message, RetryAfter: retryAfter}
 }
 
 // AsError extracts a *Error from anywhere in an error chain.
