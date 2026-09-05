@@ -2,8 +2,8 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { AgentStatus } from '@/api/types';
-import { colors, type } from '@/theme/tokens';
-import { initials } from '@/util/time';
+import { sizes, useTheme, type Palette } from '@/theme';
+import { colorFor, initials } from '@/util/avatar';
 
 interface Props {
   name: string;
@@ -13,26 +13,42 @@ interface Props {
   status?: AgentStatus | null;
 }
 
-const dotColor: Record<AgentStatus, string> = {
-  connected: colors.statusConnected,
-  idle: colors.statusIdle,
-  unreachable: colors.statusUnreachable,
-};
+function dotColor(colors: Palette, status: AgentStatus): string {
+  switch (status) {
+    case 'connected':
+      return colors.statusConnected;
+    case 'idle':
+      return colors.statusIdle;
+    case 'unreachable':
+      return colors.statusUnreachable;
+  }
+}
 
-export function Avatar({ name, size = 48, status }: Props) {
-  const dot = size * 0.28;
+// Avatar is a coloured disc with the name's initials. The colour comes from
+// the name, so an agent looks the same everywhere it appears.
+export function Avatar({ name, size = sizes.avatar, status }: Props) {
+  const { colors } = useTheme();
+  const dot = Math.round(size * 0.27);
   return (
     <View style={{ width: size, height: size }}>
-      <View style={[styles.circle, { width: size, height: size, borderRadius: size / 2 }]}>
-        <Text style={[styles.initials, { fontSize: size * 0.4 }]}>{initials(name)}</Text>
+      <View
+        style={[
+          styles.disc,
+          { width: size, height: size, borderRadius: size / 2, backgroundColor: colorFor(name) },
+        ]}
+      >
+        <Text style={[styles.initials, { fontSize: Math.round(size * 0.38) }]}>{initials(name)}</Text>
       </View>
       {status !== undefined ? (
         <View
           testID="status-dot"
           style={[
             styles.dot,
-            { width: dot, height: dot, borderRadius: dot / 2 },
-            status ? { backgroundColor: dotColor[status] } : styles.dotNone,
+            { width: dot, height: dot, borderRadius: dot / 2, borderColor: colors.ground },
+            status
+              ? { backgroundColor: dotColor(colors, status) }
+              : // No backend connected: a ring only.
+                { backgroundColor: colors.ground, borderColor: colors.statusIdle },
           ]}
         />
       ) : null}
@@ -41,15 +57,7 @@ export function Avatar({ name, size = 48, status }: Props) {
 }
 
 const styles = StyleSheet.create({
-  circle: { backgroundColor: colors.surfaceStrong, alignItems: 'center', justifyContent: 'center' },
-  initials: { ...type.body, color: colors.textSecondary, fontWeight: '600' },
-  dot: {
-    position: 'absolute',
-    right: -1,
-    bottom: -1,
-    borderWidth: 2,
-    borderColor: colors.ground,
-  },
-  // No backend connected: a ring only.
-  dotNone: { backgroundColor: colors.ground, borderColor: colors.statusIdle },
+  disc: { alignItems: 'center', justifyContent: 'center' },
+  initials: { color: '#FFFFFF', fontWeight: '600' },
+  dot: { position: 'absolute', right: -1, bottom: -1, borderWidth: 2.5 },
 });

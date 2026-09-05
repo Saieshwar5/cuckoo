@@ -12,11 +12,11 @@ const config: ExpoConfig = {
   scheme: 'cuckoo',
   orientation: 'portrait',
   icon: './assets/icon.png',
-  userInterfaceStyle: 'light',
+  userInterfaceStyle: 'automatic',
   ios: { supportsTablet: false },
   android: {
     adaptiveIcon: {
-      backgroundColor: '#FFFFFF',
+      backgroundColor: '#0B141A',
       foregroundImage: './assets/android-icon-foreground.png',
       backgroundImage: './assets/android-icon-background.png',
       monochromeImage: './assets/android-icon-monochrome.png',

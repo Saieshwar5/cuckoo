@@ -4,12 +4,13 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Screen } from '@/components/Screen';
 import { t } from '@/i18n';
-import { colors, spacing, type } from '@/theme/tokens';
+import { spacing, type, useStyles, type Theme } from '@/theme';
 
 // The conversation. This step opens the door; the next one furnishes the
 // room: bubbles, streaming, buttons and the composer.
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const styles = useStyles(makeStyles);
   return (
     <>
       <Stack.Screen options={{ title: t('app.name') }} />
@@ -23,8 +24,9 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  body: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  text: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
-  id: { ...type.caption, color: colors.textSecondary },
-});
+const makeStyles = ({ colors }: Theme) =>
+  StyleSheet.create({
+    body: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+    text: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
+    id: { ...type.caption, color: colors.textSecondary },
+  });
