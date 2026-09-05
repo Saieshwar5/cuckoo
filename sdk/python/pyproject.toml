@@ -7,7 +7,7 @@ name = "cuckoo-agent"
 version = "0.0.1"
 description = "Connect an agent backend to a Cuckoo hub: receive messages, reply, done."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "websockets>=13",
@@ -19,4 +19,4 @@ include = ["cuckoo*"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"

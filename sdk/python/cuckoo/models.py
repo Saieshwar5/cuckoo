@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .agent import Agent
+    from .agent import Agent, Stream
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,8 @@ class Message:
     text: str
     sender: Sender
     created_at: str
+    status: str = "complete"
+    truncated: bool = False
     event_id: str | None = None
 
     @classmethod
@@ -55,6 +57,8 @@ class Message:
                 display_name=sender.get("display_name", ""),
             ),
             created_at=data.get("created_at", ""),
+            status=data.get("status", "complete"),
+            truncated=bool(data.get("truncated")),
             event_id=event_id,
         )
 
@@ -93,3 +97,14 @@ class Conversation:
         if self._agent is None:
             raise RuntimeError("this conversation is not attached to an agent")
         return await self._agent.send(self.id, text, idempotency_key=idempotency_key)
+
+    def stream(self) -> Stream:
+        """Begin a reply that arrives piece by piece::
+
+        async with conv.stream() as reply:
+            async for token in model.generate(prompt):
+                await reply.append(token)
+        """
+        if self._agent is None:
+            raise RuntimeError("this conversation is not attached to an agent")
+        return self._agent.stream(self.id)

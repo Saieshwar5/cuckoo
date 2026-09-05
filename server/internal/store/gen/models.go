@@ -49,6 +49,8 @@ type Message struct {
 	Body           []byte
 	CreatedAt      time.Time
 	IdempotencyKey *string
+	Status         string
+	Truncated      bool
 }
 
 type MessageDelivery struct {

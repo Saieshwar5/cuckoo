@@ -1,7 +1,30 @@
 -- name: CreateMessage :one
-INSERT INTO messages (id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, idempotency_key)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO messages (id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, idempotency_key, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
+
+-- name: GetMessage :one
+SELECT * FROM messages
+WHERE id = $1;
+
+-- name: FinishMessage :one
+-- Ends a stream: the whole text lands in one update. Scoped to the agent
+-- that started it, and to a message still streaming, so a second finish or
+-- another agent's finish changes nothing.
+UPDATE messages
+SET body = sqlc.arg('body'), status = 'complete', truncated = sqlc.arg('truncated')
+WHERE id = sqlc.arg('id')
+  AND sender_agent_id = sqlc.arg('sender_agent_id')::uuid
+  AND status = 'streaming'
+RETURNING *;
+
+-- name: ListStaleStreamingMessages :many
+-- Streams still open long after they began: the buffer's own bookkeeping
+-- was lost, and the row must be finished from whatever is left.
+SELECT * FROM messages
+WHERE status = 'streaming' AND created_at < sqlc.arg('started_before')::timestamptz
+ORDER BY created_at
+LIMIT 100;
 
 -- name: GetMessageByUserKey :one
 SELECT * FROM messages

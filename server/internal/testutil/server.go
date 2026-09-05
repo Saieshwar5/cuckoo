@@ -72,7 +72,8 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 	agentService := agents.New(db)
 	conversationService := conversations.New(db,
 		conversations.WithLimiter(NewLimiter(t)),
-		conversations.WithPublisher(bus))
+		conversations.WithPublisher(bus),
+		conversations.WithStreams(NewStreamStore(t)))
 	handler := api.NewRouter(api.Deps{
 		Logger:        quiet,
 		UserAuth:      auth.NewDev(),

@@ -188,7 +188,7 @@ func TestReplyRejections(t *testing.T) {
 			ExpectError(http.StatusUnprocessableEntity, "invalid_text")
 	})
 	t.Run("unknown field", func(t *testing.T) {
-		f.srv.AsAgent(t, f.secret).Post(path, map[string]any{"text": "hi", "stream": true}).
+		f.srv.AsAgent(t, f.secret).Post(path, map[string]any{"text": "hi", "priority": "high"}).
 			ExpectError(http.StatusUnprocessableEntity, "unknown_field")
 	})
 	t.Run("another agent", func(t *testing.T) {

@@ -93,7 +93,8 @@ func run() error {
 	agentService := agents.New(db)
 	conversationService := conversations.New(db,
 		conversations.WithLimiter(ratelimit.NewRedis(redisClient, "cuckoo:")),
-		conversations.WithPublisher(bus))
+		conversations.WithPublisher(bus),
+		conversations.WithStreams(conversations.NewStreamStore(redisClient, "cuckoo:")))
 	deliveryService := delivery.New(db, conversationService)
 
 	router := api.NewRouter(api.Deps{
@@ -120,10 +121,16 @@ func run() error {
 		Logger:        log,
 	})
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		worker.Run(ctx)
+	}()
+	// Streams an agent stops writing to are finished for it, so a bubble
+	// never spins forever.
+	go func() {
+		defer wg.Done()
+		conversationService.RunStreamSweeper(ctx, 5*time.Second, log)
 	}()
 
 	err = serve(ctx, cfg, log, router)

@@ -63,7 +63,19 @@ const (
 	// EventDeliveryPending is a nudge to an agent's socket: something is
 	// waiting in the outbox. It carries nothing; the socket reads the rows.
 	EventDeliveryPending = "delivery.pending"
+	// The life of a streamed message, as a device sees it: an empty bubble
+	// appears, text arrives in pieces, the bubble is final.
+	EventMessageStarted   = "message.started"
+	EventMessageDelta     = "message.delta"
+	EventMessageCompleted = "message.completed"
 )
+
+// MessageDeltaEvent is one piece of a streaming message's text.
+type MessageDeltaEvent struct {
+	ConversationID uuid.UUID `json:"conversation_id"`
+	MessageID      uuid.UUID `json:"message_id"`
+	Text           string    `json:"text"`
+}
 
 // MessageCreatedEvent is what a device hears when a message lands in one of
 // its person's conversations. Internal form; the socket renders the wire
@@ -105,12 +117,25 @@ type Body struct {
 	Text string `json:"text,omitempty"`
 }
 
-// Message is one thing said in a conversation.
+// MessageStatus says whether a message is still being written.
+type MessageStatus string
+
+const (
+	// MessageStreaming: an agent has started the message and is appending to
+	// it. Its text so far lives in the stream buffer, not the row.
+	MessageStreaming MessageStatus = "streaming"
+	MessageComplete  MessageStatus = "complete"
+)
+
+// Message is one thing said in a conversation. Truncated marks a stream the
+// hub had to finish because the agent stopped without finishing it.
 type Message struct {
 	ID             uuid.UUID
 	ConversationID uuid.UUID
 	Sender         Sender
 	Body           Body
+	Status         MessageStatus
+	Truncated      bool
 	DeliveryStatus DeliveryStatus
 	CreatedAt      time.Time
 }
@@ -185,6 +210,8 @@ func messageFromRow(r gen.Message) (Message, error) {
 		ConversationID: r.ConversationID,
 		Sender:         sender,
 		Body:           body,
+		Status:         MessageStatus(r.Status),
+		Truncated:      r.Truncated,
 		CreatedAt:      r.CreatedAt,
 	}, nil
 }

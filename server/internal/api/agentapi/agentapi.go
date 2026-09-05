@@ -48,5 +48,10 @@ func (h *Handler) Routes() chi.Router {
 		r.Post("/messages", h.sendMessage)
 	})
 
+	r.Route("/messages/{id}", func(r chi.Router) {
+		r.Post("/append", h.appendStream)
+		r.Post("/finish", h.finishStream)
+	})
+
 	return r
 }

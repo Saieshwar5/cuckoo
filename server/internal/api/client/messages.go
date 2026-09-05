@@ -29,6 +29,8 @@ type messageResponse struct {
 	ConversationID string         `json:"conversation_id"`
 	Sender         senderResponse `json:"sender"`
 	Body           bodyResponse   `json:"body"`
+	Status         string         `json:"status"`
+	Truncated      bool           `json:"truncated"`
 	DeliveryStatus *string        `json:"delivery_status"`
 	CreatedAt      time.Time      `json:"created_at"`
 }
@@ -55,6 +57,8 @@ func newMessageResponse(m conversations.Message) messageResponse {
 			ID:   formatParticipantID(m.Sender.Kind, m.Sender.ID),
 		},
 		Body:      bodyResponse{Text: m.Body.Text},
+		Status:    string(m.Status),
+		Truncated: m.Truncated,
 		CreatedAt: m.CreatedAt,
 	}
 	if m.DeliveryStatus != "" {
