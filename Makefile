@@ -102,8 +102,24 @@ mobile-check: ## Typecheck, lint, format-check and test the app
 	cd apps/mobile && npm run check
 
 .PHONY: play
-play: ## Start everything for a phone test (make play EMAIL=you@example.com)
-	@scripts/play.sh $(EMAIL)
+play: ## Start everything and the app (make play EMAIL=you@example.com [TARGET=phone|web|emulator])
+	@TARGET=$(or $(TARGET),phone) scripts/play.sh $(EMAIL)
+
+.PHONY: web
+web: ## Start everything and open the app in this laptop's browser
+	@TARGET=web scripts/play.sh $(EMAIL)
+
+.PHONY: emulator-install
+emulator-install: ## Download the Android emulator and create a device (about 3 GB, once)
+	@scripts/emulator.sh install
+
+.PHONY: emulator
+emulator: ## Boot the Android emulator
+	@scripts/emulator.sh start
+
+.PHONY: emulator-stop
+emulator-stop: ## Close the Android emulator
+	@scripts/emulator.sh stop
 
 .PHONY: say
 say: ## Send a message as yourself to your Echo agent (make say TEXT="hello")

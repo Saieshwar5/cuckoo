@@ -16,6 +16,8 @@ export default function TabsLayout() {
         tabBarStyle: { backgroundColor: colors.ground, borderTopColor: colors.hairline },
       }}
     >
+      {/* The redirect file is a route, not a tab. */}
+      <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen
         name="chats"
         options={{

@@ -1,8 +1,9 @@
 import type { ExpoConfig } from 'expo/config';
 
-// The hub the app talks to. On a phone on the same wifi as a laptop running
-// the hub, set CUCKOO_HUB_URL to the laptop's address before `expo start`.
-const hubUrl = process.env.CUCKOO_HUB_URL ?? 'http://localhost:8080';
+// The hub the app talks to. Set EXPO_PUBLIC_HUB_URL before `expo start`:
+// the laptop's wifi address for a phone, localhost for the browser,
+// 10.0.2.2 for the Android emulator. make play does this.
+const hubUrl = process.env.EXPO_PUBLIC_HUB_URL ?? 'http://localhost:8080';
 
 const config: ExpoConfig = {
   name: 'Cuckoo',
@@ -22,6 +23,7 @@ const config: ExpoConfig = {
     },
     predictiveBackGestureEnabled: false,
   },
+  web: { bundler: 'metro', output: 'single', favicon: './assets/favicon.png' },
   plugins: ['expo-router', 'expo-secure-store'],
   extra: { hubUrl },
 };

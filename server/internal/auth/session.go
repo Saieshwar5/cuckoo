@@ -56,12 +56,24 @@ func (a *DevOrSession) Authenticate(r *http.Request) (principal.Principal, error
 	return a.session.Authenticate(r)
 }
 
-// bearerToken reads an Authorization: Bearer header.
+// bearerToken reads an Authorization: Bearer header, or, for a WebSocket
+// opened from a browser, the token offered as a subprotocol.
+//
+// Browsers cannot set headers on a WebSocket. The one header they do let a
+// page fill is the subprotocol list, so the web app offers
+// "cuckoo, <session token>" and the hub answers "cuckoo". The token never
+// appears in a URL, where it would be logged and cached.
 func bearerToken(r *http.Request) (string, bool) {
 	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
-	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return "", false
+	if ok && strings.EqualFold(scheme, "Bearer") {
+		token = strings.TrimSpace(token)
+		return token, token != ""
 	}
-	token = strings.TrimSpace(token)
-	return token, token != ""
+	for _, p := range strings.Split(r.Header.Get("Sec-WebSocket-Protocol"), ",") {
+		p = strings.TrimSpace(p)
+		if strings.HasPrefix(p, domain.PrefixSessionToken+"_") {
+			return p, true
+		}
+	}
+	return "", false
 }
