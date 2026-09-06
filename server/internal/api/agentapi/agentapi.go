@@ -12,6 +12,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
+	"github.com/Saieshwar5/cuckoo/server/internal/media"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 )
 
@@ -22,14 +23,15 @@ type Handler struct {
 	conversations *conversations.Service
 	hub           *realtime.Hub
 	publisher     realtime.Publisher
+	media         *media.Service
 }
 
 // New builds the agent API handler.
 func New(agentService *agents.Service, deliveryService *delivery.Service, conversationService *conversations.Service,
-	hub *realtime.Hub, publisher realtime.Publisher) *Handler {
+	hub *realtime.Hub, publisher realtime.Publisher, mediaService *media.Service) *Handler {
 	return &Handler{
 		agents: agentService, delivery: deliveryService, conversations: conversationService,
-		hub: hub, publisher: publisher,
+		hub: hub, publisher: publisher, media: mediaService,
 	}
 }
 
@@ -48,6 +50,11 @@ func (h *Handler) Routes() chi.Router {
 		r.Post("/messages", h.sendMessage)
 		r.Post("/typing", h.typing)
 	})
+
+	// Files: uploaded before the message that carries them, and read back
+	// from the messages this agent can see.
+	r.Post("/media", h.uploadMedia)
+	r.Get("/media/{id}", h.getMedia)
 
 	r.Route("/messages/{id}", func(r chi.Router) {
 		r.Post("/append", h.appendStream)

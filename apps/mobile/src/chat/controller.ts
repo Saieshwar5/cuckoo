@@ -1,5 +1,6 @@
 import { newIdempotencyKey, type Api } from '../api/client';
-import type { Message } from '../api/types';
+import type { Attachment, Message } from '../api/types';
+import type { PickedFile } from '../media/pick';
 import type { Realtime } from '../realtime/realtime';
 import {
   addLocal,
@@ -33,6 +34,8 @@ export interface ChatSnapshot {
 // offered, either quoting an earlier message.
 export interface SendRequest {
   text?: string;
+  // Files picked on this device, not yet on the hub.
+  files?: PickedFile[];
   action?: { button_id: string; source_message_id: string; label: string };
   replyTo?: Message;
 }
@@ -58,6 +61,9 @@ export class ChatController {
   private unsubscribe: (() => void) | null = null;
   private typingTimer: ReturnType<typeof setTimeout> | null = null;
   private pending = new Map<string, SendRequest>();
+  // Files a send has already uploaded, kept per send so a retry after a
+  // failed message does not upload the same photo twice.
+  private uploaded = new Map<string, string[]>();
   private stopped = false;
 
   constructor(
@@ -153,7 +159,7 @@ export class ChatController {
             text: req.action.label,
             action: { button_id: req.action.button_id, source_message_id: req.action.source_message_id },
           }
-        : { text: req.text },
+        : { text: req.text, attachments: localAttachments(req.files) },
       reply_to: req.replyTo
         ? {
             id: req.replyTo.id,
@@ -182,10 +188,15 @@ export class ChatController {
 
   private async deliver(key: string, req: SendRequest): Promise<void> {
     try {
+      // The files go first and the message names them, so a send is one
+      // quick call at the end however slow the photos were.
+      const attachments = await this.upload(key, req.files);
+      if (this.stopped) return;
       const m = await this.api.sendMessage(
         this.conversationId,
         {
           text: req.action ? undefined : req.text,
+          attachments: attachments.length ? attachments : undefined,
           action: req.action
             ? { button_id: req.action.button_id, source_message_id: req.action.source_message_id }
             : undefined,
@@ -195,10 +206,29 @@ export class ChatController {
       );
       if (this.stopped) return;
       this.pending.delete(key);
+      this.uploaded.delete(key);
       this.set(confirmLocal(this.state, key, m));
     } catch {
       if (!this.stopped) this.set(failLocal(this.state, key));
     }
+  }
+
+  // upload puts this send's files on the hub and returns their ids. What
+  // it already uploaded is remembered: a retry finishes the send rather
+  // than starting the photos again.
+  private async upload(key: string, files: PickedFile[] | undefined): Promise<string[]> {
+    if (!files?.length) return [];
+    const done = this.uploaded.get(key) ?? [];
+    for (const file of files.slice(done.length)) {
+      const media = await this.api.uploadMedia({
+        uri: file.uri,
+        name: file.name,
+        mimeType: file.mimeType,
+      });
+      done.push(media.id);
+      this.uploaded.set(key, done);
+    }
+    return done;
   }
 
   private set(state: ChatState, extra: Partial<ChatSnapshot> = {}): void {
@@ -227,4 +257,21 @@ export class ChatController {
     this.snapshot = { ...this.snapshot, ...extra };
     for (const l of this.listeners) l();
   }
+}
+
+// localAttachments is what our own bubble shows while the files are still
+// going up: the pictures on this device, drawn from their own paths, with
+// no media id yet because the hub has not seen them.
+function localAttachments(files: PickedFile[] | undefined): Attachment[] | undefined {
+  if (!files?.length) return undefined;
+  return files.map((f) => ({
+    media_id: '',
+    kind: f.kind,
+    mime_type: f.mimeType,
+    byte_size: f.byteSize,
+    file_name: f.name,
+    width: f.width,
+    height: f.height,
+    local_uri: f.uri,
+  }));
 }

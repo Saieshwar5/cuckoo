@@ -5,16 +5,19 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import mimetypes
+import os
 import uuid
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, Self
 
 import httpx
 import websockets
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
-from .models import Conversation, Message, PairToken
+from .models import Attachment, Conversation, Message, PairToken
 
 log = logging.getLogger("cuckoo")
 
@@ -35,6 +38,10 @@ JoinHandler = Callable[[Conversation, PairToken | None], Awaitable[None]]
 # Rows of buttons: each button is (id, label) or (id, label, style), or a
 # dict with those keys.
 Buttons = list[list[tuple[str, str] | tuple[str, str, str] | dict[str, str]]]
+
+# What can be sent as an attachment: a path to a file, or something already
+# uploaded — an Attachment from a message, or a media id.
+Attachable = str | os.PathLike[str] | Attachment
 
 
 def _buttons_json(buttons: Buttons | None) -> list[list[dict[str, str]]] | None:
@@ -67,6 +74,20 @@ class ProtocolError(Exception):
         super().__init__(f"{code}: {message}")
         self.code = code
         self.message = message
+
+
+def _raise_for_status(response: httpx.Response) -> None:
+    """Turn a refusal into the hub's own error, so a caller sees
+    "file_too_large" rather than "422 Unprocessable Entity"."""
+    if response.status_code < 400:
+        return
+    try:
+        error = response.json()["error"]
+    except Exception:  # noqa: BLE001 - a hub that answered with prose
+        raise ProtocolError(
+            "http_error", f"{response.status_code}: {response.text[:200]}"
+        ) from None
+    raise ProtocolError(error.get("code", "error"), error.get("message", ""))
 
 
 class Agent:
@@ -218,7 +239,7 @@ class Agent:
 
         data = event.get("data") or {}
         conv = Conversation.from_wire(data["conversation"], data.get("participants") or [], self)
-        msg = Message.from_wire(data["message"], conv.id, event_id)
+        msg = Message.from_wire(data["message"], conv.id, event_id, self)
         assert self._handler is not None
         try:
             await self._handler(msg, conv)
@@ -245,20 +266,28 @@ class Agent:
     async def send(
         self,
         conversation_id: str,
-        text: str,
+        text: str = "",
         *,
+        attachments: list[Attachable] | None = None,
         buttons: Buttons | None = None,
         quick_replies: list[str] | None = None,
         reply_to: str | None = None,
         idempotency_key: str | None = None,
     ) -> Message:
-        """Say something in a conversation the agent is in."""
+        """Say something in a conversation the agent is in.
+
+        Anything in ``attachments`` that is a path is uploaded first, and the
+        message names what was uploaded. A message carrying files needs no
+        text; the text, if there is any, is their caption.
+        """
         if self._http is None:
             raise RuntimeError("send is only available while the agent is running")
         body: dict[str, Any] = {
             "text": text,
             "idempotency_key": idempotency_key or str(uuid.uuid4()),
         }
+        if media_ids := await self._upload_all(attachments):
+            body["attachments"] = media_ids
         if reply_to:
             body["reply_to"] = reply_to
         if wire := _buttons_json(buttons):
@@ -268,8 +297,58 @@ class Agent:
         response = await self._http.post(
             f"/v1/agent/conversations/{conversation_id}/messages", json=body
         )
-        response.raise_for_status()
-        return Message.from_wire(response.json()["message"], conversation_id)
+        _raise_for_status(response)
+        return Message.from_wire(response.json()["message"], conversation_id, agent=self)
+
+    # -- files ------------------------------------------------------------
+
+    async def upload(self, path: str | os.PathLike[str]) -> Attachment:
+        """Put a file on the hub, ready to be sent.
+
+        Sending is a separate step, so a slow upload does not hold a message
+        open. An upload nobody sends is removed after a day.
+        """
+        if self._http is None:
+            raise RuntimeError("upload is only available while the agent is running")
+        file = Path(path)
+        content_type = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
+        # Read off the event loop: a file on a disk blocks, and a backend
+        # answering other conversations should not stop while this one reads.
+        data = await asyncio.to_thread(file.read_bytes)
+        response = await self._http.post(
+            "/v1/agent/media",
+            files={"file": (file.name, data, content_type)},
+            timeout=None,
+        )
+        _raise_for_status(response)
+        return Attachment.from_wire(response.json()["media"], self)
+
+    async def download(self, media_id: str, *, thumbnail: bool = False) -> bytes:
+        """Fetch the bytes of a file on a message in one of this agent's
+        conversations."""
+        if self._http is None:
+            raise RuntimeError("download is only available while the agent is running")
+        response = await self._http.get(
+            f"/v1/agent/media/{media_id}",
+            params={"variant": "thumb"} if thumbnail else None,
+            timeout=None,
+        )
+        _raise_for_status(response)
+        return response.content
+
+    async def _upload_all(self, attachments: list[Attachable] | None) -> list[str]:
+        """Turn what a caller passed into media ids, uploading the paths."""
+        if not attachments:
+            return []
+        ids: list[str] = []
+        for item in attachments:
+            if isinstance(item, Attachment):
+                ids.append(item.media_id)
+            elif isinstance(item, str) and item.startswith("med_"):
+                ids.append(item)
+            else:
+                ids.append((await self.upload(item)).media_id)
+        return ids
 
     def stream(
         self,

@@ -1,19 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { ChatMessage } from '@/chat/store';
 import { t } from '@/i18n';
+import { formatBytes } from '@/media/format';
+import { MAX_FILES, pickDocuments, pickPhotos, takePhoto, type PickedFile } from '@/media/pick';
 import { inputReset, radius, sizes, spacing, type, useTheme } from '@/theme';
 
+import { ActionSheet } from '../ActionSheet';
 import { IconButton } from '../IconButton';
 
 interface Props {
   replyTo: ChatMessage | null;
   agentName: string;
   onCancelReply: () => void;
-  onSend: (text: string) => void;
+  onSend: (text: string, files: PickedFile[]) => void;
 }
 
 // Composer is the bar at the bottom: what is being quoted, the words, and
@@ -23,12 +26,21 @@ export function Composer({ replyTo, agentName, onCancelReply, onSend }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
-  const ready = text.trim().length > 0;
+  const [files, setFiles] = useState<PickedFile[]>([]);
+  const [picking, setPicking] = useState(false);
+  // A photo with nothing written under it is a message; an empty one is not.
+  const ready = text.trim().length > 0 || files.length > 0;
 
   const submit = () => {
     if (!ready) return;
-    onSend(text.trim());
+    onSend(text.trim(), files);
     setText('');
+    setFiles([]);
+  };
+
+  const add = async (pick: () => Promise<PickedFile[]>) => {
+    const picked = await pick();
+    if (picked.length) setFiles((current) => [...current, ...picked].slice(0, MAX_FILES));
   };
 
   return (
@@ -47,7 +59,51 @@ export function Composer({ replyTo, agentName, onCancelReply, onSend }: Props) {
           <IconButton icon="close" label={t('chat.reply.cancel')} onPress={onCancelReply} size={20} />
         </View>
       ) : null}
+      {files.length ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.picked}
+          style={styles.pickedRow}
+        >
+          {files.map((f, i) => (
+            <View key={`${f.uri}-${i}`} style={[styles.chip, { backgroundColor: colors.surface }]}>
+              {f.kind === 'image' ? (
+                <Image source={{ uri: f.uri }} style={styles.chipImage} accessibilityIgnoresInvertColors />
+              ) : (
+                <View style={[styles.chipImage, styles.chipIcon, { backgroundColor: colors.surfaceStrong }]}>
+                  <Ionicons name="document-text" size={18} color={colors.textSecondary} />
+                </View>
+              )}
+              <View style={styles.chipBody}>
+                <Text style={[styles.chipName, { color: colors.text }]} numberOfLines={1}>
+                  {f.name}
+                </Text>
+                {f.byteSize ? (
+                  <Text style={[styles.chipSize, { color: colors.textSecondary }]}>
+                    {formatBytes(f.byteSize)}
+                  </Text>
+                ) : null}
+              </View>
+              <IconButton
+                icon="close"
+                label={t('chat.attach.remove')}
+                size={18}
+                testID={`unattach-${i}`}
+                onPress={() => setFiles((current) => current.filter((_, j) => j !== i))}
+              />
+            </View>
+          ))}
+        </ScrollView>
+      ) : null}
       <View style={styles.row}>
+        <IconButton
+          icon="add-circle-outline"
+          label={t('chat.attach')}
+          size={26}
+          testID="attach"
+          onPress={() => setPicking(true)}
+        />
         <View style={[styles.pill, { backgroundColor: colors.surface }]}>
           <TextInput
             accessibilityLabel={t('chat.placeholder')}
@@ -85,6 +141,30 @@ export function Composer({ replyTo, agentName, onCancelReply, onSend }: Props) {
           <Ionicons name="send" size={20} color={ready ? colors.onAccent : colors.textSecondary} />
         </Pressable>
       </View>
+      <ActionSheet
+        visible={picking}
+        onClose={() => setPicking(false)}
+        actions={[
+          {
+            icon: 'images-outline',
+            label: t('chat.attach.photos'),
+            testID: 'attach-photos',
+            onPress: () => void add(pickPhotos),
+          },
+          {
+            icon: 'camera-outline',
+            label: t('chat.attach.camera'),
+            testID: 'attach-camera',
+            onPress: () => void add(takePhoto),
+          },
+          {
+            icon: 'document-outline',
+            label: t('chat.attach.file'),
+            testID: 'attach-file',
+            onPress: () => void add(pickDocuments),
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -103,7 +183,23 @@ const styles = StyleSheet.create({
   replyBody: { flex: 1, paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.sm },
   replyName: { ...type.label, marginBottom: 1 },
   replyText: type.secondary,
-  row: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  row: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.xs },
+  pickedRow: { flexGrow: 0, marginBottom: spacing.sm },
+  picked: { gap: spacing.sm, paddingHorizontal: 2 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.md,
+    padding: spacing.xs + 2,
+    paddingRight: spacing.xs,
+    maxWidth: 240,
+  },
+  chipImage: { width: 34, height: 34, borderRadius: radius.sm },
+  chipIcon: { alignItems: 'center', justifyContent: 'center' },
+  chipBody: { flexShrink: 1, gap: 1 },
+  chipName: { ...type.caption, fontWeight: '600' },
+  chipSize: type.caption,
   pill: {
     flex: 1,
     minHeight: sizes.control,

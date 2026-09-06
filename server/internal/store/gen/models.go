@@ -61,6 +61,22 @@ type Conversation struct {
 	CreatedAt time.Time
 }
 
+type Medium struct {
+	ID         uuid.UUID
+	OwnerKind  string
+	OwnerID    uuid.UUID
+	Kind       string
+	MimeType   string
+	ByteSize   int64
+	FileName   string
+	Width      int32
+	Height     int32
+	StorageKey string
+	ThumbKey   *string
+	MessageID  *uuid.UUID
+	CreatedAt  time.Time
+}
+
 type Message struct {
 	ID               uuid.UUID
 	ConversationID   uuid.UUID

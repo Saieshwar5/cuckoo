@@ -41,6 +41,10 @@ export interface Palette {
   // Avatar discs: shades of grey a name is mapped onto, and the initials on them.
   avatars: readonly string[];
   onAvatar: string;
+  // What is laid over a picture: while it uploads, and behind one opened
+  // full-screen. Dark in both themes, because a photograph is looked at
+  // against black whatever the rest of the app is doing.
+  scrim: string;
 }
 
 export const dark: Palette = {
@@ -73,6 +77,7 @@ export const dark: Palette = {
   statusUnreachable: '#FF5A50',
   avatars: ['#E8E8E8', '#C4C4C4', '#A0A0A0', '#7C7C7C', '#5A5A5A'],
   onAvatar: '#000000',
+  scrim: 'rgba(0, 0, 0, 0.55)',
 };
 
 export const light: Palette = {
@@ -105,6 +110,7 @@ export const light: Palette = {
   statusUnreachable: '#D0342C',
   avatars: ['#111111', '#3A3A3A', '#5C5C5C', '#7A7A7A', '#9A9A9A'],
   onAvatar: '#FFFFFF',
+  scrim: 'rgba(0, 0, 0, 0.55)',
 };
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;

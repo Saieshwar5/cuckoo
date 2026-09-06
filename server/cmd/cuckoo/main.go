@@ -26,10 +26,12 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/api/middleware"
 	"github.com/Saieshwar5/cuckoo/server/internal/apikeys"
 	"github.com/Saieshwar5/cuckoo/server/internal/auth"
+	"github.com/Saieshwar5/cuckoo/server/internal/blobs"
 	"github.com/Saieshwar5/cuckoo/server/internal/config"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/mail"
+	"github.com/Saieshwar5/cuckoo/server/internal/media"
 	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/ratelimit"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
@@ -103,6 +105,13 @@ func run() error {
 	pairingService := pairing.New(db, agentService, conversationService, userService, cfg.PublicURL)
 	apiKeyService := apikeys.New(db)
 
+	blobStore, err := blobs.NewDisk(cfg.MediaDir)
+	if err != nil {
+		return err
+	}
+	log.Info("media storage ready", "dir", blobStore.Root())
+	mediaService := media.New(db, blobStore, media.WithLimiter(limits), media.WithLogger(log))
+
 	router := api.NewRouter(api.Deps{
 		Logger:        log,
 		UserAuth:      userAuth,
@@ -115,6 +124,7 @@ func run() error {
 		Delivery:      deliveryService,
 		Pairing:       pairingService,
 		APIKeys:       apiKeyService,
+		Media:         mediaService,
 		Hub:           hub,
 		Bus:           bus,
 		CORSOrigins:   cfg.CORSOrigins,
@@ -132,7 +142,7 @@ func run() error {
 		Logger:        log,
 	})
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		worker.Run(ctx)
@@ -142,6 +152,11 @@ func run() error {
 	go func() {
 		defer wg.Done()
 		conversationService.RunStreamSweeper(ctx, 5*time.Second, log)
+	}()
+	// Files picked and never sent do not stay on the disk forever.
+	go func() {
+		defer wg.Done()
+		mediaService.RunSweeper(ctx, time.Hour, 24*time.Hour)
 	}()
 
 	err = serve(ctx, cfg, log, router)

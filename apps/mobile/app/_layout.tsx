@@ -53,6 +53,7 @@ function Routes() {
           <Stack.Screen name="agent" />
           <Stack.Screen name="scan" />
           <Stack.Screen name="api-keys" />
+          <Stack.Screen name="media/[id]" options={{ animation: 'fade' }} />
           <Stack.Screen name="p/[code]" />
         </Stack.Protected>
       </Stack>

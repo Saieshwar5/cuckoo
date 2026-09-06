@@ -111,6 +111,25 @@ func validateLabel(field, code, raw string) (string, error) {
 	return label, nil
 }
 
+// validateCaption checks the words on a message. Text is required on a
+// message that is only words, and optional on one carrying files: a photo
+// with nothing written under it is a message, and an empty bubble is not.
+func validateCaption(raw string, hasAttachments bool) (string, error) {
+	if hasAttachments && strings.TrimSpace(raw) == "" {
+		return "", nil
+	}
+	return validateText(raw)
+}
+
+// previewOfBody is the short form of a message for a quote or a chat-list
+// row: its words, or what it carried when there are none.
+func previewOfBody(b Body) string {
+	if strings.TrimSpace(b.Text) == "" {
+		return previewOfAttachments(b.Attachments)
+	}
+	return previewOf(b.Text)
+}
+
 // previewOf is the short form of a message's text for a quote.
 func previewOf(text string) string {
 	text = strings.Join(strings.Fields(text), " ")

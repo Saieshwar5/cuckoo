@@ -190,5 +190,14 @@
   "keys.unused": "Never used",
   "keys.empty.title": "No API keys",
   "keys.empty.subtitle": "Create one to run agents from your own systems.",
-  "keys.hint": "Use it as a bearer token on /v1/mgmt, or with the Python SDK and the cuckoo command."
+  "keys.hint": "Use it as a bearer token on /v1/mgmt, or with the Python SDK and the cuckoo command.",
+  "chat.attach": "Attach",
+  "chat.attach.photos": "Photos and videos",
+  "chat.attach.camera": "Camera",
+  "chat.attach.file": "Document",
+  "chat.attach.remove": "Remove",
+  "chat.attach.toomany": "Up to {max} files in one message.",
+  "chat.file.open": "Tap to open",
+  "chat.file.save": "Save",
+  "chat.upload.failed": "Could not send that file."
 }

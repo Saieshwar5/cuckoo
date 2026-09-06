@@ -124,12 +124,13 @@ type Sender struct {
 
 // Body is the content of a message, stored as one JSON object.
 //
-// Attachments will be further fields of this same object, which is why it is
-// a document and not a column. Buttons and quick replies are what an agent
+// Attachments are further fields of this same object, which is why it is a
+// document and not a column. Buttons and quick replies are what an agent
 // offers; Action is what a person's tap produced; SelectedButtonID records
 // on the offering message which button was taken.
 type Body struct {
 	Text             string       `json:"text,omitempty"`
+	Attachments      []Attachment `json:"attachments,omitempty"`
 	Buttons          [][]Button   `json:"buttons,omitempty"`
 	QuickReplies     []QuickReply `json:"quick_replies,omitempty"`
 	Action           *Action      `json:"action,omitempty"`
@@ -201,7 +202,10 @@ type Message struct {
 // message back instead of a duplicate. Buttons and QuickReplies are for
 // agents; Action is for a person tapping a button, instead of text.
 type SendInput struct {
-	Text           string
+	Text string
+	// Attachments are files already uploaded by this sender, in the order
+	// they should appear.
+	Attachments    []uuid.UUID
 	IdempotencyKey string
 	ReplyTo        *uuid.UUID
 	Buttons        [][]Button
