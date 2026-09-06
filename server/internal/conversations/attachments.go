@@ -37,6 +37,11 @@ type Attachment struct {
 	Height int32 `json:"height,omitempty"`
 	// HasThumbnail says a small copy exists to draw in the bubble.
 	HasThumbnail bool `json:"has_thumbnail,omitempty"`
+	// How long a recording or video runs, and its loudness over time. Both
+	// are here rather than fetched, because they are what the bubble is
+	// drawn from before a single byte of audio is asked for.
+	DurationMS int32   `json:"duration_ms,omitempty"`
+	Waveform   []int32 `json:"waveform,omitempty"`
 }
 
 // resolveAttachments turns the ids a sender named into what the message
@@ -93,6 +98,8 @@ func (s *Service) resolveAttachments(ctx context.Context, sender Sender, ids []u
 			Width:        row.Width,
 			Height:       row.Height,
 			HasThumbnail: row.ThumbKey != nil,
+			DurationMS:   row.DurationMs,
+			Waveform:     row.Waveform,
 		})
 	}
 	return out, nil

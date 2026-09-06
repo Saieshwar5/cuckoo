@@ -77,9 +77,9 @@ func (q *Queries) ClaimMedia(ctx context.Context, arg ClaimMediaParams) (int64, 
 
 const createMedia = `-- name: CreateMedia :one
 INSERT INTO media (id, owner_kind, owner_id, kind, mime_type, byte_size, file_name,
-                   width, height, storage_key, thumb_key)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, owner_kind, owner_id, kind, mime_type, byte_size, file_name, width, height, storage_key, thumb_key, message_id, created_at
+                   width, height, storage_key, thumb_key, duration_ms, waveform)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING id, owner_kind, owner_id, kind, mime_type, byte_size, file_name, width, height, storage_key, thumb_key, message_id, created_at, duration_ms, waveform
 `
 
 type CreateMediaParams struct {
@@ -94,6 +94,8 @@ type CreateMediaParams struct {
 	Height     int32
 	StorageKey string
 	ThumbKey   *string
+	DurationMs int32
+	Waveform   []int32
 }
 
 func (q *Queries) CreateMedia(ctx context.Context, arg CreateMediaParams) (Medium, error) {
@@ -109,6 +111,8 @@ func (q *Queries) CreateMedia(ctx context.Context, arg CreateMediaParams) (Mediu
 		arg.Height,
 		arg.StorageKey,
 		arg.ThumbKey,
+		arg.DurationMs,
+		arg.Waveform,
 	)
 	var i Medium
 	err := row.Scan(
@@ -125,6 +129,8 @@ func (q *Queries) CreateMedia(ctx context.Context, arg CreateMediaParams) (Mediu
 		&i.ThumbKey,
 		&i.MessageID,
 		&i.CreatedAt,
+		&i.DurationMs,
+		&i.Waveform,
 	)
 	return i, err
 }
@@ -163,7 +169,7 @@ func (q *Queries) DeleteUnclaimedMedia(ctx context.Context, before time.Time) ([
 }
 
 const getMedia = `-- name: GetMedia :one
-SELECT id, owner_kind, owner_id, kind, mime_type, byte_size, file_name, width, height, storage_key, thumb_key, message_id, created_at FROM media WHERE id = $1
+SELECT id, owner_kind, owner_id, kind, mime_type, byte_size, file_name, width, height, storage_key, thumb_key, message_id, created_at, duration_ms, waveform FROM media WHERE id = $1
 `
 
 func (q *Queries) GetMedia(ctx context.Context, id uuid.UUID) (Medium, error) {
@@ -183,12 +189,14 @@ func (q *Queries) GetMedia(ctx context.Context, id uuid.UUID) (Medium, error) {
 		&i.ThumbKey,
 		&i.MessageID,
 		&i.CreatedAt,
+		&i.DurationMs,
+		&i.Waveform,
 	)
 	return i, err
 }
 
 const listMediaByIDs = `-- name: ListMediaByIDs :many
-SELECT id, owner_kind, owner_id, kind, mime_type, byte_size, file_name, width, height, storage_key, thumb_key, message_id, created_at FROM media WHERE id = ANY($1::uuid[])
+SELECT id, owner_kind, owner_id, kind, mime_type, byte_size, file_name, width, height, storage_key, thumb_key, message_id, created_at, duration_ms, waveform FROM media WHERE id = ANY($1::uuid[])
 `
 
 // The files a send is claiming, read in one query so the order the caller
@@ -216,6 +224,8 @@ func (q *Queries) ListMediaByIDs(ctx context.Context, ids []uuid.UUID) ([]Medium
 			&i.ThumbKey,
 			&i.MessageID,
 			&i.CreatedAt,
+			&i.DurationMs,
+			&i.Waveform,
 		); err != nil {
 			return nil, err
 		}

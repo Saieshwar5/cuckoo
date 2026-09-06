@@ -33,14 +33,16 @@ type bodyResponse struct {
 // /media/{media_id}; the size and shape are here so the bubble is drawn
 // correctly before they do.
 type attachmentResponse struct {
-	MediaID      string `json:"media_id"`
-	Kind         string `json:"kind"`
-	MimeType     string `json:"mime_type"`
-	ByteSize     int64  `json:"byte_size"`
-	FileName     string `json:"file_name"`
-	Width        int32  `json:"width,omitempty"`
-	Height       int32  `json:"height,omitempty"`
-	HasThumbnail bool   `json:"has_thumbnail,omitempty"`
+	MediaID      string  `json:"media_id"`
+	Kind         string  `json:"kind"`
+	MimeType     string  `json:"mime_type"`
+	ByteSize     int64   `json:"byte_size"`
+	FileName     string  `json:"file_name"`
+	Width        int32   `json:"width,omitempty"`
+	Height       int32   `json:"height,omitempty"`
+	HasThumbnail bool    `json:"has_thumbnail,omitempty"`
+	DurationMS   int32   `json:"duration_ms,omitempty"`
+	Waveform     []int32 `json:"waveform,omitempty"`
 }
 
 type buttonResponse struct {
@@ -77,6 +79,8 @@ func newBodyResponse(b conversations.Body) bodyResponse {
 			Width:        a.Width,
 			Height:       a.Height,
 			HasThumbnail: a.HasThumbnail,
+			DurationMS:   a.DurationMS,
+			Waveform:     a.Waveform,
 		})
 	}
 	for _, row := range b.Buttons {

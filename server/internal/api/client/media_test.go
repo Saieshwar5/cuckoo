@@ -28,14 +28,16 @@ type mediaJSON struct {
 // upload, under media_id, because in a body it names a file rather than
 // being one.
 type attachmentJSON struct {
-	MediaID      string `json:"media_id"`
-	Kind         string `json:"kind"`
-	MimeType     string `json:"mime_type"`
-	ByteSize     int64  `json:"byte_size"`
-	FileName     string `json:"file_name"`
-	Width        int32  `json:"width"`
-	Height       int32  `json:"height"`
-	HasThumbnail bool   `json:"has_thumbnail"`
+	MediaID      string  `json:"media_id"`
+	Kind         string  `json:"kind"`
+	MimeType     string  `json:"mime_type"`
+	ByteSize     int64   `json:"byte_size"`
+	FileName     string  `json:"file_name"`
+	Width        int32   `json:"width"`
+	Height       int32   `json:"height"`
+	HasThumbnail bool    `json:"has_thumbnail"`
+	DurationMS   int32   `json:"duration_ms"`
+	Waveform     []int32 `json:"waveform"`
 }
 
 type attachedMessageJSON struct {
@@ -263,4 +265,55 @@ func TestUploadFromTheCommandLineShape(t *testing.T) {
 
 	me.UploadRaw("/v1/client/media?name=nothing.txt", nil).
 		ExpectError(http.StatusUnprocessableEntity, "empty_file")
+}
+
+// A voice note, through the protocol: recorded on a device, which is the
+// only thing that knows how long it is and what it looked like.
+func TestSendAVoiceNote(t *testing.T) {
+	f := setupChat(t)
+	me := f.srv.AsUser(t, f.owner)
+
+	var env struct {
+		Media mediaJSON `json:"media"`
+	}
+	me.UploadRaw("/v1/client/media?name=note.m4a&duration_ms=8200&waveform=2,40,90,15&kind=audio",
+		[]byte(recordingBytes())).ExpectStatus(http.StatusCreated).Decode(&env)
+	if env.Media.Kind != "audio" {
+		t.Fatalf("uploaded = %+v, want a recording", env.Media)
+	}
+
+	var sent struct {
+		Message attachedMessageJSON `json:"message"`
+	}
+	me.Post("/v1/client/conversations/"+f.dmID+"/messages", map[string]any{
+		"attachments": []string{env.Media.ID},
+	}).ExpectStatus(http.StatusCreated).Decode(&sent)
+
+	att := sent.Message.Body.Attachments
+	if len(att) != 1 {
+		t.Fatalf("message = %+v", sent.Message.Body)
+	}
+	// The bubble is drawn from the message alone: no second call, and no
+	// audio decoded anywhere.
+	if att[0].DurationMS != 8200 {
+		t.Errorf("duration = %d, want 8200", att[0].DurationMS)
+	}
+	if len(att[0].Waveform) != 4 || att[0].Waveform[2] != 90 {
+		t.Errorf("waveform = %v", att[0].Waveform)
+	}
+}
+
+func TestUploadRefusesNonsenseAboutARecording(t *testing.T) {
+	f := setupChat(t)
+	me := f.srv.AsUser(t, f.owner)
+
+	me.UploadRaw("/v1/client/media?name=note.m4a&duration_ms=99999999", []byte(recordingBytes())).
+		ExpectError(http.StatusUnprocessableEntity, "invalid_duration")
+	me.UploadRaw("/v1/client/media?name=note.m4a&waveform=0,900", []byte(recordingBytes())).
+		ExpectError(http.StatusUnprocessableEntity, "invalid_waveform")
+}
+
+// recordingBytes is the header of a recording from a phone.
+func recordingBytes() string {
+	return "\x00\x00\x00\x20ftypM4A \x00\x00\x00\x00M4A mp42isom" + strings.Repeat("\x00", 512)
 }

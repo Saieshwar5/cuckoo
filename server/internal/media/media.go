@@ -13,8 +13,11 @@
 package media
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -22,6 +25,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/store/gen"
 )
 
@@ -60,6 +64,21 @@ const (
 	// fileNameMaxLen matches the column.
 	fileNameMaxLen = 255
 
+	// maxDurationMS is the longest a recording may say it is: ten minutes.
+	// A limit in bytes alone would allow an hour of speech, which is not a
+	// message, and the number is the sender's claim, so it is bounded like
+	// any other thing a caller says.
+	maxDurationMS = 10 * 60 * 1000
+
+	// waveformMax is how many loudness values a recording may carry. Fifty
+	// or so bars is what fits across a bubble; more would be detail nobody
+	// can see, stored in every copy of the message.
+	waveformMax = 64
+
+	// waveformPeak is the top of the scale. The values are a shape, not a
+	// measurement, so they are plain small numbers rather than decibels.
+	waveformPeak = 100
+
 	// thumbMaxPixels is the long side of the small copy of a picture: big
 	// enough for a bubble on a dense screen, small enough to arrive at once.
 	thumbMaxPixels = 480
@@ -91,11 +110,70 @@ type File struct {
 	Height int32
 	// HasThumbnail is true when a small copy was made.
 	HasThumbnail bool
-	CreatedAt    time.Time
+	// How long a recording or a video runs, in milliseconds, and its shape
+	// over time. Both come from whoever recorded it; see the migration.
+	DurationMS int32
+	Waveform   []int32
+	CreatedAt  time.Time
+}
+
+// Meta is what a caller can tell the hub about a file that the hub cannot
+// see for itself.
+type Meta struct {
+	DurationMS int32
+	Waveform   []int32
+	// Audio says a container that could hold either is a recording. See
+	// resolveKind.
+	Audio bool
+}
+
+// MetaFromQuery reads what an upload declared about itself.
+//
+//	?duration_ms=8200&waveform=3,9,40,88,12&kind=audio
+func MetaFromQuery(q url.Values) (Meta, error) {
+	var meta Meta
+	if raw := q.Get("duration_ms"); raw != "" {
+		ms, err := strconv.Atoi(raw)
+		if err != nil || ms < 0 || ms > maxDurationMS {
+			return Meta{}, domain.InvalidField("duration_ms", "invalid_duration",
+				fmt.Sprintf("Duration must be a whole number of milliseconds, at most %d.", maxDurationMS))
+		}
+		meta.DurationMS = int32(ms) // #nosec G109 -- bounded by maxDurationMS above
+	}
+	if raw := q.Get("waveform"); raw != "" {
+		parts := strings.Split(raw, ",")
+		if len(parts) > waveformMax {
+			return Meta{}, domain.InvalidField("waveform", "invalid_waveform",
+				fmt.Sprintf("A waveform is at most %d values.", waveformMax))
+		}
+		meta.Waveform = make([]int32, 0, len(parts))
+		for _, part := range parts {
+			n, err := strconv.Atoi(strings.TrimSpace(part))
+			if err != nil || n < 0 || n > waveformPeak {
+				return Meta{}, domain.InvalidField("waveform", "invalid_waveform",
+					fmt.Sprintf("A waveform is whole numbers from 0 to %d, separated by commas.", waveformPeak))
+			}
+			meta.Waveform = append(meta.Waveform, int32(n)) // #nosec G109 -- bounded by waveformPeak above
+		}
+	}
+	meta.Audio = q.Get("kind") == KindAudio
+	return meta, nil
+}
+
+// forKind drops what does not apply. A picture has no duration, and a
+// document has no shape; carrying a number a caller sent anyway would put
+// it in front of people in a bubble.
+func (m Meta) forKind(kind string) Meta {
+	if kind == KindAudio || kind == KindVideo {
+		return m
+	}
+	return Meta{}
 }
 
 func fromRow(r gen.Medium) File {
 	return File{
+		DurationMS:   r.DurationMs,
+		Waveform:     r.Waveform,
 		ID:           r.ID,
 		OwnerKind:    r.OwnerKind,
 		OwnerID:      r.OwnerID,
@@ -114,6 +192,22 @@ func fromRow(r gen.Medium) File {
 type Owner struct {
 	Kind string
 	ID   uuid.UUID
+}
+
+// resolveKind decides what a file is.
+//
+// The bytes decide, with one exception: WebM, Ogg and MP4 are containers
+// that hold either sound or pictures, and telling which without parsing
+// them means decoding a stranger's media. So a caller may say "this is a
+// recording" about one of those, and nothing else — a claim can only turn
+// a video into audio, never a document into a picture. The cost of a lie
+// is a waveform drawn over a video.
+func resolveKind(mimeType string, meta Meta) string {
+	kind := kindOf(mimeType)
+	if meta.Audio && kind == KindVideo {
+		return KindAudio
+	}
+	return kind
 }
 
 // kindOf classifies sniffed bytes. http.DetectContentType knows the common

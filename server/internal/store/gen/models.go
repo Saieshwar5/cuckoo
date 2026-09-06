@@ -75,6 +75,8 @@ type Medium struct {
 	ThumbKey   *string
 	MessageID  *uuid.UUID
 	CreatedAt  time.Time
+	DurationMs int32
+	Waveform   []int32
 }
 
 type Message struct {

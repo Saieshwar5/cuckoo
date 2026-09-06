@@ -65,6 +65,11 @@ class Attachment:
     width: int = 0
     height: int = 0
     has_thumbnail: bool = False
+    # For a recording or a video: how long it runs, and its loudness over
+    # time from 0 to 100. Both come from the device that recorded it — the
+    # hub does not decode audio to check, and neither should you.
+    duration_ms: int = 0
+    waveform: tuple[int, ...] = ()
     _agent: Agent | None = field(default=None, repr=False, compare=False)
 
     @property
@@ -74,6 +79,11 @@ class Attachment:
     @property
     def is_audio(self) -> bool:
         return self.kind == "audio"
+
+    @property
+    def seconds(self) -> float:
+        """How long a recording or video runs. Zero for anything else."""
+        return self.duration_ms / 1000
 
     @classmethod
     def from_wire(cls, data: dict[str, Any], agent: Agent | None = None) -> Attachment:
@@ -87,6 +97,8 @@ class Attachment:
             width=int(data.get("width") or 0),
             height=int(data.get("height") or 0),
             has_thumbnail=bool(data.get("has_thumbnail")),
+            duration_ms=int(data.get("duration_ms") or 0),
+            waveform=tuple(int(n) for n in (data.get("waveform") or ())),
             _agent=agent,
         )
 
