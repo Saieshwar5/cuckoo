@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 
 import { createApi, type Api } from '../api/client';
 import type { Verified } from '../api/types';
+import { forgetEverything } from '../cache/CacheProvider';
 import { hubUrl } from '../config';
 import { clearSession, loadSession, saveSession, type StoredSession } from './store';
 
@@ -28,10 +29,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [stored, setStored] = useState<StoredSession | null>(null);
   const token = stored?.token ?? null;
 
+  // Signing out, or being signed out, leaves nothing behind: not the
+  // credential, and not the conversations remembered under it. A shared
+  // phone should not carry someone else's chats.
   const forget = useCallback(async () => {
     setStored(null);
     setStatus('signedOut');
-    await clearSession();
+    await Promise.all([clearSession(), forgetEverything()]);
   }, []);
 
   const api = useMemo(

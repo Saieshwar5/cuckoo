@@ -1,5 +1,6 @@
 import type { Api, CreateAgentInput, SetBindingInput, UpdateAgentInput } from '../api/client';
 import type { Agent, Binding, Contact, PairAccepted } from '../api/types';
+import { keys, MemoryCache, type Cache } from '../cache/cache';
 import type { Realtime } from '../realtime/realtime';
 import {
   applyFrame,
@@ -31,11 +32,17 @@ export class AgentsController {
   private listeners = new Set<() => void>();
   private unsubscribe: (() => void) | null = null;
   private stopped = false;
+  private readonly cache: Cache;
+  private readonly cacheKey: string;
 
   constructor(
     private readonly api: Api,
     private readonly realtime: Realtime,
-  ) {}
+    remember: { cache: Cache; userId: string } = { cache: new MemoryCache(), userId: '' },
+  ) {
+    this.cache = remember.cache;
+    this.cacheKey = keys.agents(remember.userId);
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -46,7 +53,7 @@ export class AgentsController {
 
   start(): void {
     this.stopped = false;
-    void this.refresh();
+    void this.recall().then(() => this.refresh());
     this.unsubscribe = this.realtime.subscribe({
       onFrame: (frame) => {
         const { state, stale } = applyFrame(this.state, frame);
@@ -74,6 +81,13 @@ export class AgentsController {
       if (!this.stopped) this.patch({ error, loading: false });
     }
   };
+
+  // recall shows the agents as they were last time, before the hub is asked.
+  private async recall(): Promise<void> {
+    const saved = await this.cache.get<{ agents: Agent[]; contacts: Contact[] }>(this.cacheKey);
+    if (this.stopped || !saved || this.state.agents.length || this.state.contacts.length) return;
+    this.set(setContacts(setAgents(this.state, saved.agents), saved.contacts), { loading: false });
+  }
 
   // accept takes in the agent behind a scanned code. The list of contacts
   // is reloaded rather than guessed at: the hub's row has the owner's name.
@@ -134,6 +148,7 @@ export class AgentsController {
   private set(state: AgentsState, extra: Partial<AgentsSnapshot> = {}): void {
     this.state = state;
     this.patch({ agents: state.agents, contacts: state.contacts, ...extra });
+    void this.cache.set(this.cacheKey, { agents: state.agents, contacts: state.contacts });
   }
 
   private patch(extra: Partial<AgentsSnapshot>): void {

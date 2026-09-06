@@ -1,6 +1,8 @@
 import { newIdempotencyKey, type Api } from '../api/client';
 import type { Attachment, Message } from '../api/types';
+import { keys, MemoryCache, MESSAGES_KEPT, type Cache } from '../cache/cache';
 import type { PickedFile } from '../media/pick';
+import { Outbox, type OutboxEvent, type OutboxItem } from '../outbox/outbox';
 import type { Realtime } from '../realtime/realtime';
 import {
   addLocal,
@@ -42,9 +44,30 @@ export interface SendRequest {
 
 const PAGE = 50;
 
+// How long after the last change a chat's messages are written down. A
+// stream delivers a piece of text many times a second; writing five
+// hundred messages on each would be most of what the phone did.
+const WRITE_DELAY_MS = 400;
+
+// What a chat needs from the rest of the session to remember and to send:
+// where to remember, whose it is, and the queue sends go through.
+export interface ChatDeps {
+  cache: Cache;
+  userId: string;
+  outbox: Outbox;
+}
+
+// A remembered chat: the messages the hub gave us and where older history
+// continues. Our own unsent messages are not here; the outbox has those.
+interface Remembered {
+  messages: Message[];
+  nextBefore: string | null;
+}
+
 // ChatController is one open conversation as a thing outside React: its
-// history loaded from the hub, kept live by the session's connection, our
-// own sends shown before the hub answers and retried with the same key.
+// history remembered from last time and loaded from the hub, kept live by
+// the session's connection, our own sends shown at once and carried by the
+// outbox until the hub has them.
 export class ChatController {
   private state: ChatState = empty;
   private snapshot: ChatSnapshot = {
@@ -59,12 +82,13 @@ export class ChatController {
   };
   private listeners = new Set<() => void>();
   private unsubscribe: (() => void) | null = null;
+  private unsubscribeOutbox: (() => void) | null = null;
   private typingTimer: ReturnType<typeof setTimeout> | null = null;
-  private pending = new Map<string, SendRequest>();
-  // Files a send has already uploaded, kept per send so a retry after a
-  // failed message does not upload the same photo twice.
-  private uploaded = new Map<string, string[]>();
+  private writeTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
+  private readonly cache: Cache;
+  private readonly cacheKey: string;
+  private readonly outbox: Outbox;
 
   constructor(
     private readonly api: Api,
@@ -72,7 +96,16 @@ export class ChatController {
     private readonly conversationId: string,
     private readonly userId: string,
     private readonly now: () => number = Date.now,
-  ) {}
+    deps?: ChatDeps,
+  ) {
+    // Without a session's cache and outbox — a test of something else —
+    // the chat remembers nothing and sends through a queue of its own,
+    // which behaves as sending always did.
+    this.cache = deps?.cache ?? new MemoryCache();
+    this.cacheKey = keys.messages(deps?.userId ?? userId, conversationId);
+    this.outbox = deps?.outbox ?? new Outbox(api, this.cache, realtime, userId);
+    if (!deps) this.outbox.start();
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -84,7 +117,8 @@ export class ChatController {
   start(): void {
     this.stopped = false;
     this.patch({ connected: this.realtime.connected });
-    void this.load();
+    void this.recall().then(() => this.load());
+    this.unsubscribeOutbox = this.outbox.subscribe((e) => this.onOutbox(e));
     this.unsubscribe = this.realtime.subscribe({
       onFrame: (frame) => this.set(applyFrame(this.state, frame, this.conversationId)),
       onOpen: (reconnect) => {
@@ -99,14 +133,44 @@ export class ChatController {
     this.stopped = true;
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.unsubscribeOutbox?.();
+    this.unsubscribeOutbox = null;
     if (this.typingTimer) clearTimeout(this.typingTimer);
+    if (this.writeTimer) {
+      clearTimeout(this.writeTimer);
+      this.writeTimer = null;
+      this.remember();
+    }
+  }
+
+  // recall puts the chat on screen as it was last time — the hub's
+  // messages, then our own that never left — before the hub is asked.
+  private async recall(): Promise<void> {
+    const saved = await this.cache.get<Remembered>(this.cacheKey);
+    await this.outbox.ready();
+    if (this.stopped) return;
+    let state = this.state;
+    if (saved?.messages.length && !state.messages.length) {
+      state = setPage(state, { messages: saved.messages, next_before: saved.nextBefore, next_after: null });
+    }
+    for (const item of this.outbox.pending(this.conversationId)) {
+      if (!state.messages.some((m) => m.localKey === item.key)) {
+        state = addLocal(state, this.localMessage(item));
+      }
+    }
+    if (state !== this.state) this.set(state, { loading: false });
   }
 
   load = async (): Promise<void> => {
     try {
       const page = await this.api.listMessages(this.conversationId, { limit: PAGE });
       if (this.stopped) return;
-      this.set(setPage(this.state, page), { error: null, loading: false });
+      // The hub's page replaces what was remembered; what we have not sent
+      // yet is ours and stays.
+      const unsent = this.state.messages.filter((m) => m.localKey);
+      let state = setPage(this.state, page);
+      for (const m of unsent.reverse()) state = addLocal(state, m);
+      this.set(state, { error: null, loading: false });
     } catch (error) {
       if (!this.stopped) this.patch({ error, loading: false });
     }
@@ -145,98 +209,98 @@ export class ChatController {
     }
   }
 
-  // send shows the message at once and tells the hub. A failure leaves it
-  // on screen, marked, for retry.
+  // send shows the message at once and hands it to the outbox, which
+  // carries it to the hub now or whenever the hub can next be reached.
   send = async (req: SendRequest): Promise<void> => {
     const key = newIdempotencyKey();
-    const local: ChatMessage = {
-      id: `local-${key}`,
-      localKey: key,
-      conversation_id: this.conversationId,
-      sender: { kind: 'user', id: this.userId },
-      body: req.action
-        ? {
-            text: req.action.label,
-            action: { button_id: req.action.button_id, source_message_id: req.action.source_message_id },
-          }
-        : { text: req.text, attachments: localAttachments(req.files) },
-      reply_to: req.replyTo
-        ? {
-            id: req.replyTo.id,
-            sender_kind: req.replyTo.sender.kind,
-            text_preview: (req.replyTo.body.text ?? '').slice(0, 120),
-          }
-        : null,
-      status: 'complete',
-      truncated: false,
-      delivery_status: 'pending',
-      created_at: new Date(this.now()).toISOString(),
+    const item: OutboxItem = {
+      key,
+      conversationId: this.conversationId,
+      request: {
+        text: req.text,
+        files: req.files,
+        action: req.action,
+        replyTo: req.replyTo
+          ? {
+              id: req.replyTo.id,
+              sender_kind: req.replyTo.sender.kind,
+              text_preview: (req.replyTo.body.text ?? '').slice(0, 120),
+            }
+          : undefined,
+      },
+      uploaded: [],
+      state: 'queued',
+      createdAt: new Date(this.now()).toISOString(),
     };
-    this.pending.set(key, req);
-    this.set(addLocal(this.state, local));
-    await this.deliver(key, req);
+    this.set(addLocal(this.state, this.localMessage(item)));
+    await this.outbox.enqueue(key, this.conversationId, item.request);
   };
 
-  // retry sends a failed message again, with the same key, so the hub
-  // creates it once however many times this is pressed.
+  // retry puts a message the hub refused back in the queue, with the same
+  // key, so the hub creates it once however many times this is pressed.
   retry = async (key: string): Promise<void> => {
-    const req = this.pending.get(key);
-    if (!req) return;
     this.set(retryLocal(this.state, key));
-    await this.deliver(key, req);
+    await this.outbox.retry(key);
   };
 
-  private async deliver(key: string, req: SendRequest): Promise<void> {
-    try {
-      // The files go first and the message names them, so a send is one
-      // quick call at the end however slow the photos were.
-      const attachments = await this.upload(key, req.files);
-      if (this.stopped) return;
-      const m = await this.api.sendMessage(
-        this.conversationId,
-        {
-          text: req.action ? undefined : req.text,
-          attachments: attachments.length ? attachments : undefined,
-          action: req.action
-            ? { button_id: req.action.button_id, source_message_id: req.action.source_message_id }
-            : undefined,
-          reply_to: req.replyTo?.id,
-        },
-        key,
-      );
-      if (this.stopped) return;
-      this.pending.delete(key);
-      this.uploaded.delete(key);
-      this.set(confirmLocal(this.state, key, m));
-    } catch {
-      if (!this.stopped) this.set(failLocal(this.state, key));
+  // onOutbox is the queue reporting on one of our sends: gone, or refused.
+  // A send the hub could not be reached for reports nothing; it stays
+  // pending, which is the truth of it.
+  private onOutbox(e: OutboxEvent): void {
+    if (e.item.conversationId !== this.conversationId || this.stopped) return;
+    switch (e.type) {
+      case 'sent':
+        this.set(confirmLocal(this.state, e.item.key, e.message));
+        break;
+      case 'failed':
+        this.set(failLocal(this.state, e.item.key));
+        break;
+      case 'queued':
+        break;
     }
   }
 
-  // upload puts this send's files on the hub and returns their ids. What
-  // it already uploaded is remembered: a retry finishes the send rather
-  // than starting the photos again.
-  private async upload(key: string, files: PickedFile[] | undefined): Promise<string[]> {
-    if (!files?.length) return [];
-    const done = this.uploaded.get(key) ?? [];
-    for (const file of files.slice(done.length)) {
-      const media = await this.api.uploadMedia({
-        uri: file.uri,
-        name: file.name,
-        mimeType: file.mimeType,
-        durationMs: file.durationMs,
-        waveform: file.waveform,
-        audio: file.kind === 'audio',
-      });
-      done.push(media.id);
-      this.uploaded.set(key, done);
-    }
-    return done;
+  // localMessage is how one of our own sends looks before the hub has it:
+  // the bubble drawn from what was typed and picked, on this device.
+  private localMessage(item: OutboxItem): ChatMessage {
+    const { request } = item;
+    return {
+      id: `local-${item.key}`,
+      localKey: item.key,
+      conversation_id: this.conversationId,
+      sender: { kind: 'user', id: this.userId },
+      body: request.action
+        ? {
+            text: request.action.label,
+            action: {
+              button_id: request.action.button_id,
+              source_message_id: request.action.source_message_id,
+            },
+          }
+        : { text: request.text, attachments: localAttachments(request.files) },
+      reply_to: request.replyTo ?? null,
+      status: 'complete',
+      truncated: false,
+      delivery_status: item.state === 'failed' ? 'failed' : 'pending',
+      created_at: item.createdAt,
+    };
+  }
+
+  // remember writes the hub's messages down, a little after the last
+  // change. Our own unsent ones are the outbox's to remember.
+  private remember(): void {
+    const messages = this.state.messages.filter((m) => !m.localKey).slice(0, MESSAGES_KEPT);
+    void this.cache.set(this.cacheKey, { messages, nextBefore: this.state.nextBefore } satisfies Remembered);
   }
 
   private set(state: ChatState, extra: Partial<ChatSnapshot> = {}): void {
     this.state = state;
     this.armTyping();
+    if (this.writeTimer) clearTimeout(this.writeTimer);
+    this.writeTimer = setTimeout(() => {
+      this.writeTimer = null;
+      this.remember();
+    }, WRITE_DELAY_MS);
     this.patch({
       messages: state.messages,
       typing: isTyping(state, this.now()),

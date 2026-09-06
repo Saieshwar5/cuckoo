@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo } from 'react';
 
+import { useMemory } from '../cache/CacheProvider';
 import { useRealtime } from '../realtime/RealtimeProvider';
 import { useSession } from '../session/SessionProvider';
 import { ChatsController } from './controller';
@@ -12,9 +13,13 @@ const ChatsContext = createContext<ChatsController | null>(null);
 export function ChatsProvider({ children }: { children: React.ReactNode }) {
   const { api, token } = useSession();
   const realtime = useRealtime();
+  const memory = useMemory();
   const controller = useMemo(
-    () => (token && realtime ? new ChatsController(api, realtime) : null),
-    [api, token, realtime],
+    () =>
+      token && realtime && memory
+        ? new ChatsController(api, realtime, { cache: memory.cache, userId: memory.userId })
+        : null,
+    [api, token, realtime, memory],
   );
 
   useEffect(() => {

@@ -4,6 +4,7 @@ import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { AgentsProvider } from '@/agents/AgentsProvider';
+import { CacheProvider } from '@/cache/CacheProvider';
 import { ChatsProvider } from '@/chats/ChatsProvider';
 import { RealtimeProvider } from '@/realtime/RealtimeProvider';
 import { SessionProvider, useSession } from '@/session/SessionProvider';
@@ -16,11 +17,13 @@ export default function RootLayout() {
     <ThemeProvider>
       <SessionProvider>
         <RealtimeProvider>
-          <ChatsProvider>
-            <AgentsProvider>
-              <Routes />
-            </AgentsProvider>
-          </ChatsProvider>
+          <CacheProvider>
+            <ChatsProvider>
+              <AgentsProvider>
+                <Routes />
+              </AgentsProvider>
+            </ChatsProvider>
+          </CacheProvider>
         </RealtimeProvider>
       </SessionProvider>
     </ThemeProvider>

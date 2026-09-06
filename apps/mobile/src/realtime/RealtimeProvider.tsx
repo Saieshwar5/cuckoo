@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo } from 'react';
 
 import { socketUrl } from '../config';
 import { useSession } from '../session/SessionProvider';
+import { onNetworkBack } from './network';
 import { createRealtime, type Realtime } from './realtime';
 
 const RealtimeContext = createContext<Realtime | null>(null);
@@ -16,7 +17,11 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!realtime) return;
     realtime.start();
-    return () => realtime.stop();
+    const stopListening = onNetworkBack(() => realtime.retryNow());
+    return () => {
+      stopListening();
+      realtime.stop();
+    };
   }, [realtime]);
 
   return <RealtimeContext.Provider value={realtime}>{children}</RealtimeContext.Provider>;

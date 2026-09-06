@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from 'react';
 
 import type { Agent, Contact } from '../api/types';
+import { useMemory } from '../cache/CacheProvider';
 import { useRealtime } from '../realtime/RealtimeProvider';
 import { useSession } from '../session/SessionProvider';
 import { AgentsController, type AgentsSnapshot } from './controller';
@@ -13,9 +14,13 @@ const AgentsContext = createContext<AgentsController | null>(null);
 export function AgentsProvider({ children }: { children: React.ReactNode }) {
   const { api, token } = useSession();
   const realtime = useRealtime();
+  const memory = useMemory();
   const controller = useMemo(
-    () => (token && realtime ? new AgentsController(api, realtime) : null),
-    [api, token, realtime],
+    () =>
+      token && realtime && memory
+        ? new AgentsController(api, realtime, { cache: memory.cache, userId: memory.userId })
+        : null,
+    [api, token, realtime, memory],
   );
 
   useEffect(() => {
