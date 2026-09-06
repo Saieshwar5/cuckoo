@@ -224,6 +224,9 @@ export class ChatController {
         uri: file.uri,
         name: file.name,
         mimeType: file.mimeType,
+        durationMs: file.durationMs,
+        waveform: file.waveform,
+        audio: file.kind === 'audio',
       });
       done.push(media.id);
       this.uploaded.set(key, done);
@@ -272,6 +275,8 @@ function localAttachments(files: PickedFile[] | undefined): Attachment[] | undef
     file_name: f.name,
     width: f.width,
     height: f.height,
+    duration_ms: f.durationMs,
+    waveform: f.waveform,
     local_uri: f.uri,
   }));
 }

@@ -199,5 +199,11 @@
   "chat.attach.toomany": "Up to {max} files in one message.",
   "chat.file.open": "Tap to open",
   "chat.file.save": "Save",
-  "chat.upload.failed": "Could not send that file."
+  "chat.upload.failed": "Could not send that file.",
+  "chat.voice.record": "Record a voice note",
+  "chat.voice.cancel": "Discard the recording",
+  "chat.voice.play": "Play",
+  "chat.voice.pause": "Pause",
+  "chat.voice.seek": "Go to a point in the recording",
+  "chat.voice.speed": "Playback speed"
 }

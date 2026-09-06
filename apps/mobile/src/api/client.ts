@@ -61,6 +61,11 @@ export interface UploadInput {
   uri: string;
   name: string;
   mimeType: string;
+  // A recording's own account of itself: the hub does not decode audio to
+  // check, and neither does anything else. See the media package.
+  durationMs?: number;
+  waveform?: number[];
+  audio?: boolean;
 }
 
 export interface CreateAgentInput {
@@ -214,10 +219,18 @@ export function createApi(opts: ApiOptions): Api {
         } as unknown as Blob);
       }
 
+      const params = new URLSearchParams();
+      if (file.durationMs) params.set('duration_ms', String(Math.round(file.durationMs)));
+      if (file.waveform?.length) params.set('waveform', file.waveform.join(','));
+      // WebM and MP4 hold sound or pictures alike, and nothing in the bytes
+      // says which. A recording says so.
+      if (file.audio ?? file.mimeType.startsWith('audio/')) params.set('kind', 'audio');
+      const query = params.toString();
+
       const token = opts.getToken();
       let res: Response;
       try {
-        res = await fetchImpl(`${opts.baseUrl}/v1/client/media`, {
+        res = await fetchImpl(`${opts.baseUrl}/v1/client/media${query ? `?${query}` : ''}`, {
           method: 'POST',
           headers: token ? { Accept: 'application/json', Authorization: `Bearer ${token}` } : {},
           body: form,
