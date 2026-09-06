@@ -17,7 +17,7 @@ import httpx
 import websockets
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
-from .models import Attachment, Conversation, Message, PairToken
+from .models import Attachment, Conversation, Link, Message, PairToken
 
 log = logging.getLogger("cuckoo")
 
@@ -35,9 +35,10 @@ _REPLY_TIMEOUT = 30.0
 Handler = Callable[[Message, Conversation], Awaitable[None]]
 JoinHandler = Callable[[Conversation, PairToken | None], Awaitable[None]]
 
-# Rows of buttons: each button is (id, label) or (id, label, style), or a
-# dict with those keys.
-Buttons = list[list[tuple[str, str] | tuple[str, str, str] | dict[str, str]]]
+# Rows of buttons. A button is either a choice, whose id comes back when it
+# is tapped — (id, label), (id, label, style), or a dict with those keys —
+# or a Link, which opens something and tells you nothing.
+Buttons = list[list[tuple[str, str] | tuple[str, str, str] | dict[str, str] | Link]]
 
 # What can be sent as an attachment: a path to a file, or something already
 # uploaded — an Attachment from a message, or a media id.
@@ -51,10 +52,14 @@ def _buttons_json(buttons: Buttons | None) -> list[list[dict[str, str]]] | None:
     for row in buttons:
         wire = []
         for b in row:
-            if isinstance(b, dict):
-                wire.append(
-                    {"id": b["id"], "label": b["label"], "style": b.get("style", "default")}
-                )
+            if isinstance(b, Link):
+                wire.append({"url": b.url, "label": b.label, "style": b.style})
+            elif isinstance(b, dict):
+                entry = {"label": b["label"], "style": b.get("style", "default")}
+                # A url button has no id, and an id button no url: the hub
+                # refuses a button carrying both.
+                entry["url" if "url" in b else "id"] = b.get("url") or b["id"]
+                wire.append(entry)
             else:
                 wire.append({"id": b[0], "label": b[1], "style": b[2] if len(b) > 2 else "default"})
         rows.append(wire)

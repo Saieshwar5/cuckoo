@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Conversation, DeliveryStatus, Message } from '@/api/types';
 import { t } from '@/i18n';
 import { sizes, spacing, type, useTheme, type Palette } from '@/theme';
+import { plain } from '@/util/markdown';
 import { formatListTime } from '@/util/time';
 
 import { agentAvatar } from '@/media/avatar';
@@ -21,7 +22,7 @@ export function counterpart(c: Conversation) {
 export function preview(m: Message | null): string {
   if (!m) return t('chats.preview.none');
   if (m.status === 'streaming' && !m.body.text) return t('chats.preview.streaming');
-  return m.body.text ?? '';
+  return plain(m.body.text ?? '');
 }
 
 // Ticks renders delivery status for our own last message the way every

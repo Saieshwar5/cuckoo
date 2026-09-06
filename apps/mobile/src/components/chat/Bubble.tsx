@@ -6,9 +6,11 @@ import type { Button as ButtonSpec, DeliveryStatus } from '@/api/types';
 import type { ChatMessage } from '@/chat/store';
 import { t } from '@/i18n';
 import { radius, spacing, type, useTheme, type Palette } from '@/theme';
+import { plain } from '@/util/markdown';
 import { formatClock } from '@/util/time';
 
 import { Attachments } from './Attachments';
+import { RichText } from './RichText';
 
 interface Props {
   message: ChatMessage;
@@ -17,14 +19,18 @@ interface Props {
   first: boolean;
   agentName: string;
   onReply: (m: ChatMessage) => void;
+  // A choice was made: an id button was tapped. A url button never comes
+  // through here, because it is not a choice.
   onButton: (m: ChatMessage, b: ButtonSpec) => void;
+  // The person wants to leave: a link in the words, or a url button.
+  onOpen: (url: string) => void;
   onRetry: (key: string) => void;
 }
 
 // Bubble is one message: what was said, what it quoted, the buttons it
 // offered, and when. Ours sit right in the accent's shade; the agent's sit
 // left on a surface.
-export function Bubble({ message: m, mine, first, agentName, onReply, onButton, onRetry }: Props) {
+export function Bubble({ message: m, mine, first, agentName, onReply, onButton, onOpen, onRetry }: Props) {
   const { colors } = useTheme();
   const failed = m.delivery_status === 'failed' && m.localKey;
   const meta = mine ? colors.bubbleMetaMine : colors.bubbleMetaTheirs;
@@ -57,7 +63,7 @@ export function Bubble({ message: m, mine, first, agentName, onReply, onButton, 
                 {m.reply_to.sender_kind === 'user' ? t('chat.reply.you') : agentName}
               </Text>
               <Text style={[styles.quoteText, { color: meta }]} numberOfLines={2}>
-                {m.reply_to.text_preview}
+                {plain(m.reply_to.text_preview)}
               </Text>
             </View>
           </View>
@@ -66,10 +72,12 @@ export function Bubble({ message: m, mine, first, agentName, onReply, onButton, 
           <Attachments attachments={m.body.attachments} mine={mine} sending={!!m.localKey} />
         ) : null}
         {m.body.text || m.status === 'streaming' ? (
-          <Text style={[styles.text, { color: ink }]}>
-            {m.body.text ?? ''}
-            {m.status === 'streaming' ? <Caret color={ink} /> : null}
-          </Text>
+          <RichText
+            text={m.body.text ?? ''}
+            style={[styles.text, { color: ink }]}
+            trailing={m.status === 'streaming' ? <Caret color={ink} /> : null}
+            onLink={onOpen}
+          />
         ) : null}
         <View style={styles.footer}>
           {m.truncated ? (
@@ -83,7 +91,7 @@ export function Bubble({ message: m, mine, first, agentName, onReply, onButton, 
             rows={m.body.buttons}
             selected={m.body.selected_button_id}
             colors={colors}
-            onPress={(b) => onButton(m, b)}
+            onPress={(b) => (b.url ? onOpen(b.url) : onButton(m, b))}
           />
         ) : null}
       </Pressable>
@@ -112,7 +120,8 @@ function Ticks({ status, colors }: { status: DeliveryStatus; colors: Palette }) 
 }
 
 // Buttons are the agent's question as things to tap. Once one is taken the
-// choice stays visible and the rest step back.
+// choice stays visible and the rest step back — except a link, which is not
+// an answer to anything and still works afterwards.
 function Buttons({
   rows,
   selected,
@@ -129,18 +138,21 @@ function Buttons({
     <View style={[styles.buttons, { borderTopColor: colors.hairline }]}>
       {rows.map((row, i) => (
         <View key={i} style={styles.buttonRow}>
-          {row.map((b) => {
-            const chosen = b.id === selected;
-            const primary = b.style === 'primary' && !done;
+          {row.map((b, j) => {
+            const link = !!b.url;
+            const chosen = !link && !!b.id && b.id === selected;
+            const spent = done && !link;
+            const primary = b.style === 'primary' && !spent;
             const fg = primary ? colors.onAccent : b.style === 'danger' ? colors.danger : colors.accent;
             return (
               <Pressable
-                key={b.id}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: done, selected: chosen }}
-                disabled={done}
+                key={b.id ?? b.url ?? j}
+                accessibilityRole={link ? 'link' : 'button'}
+                accessibilityState={{ disabled: spent, selected: chosen }}
+                accessibilityHint={link ? t('chat.button.leaves') : undefined}
+                disabled={spent}
                 onPress={() => onPress(b)}
-                testID={`button-${b.id}`}
+                testID={link ? `open-${b.url}` : `button-${b.id}`}
                 style={[
                   styles.button,
                   {
@@ -150,13 +162,14 @@ function Buttons({
                         ? colors.accentTint
                         : colors.surfaceStrong,
                   },
-                  done && !chosen && styles.dimmed,
+                  spent && !chosen && styles.dimmed,
                 ]}
               >
                 {chosen ? <Ionicons name="checkmark" size={16} color={fg} /> : null}
                 <Text style={[styles.buttonLabel, { color: fg }]} numberOfLines={1}>
                   {b.label}
                 </Text>
+                {link ? <Ionicons name="open-outline" size={14} color={fg} /> : null}
               </Pressable>
             );
           })}

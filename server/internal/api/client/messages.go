@@ -45,8 +45,11 @@ type attachmentResponse struct {
 	Waveform     []int32 `json:"waveform,omitempty"`
 }
 
+// buttonResponse is a button as the app draws it: a choice with an id, or a
+// link with a url that opens somewhere outside Cuckoo.
 type buttonResponse struct {
-	ID    string `json:"id"`
+	ID    string `json:"id,omitempty"`
+	URL   string `json:"url,omitempty"`
 	Label string `json:"label"`
 	Style string `json:"style"`
 }
@@ -86,7 +89,7 @@ func newBodyResponse(b conversations.Body) bodyResponse {
 	for _, row := range b.Buttons {
 		wire := make([]buttonResponse, 0, len(row))
 		for _, btn := range row {
-			wire = append(wire, buttonResponse{ID: btn.ID, Label: btn.Label, Style: btn.Style})
+			wire = append(wire, buttonResponse{ID: btn.ID, URL: btn.URL, Label: btn.Label, Style: btn.Style})
 		}
 		out.Buttons = append(out.Buttons, wire)
 	}

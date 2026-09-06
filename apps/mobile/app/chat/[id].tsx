@@ -20,6 +20,7 @@ import { t } from '@/i18n';
 import { agentAvatar } from '@/media/avatar';
 import type { PickedFile } from '@/media/pick';
 import { spacing, type, useTheme } from '@/theme';
+import { openLink } from '@/util/open';
 import { formatDay, sameDay } from '@/util/time';
 
 // The conversation: history newest at the bottom, live as it happens, and a
@@ -45,7 +46,9 @@ export default function ChatScreen() {
     setReplyTo(null);
   };
   const tap = (m: ChatMessage, b: ButtonSpec) =>
-    void chat.send({ action: { button_id: b.id, source_message_id: m.id, label: b.label } });
+    void chat.send({
+      action: { button_id: b.id as string, source_message_id: m.id, label: b.label },
+    });
 
   const messages = chat.messages;
   return (
@@ -87,6 +90,7 @@ export default function ChatScreen() {
                     agentName={name}
                     onReply={setReplyTo}
                     onButton={tap}
+                    onOpen={(url) => void openLink(url)}
                     onRetry={(key) => void chat.retry(key)}
                   />
                 </View>

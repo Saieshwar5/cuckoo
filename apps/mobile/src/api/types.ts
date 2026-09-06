@@ -31,8 +31,12 @@ export interface Participant {
   has_avatar?: boolean;
 }
 
+// A button is a choice or a link, never both. A choice has an id, which
+// comes back to the agent when it is tapped; a link has a url, opens
+// outside Cuckoo, and tells the agent nothing.
 export interface Button {
-  id: string;
+  id?: string;
+  url?: string;
   label: string;
   style: 'default' | 'primary' | 'danger';
 }

@@ -32,6 +32,24 @@ class Participant:
 
 
 @dataclass(frozen=True)
+class Link:
+    """A button that opens something instead of answering.
+
+    A tracking page, a UPI payment, a phone number, your own site. The tap
+    tells you nothing and never arrives as a message — the page you sent
+    them to is yours, and that is where you learn what happened. It is also
+    how a poster's QR code, which cannot say who scanned it, gets a person
+    to sign in on your side and become someone you know.
+
+    ``url`` starts with ``https``, ``http``, ``upi`` or ``tel``.
+    """
+
+    label: str
+    url: str
+    style: str = "default"
+
+
+@dataclass(frozen=True)
 class Action:
     """A tap: which button, on which of your messages."""
 

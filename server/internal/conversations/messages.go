@@ -332,7 +332,10 @@ func (s *Service) resolveTap(ctx context.Context, conversationID uuid.UUID, a Ac
 	}
 	for _, row := range source.Body.Buttons {
 		for _, b := range row {
-			if b.ID == a.ButtonID {
+			// A url button has no id and is not a choice: it opens
+			// something and tells the agent nothing. Skipping it here is
+			// what stops an empty button_id from claiming one.
+			if b.ID != "" && b.ID == a.ButtonID {
 				return source, b, nil
 			}
 		}
