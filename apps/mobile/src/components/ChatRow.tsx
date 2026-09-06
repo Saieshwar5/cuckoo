@@ -7,6 +7,8 @@ import { t } from '@/i18n';
 import { sizes, spacing, type, useTheme, type Palette } from '@/theme';
 import { formatListTime } from '@/util/time';
 
+import { agentAvatar } from '@/media/avatar';
+
 import { Avatar } from './Avatar';
 
 // counterpart is who a DM is with: the agent.
@@ -51,6 +53,7 @@ export function ChatRow({ conversation, onPress }: { conversation: Conversation;
         name={who?.display_name ?? '?'}
         size={sizes.avatar}
         status={who?.kind === 'agent' ? (who.status ?? null) : undefined}
+        source={who?.kind === 'agent' ? agentAvatar(who.id, who.has_avatar) : null}
       />
       <View style={styles.body}>
         <View style={styles.top}>

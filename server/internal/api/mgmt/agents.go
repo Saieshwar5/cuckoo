@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
@@ -14,13 +16,15 @@ import (
 // binding is included, without its secret, so the app can show "connected" or
 // "not connected" without a second request.
 type agentResponse struct {
-	ID          string           `json:"id"`
-	Handle      string           `json:"handle"`
-	DisplayName string           `json:"display_name"`
-	Description string           `json:"description"`
-	CreatedAt   time.Time        `json:"created_at"`
-	UpdatedAt   time.Time        `json:"updated_at"`
-	Binding     *bindingResponse `json:"binding"`
+	ID          string `json:"id"`
+	Handle      string `json:"handle"`
+	DisplayName string `json:"display_name"`
+	Description string `json:"description"`
+	// HasAvatar says a picture is published at /a/{id}/avatar.
+	HasAvatar bool             `json:"has_avatar"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
+	Binding   *bindingResponse `json:"binding"`
 }
 
 type bindingResponse struct {
@@ -38,6 +42,7 @@ func newAgentResponse(a agents.Agent, b *agents.Binding) agentResponse {
 		Handle:      a.Handle,
 		DisplayName: a.DisplayName,
 		Description: a.Description,
+		HasAvatar:   a.AvatarMediaID != nil,
 		CreatedAt:   a.CreatedAt,
 		UpdatedAt:   a.UpdatedAt,
 	}
@@ -71,6 +76,8 @@ type createAgentRequest struct {
 	Handle      string `json:"handle"`
 	DisplayName string `json:"display_name"`
 	Description string `json:"description"`
+	// A picture already uploaded, to publish the agent with.
+	AvatarMediaID string `json:"avatar_media_id"`
 }
 
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
@@ -86,10 +93,16 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	avatar, err := avatarIDOf(req.AvatarMediaID)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
 	agent, err := h.agents.Create(r.Context(), userID, agents.CreateInput{
-		Handle:      req.Handle,
-		DisplayName: req.DisplayName,
-		Description: req.Description,
+		Handle:        req.Handle,
+		DisplayName:   req.DisplayName,
+		Description:   req.Description,
+		AvatarMediaID: avatar,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)
@@ -152,8 +165,22 @@ func (h *Handler) getAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateAgentRequest struct {
-	DisplayName *string `json:"display_name"`
-	Description *string `json:"description"`
+	DisplayName   *string `json:"display_name"`
+	Description   *string `json:"description"`
+	AvatarMediaID *string `json:"avatar_media_id"`
+}
+
+// avatarIDOf parses the id of a picture a profile is being given.
+func avatarIDOf(raw string) (*uuid.UUID, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	id, err := domain.ParseID(domain.PrefixMedia, raw)
+	if err != nil {
+		return nil, domain.InvalidField("avatar_media_id", "invalid_id",
+			"avatar_media_id is the id of a picture already uploaded.")
+	}
+	return &id, nil
 }
 
 func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
@@ -174,9 +201,17 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var avatar *uuid.UUID
+	if req.AvatarMediaID != nil {
+		if avatar, err = avatarIDOf(*req.AvatarMediaID); err != nil {
+			httpx.Error(w, r, err)
+			return
+		}
+	}
 	agent, err := h.agents.Update(r.Context(), userID, id, agents.UpdateInput{
-		DisplayName: req.DisplayName,
-		Description: req.Description,
+		DisplayName:   req.DisplayName,
+		Description:   req.Description,
+		AvatarMediaID: avatar,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)

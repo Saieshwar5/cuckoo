@@ -49,6 +49,8 @@ type Server struct {
 	Conversations *conversations.Service
 	// Pairing is the service behind the pair and contact routes.
 	Pairing *pairing.Service
+	// Media is the service behind uploads, downloads and faces.
+	Media *media.Service
 	// Mail holds every email the server "sent", so a test can read a
 	// sign-in code back.
 	Mail *mail.Memory
@@ -113,6 +115,7 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 		Pairing:       pairingService,
 		APIKeys:       apiKeyService,
 		Media:         mediaService,
+		PublicURL:     "https://hub.test",
 		Hub:           hub,
 		Bus:           bus,
 		CORSOrigins:   []string{"*"},
@@ -122,7 +125,10 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
-	return &Server{Server: srv, Store: db, Conversations: conversationService, Pairing: pairingService, Mail: mailer}
+	return &Server{
+		Server: srv, Store: db, Conversations: conversationService,
+		Pairing: pairingService, Media: mediaService, Mail: mailer,
+	}
 }
 
 // AsKey returns a client authenticated with an API key, as a company's own

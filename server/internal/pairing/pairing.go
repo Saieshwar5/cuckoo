@@ -92,6 +92,7 @@ type Contact struct {
 	Handle         string
 	DisplayName    string
 	Description    string
+	HasAvatar      bool
 	OwnerName      string
 	Status         *agents.Status
 	AddedVia       string
@@ -107,6 +108,7 @@ func contactFromRow(r gen.ListContactsRow) Contact {
 		Handle:         r.Handle,
 		DisplayName:    r.DisplayName,
 		Description:    r.Description,
+		HasAvatar:      r.HasAvatar,
 		OwnerName:      r.OwnerDisplayName,
 		AddedVia:       r.AddedVia,
 		Blocked:        r.BlockedAt != nil,

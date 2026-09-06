@@ -23,10 +23,10 @@
   "verify.resent": "A new code is on its way.",
   "verify.back": "Use a different email",
   "verify.error.invalid_code": "That code is not right. Check it, or ask for a new one.",
-  "profile.title": "What should we call you?",
+  "profile.title": "You",
   "profile.subtitle": "This is the name agents and people will see.",
   "profile.name.label": "Your name",
-  "profile.save": "Continue",
+  "profile.save": "Save",
   "tabs.chats": "Chats",
   "tabs.agents": "Agents",
   "chats.title": "Chats",
@@ -205,5 +205,10 @@
   "chat.voice.play": "Play",
   "chat.voice.pause": "Pause",
   "chat.voice.seek": "Go to a point in the recording",
-  "chat.voice.speed": "Playback speed"
+  "chat.voice.speed": "Playback speed",
+  "profile.photo.add": "Add a photo",
+  "profile.photo.change": "Change photo",
+  "profile.name": "Your name",
+  "profile.open": "Your profile",
+  "profile.note": "Your photo is only ever shown to people you share a chat with. Agents are told your name, and nothing else."
 }

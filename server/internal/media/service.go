@@ -30,6 +30,7 @@ var (
 type Store interface {
 	CreateMedia(ctx context.Context, arg gen.CreateMediaParams) (gen.Medium, error)
 	GetMedia(ctx context.Context, id uuid.UUID) (gen.Medium, error)
+	GetAgentAvatar(ctx context.Context, agentID uuid.UUID) (gen.Medium, error)
 	UserCanReadMedia(ctx context.Context, arg gen.UserCanReadMediaParams) (bool, error)
 	AgentCanReadMedia(ctx context.Context, arg gen.AgentCanReadMediaParams) (bool, error)
 	DeleteUnclaimedMedia(ctx context.Context, before time.Time) ([]gen.DeleteUnclaimedMediaRow, error)
@@ -245,6 +246,32 @@ func (s *Service) open(ctx context.Context, id uuid.UUID, variant string,
 		return File{}, nil, domain.Internal(fmt.Errorf("open media %s: %w", id, err))
 	}
 	return file, rc, nil
+}
+
+// OpenAgentAvatar returns an agent's published picture, to anyone at all.
+//
+// This is the only unauthenticated way to bytes in Cuckoo, and it is
+// deliberate: the card a stranger opens from a QR code, in a browser,
+// before they have an account, has to show the logo. Only the small copy is
+// served — nobody needs the original of a face, and a public route that
+// hands out 16 MB on request is a way to be knocked over.
+func (s *Service) OpenAgentAvatar(ctx context.Context, agentID uuid.UUID) (File, io.ReadCloser, error) {
+	row, err := s.store.GetAgentAvatar(ctx, agentID)
+	if err != nil {
+		if store.IsNoRows(err) {
+			return File{}, nil, domain.NotFound("no_avatar", "That agent has no picture.")
+		}
+		return File{}, nil, domain.Internal(fmt.Errorf("get avatar of %s: %w", agentID, err))
+	}
+	key := row.StorageKey
+	if row.ThumbKey != nil {
+		key = *row.ThumbKey
+	}
+	body, err := s.blobs.Open(ctx, key)
+	if err != nil {
+		return File{}, nil, domain.Internal(fmt.Errorf("open avatar of %s: %w", agentID, err))
+	}
+	return fromRow(row), body, nil
 }
 
 // SweepUnclaimed removes uploads no message ever claimed. A person who

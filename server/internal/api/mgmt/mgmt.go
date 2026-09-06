@@ -15,6 +15,7 @@ import (
 
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/media"
 	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 )
 
@@ -22,17 +23,23 @@ import (
 type Handler struct {
 	agents  *agents.Service
 	pairing *pairing.Service
+	media   *media.Service
 }
 
 // New builds the management API handler.
-func New(agentService *agents.Service, pairingService *pairing.Service) *Handler {
-	return &Handler{agents: agentService, pairing: pairingService}
+func New(agentService *agents.Service, pairingService *pairing.Service, mediaService *media.Service) *Handler {
+	return &Handler{agents: agentService, pairing: pairingService, media: mediaService}
 }
 
 // Routes returns the management routes, to be mounted behind user
 // authentication.
 func (h *Handler) Routes() chi.Router {
 	r := chi.NewRouter()
+
+	// Pictures for an agent to be published with. Here, rather than only on
+	// the client API, because a company's servers hold a key and publishing
+	// an agent's logo is an owner's job.
+	r.Post("/media", h.uploadMedia)
 
 	r.Post("/agents", h.createAgent)
 	r.Get("/agents", h.listAgents)

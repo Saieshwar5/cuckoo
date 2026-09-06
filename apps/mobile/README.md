@@ -77,6 +77,23 @@ retry a failure with the same key. One live connection per session
 (`src/realtime/realtime.ts`, opened by `RealtimeProvider`) feeds both the
 chat list and the open chat.
 
+## Faces
+
+`src/components/Avatar.tsx` draws a photo when there is one and the name's
+initials when there is not, everywhere: the chat list, the chat header, the
+Agents tab, an agent's profile, and the card a scanned code resolves to.
+
+An agent's picture is public, so it is a plain image source built from its
+id (`src/media/avatar.ts`) — no token, no fetching dance. A person's photo
+goes through `useMediaSource` behind their session, like anything else they
+own.
+
+`AvatarPicker` is the disc with a camera on it. What it hands back is the
+picked file, not an uploaded one: uploading happens when the screen is
+saved, so someone who chooses a photo and then leaves has not left a stray
+file on the hub. `app/me.tsx` is the same control for your own photo and
+name.
+
 ## Remembering, and sending with no signal
 
 The hub is the record; the app keeps a copy of the parts it has seen. The

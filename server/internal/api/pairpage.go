@@ -24,7 +24,8 @@ var pairPage = template.Must(template.New("pair").Parse(`<!doctype html>
 <style>
   body { margin: 0; font-family: -apple-system, system-ui, Roboto, sans-serif; background: #000; color: #f2f2f2; }
   main { max-width: 420px; margin: 0 auto; padding: 48px 24px; text-align: center; }
-  .disc { width: 96px; height: 96px; border-radius: 48px; background: #3a3a3a; color: #fff; font-size: 36px; font-weight: 600; line-height: 96px; margin: 0 auto 16px; }
+  .disc { width: 96px; height: 96px; border-radius: 48px; background: #3a3a3a; color: #fff; font-size: 36px; font-weight: 600; line-height: 96px; margin: 0 auto 16px; overflow: hidden; }
+  .disc img { width: 96px; height: 96px; object-fit: cover; display: block; }
   h1 { font-size: 24px; margin: 0 0 4px; }
   .muted { color: #8e8e8e; font-size: 14px; margin: 0 0 16px; }
   p { line-height: 1.5; }
@@ -35,7 +36,7 @@ var pairPage = template.Must(template.New("pair").Parse(`<!doctype html>
 <body>
 <main>
 {{if .Agent}}
-  <div class="disc">{{.Initials}}</div>
+  <div class="disc">{{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="">{{else}}{{.Initials}}{{end}}</div>
   <h1>{{.Agent.DisplayName}}</h1>
   <p class="muted">@{{.Agent.Handle}} · by {{.OwnerName}} · Unverified</p>
   {{if .Agent.Description}}<p>{{.Agent.Description}}</p>{{end}}
@@ -52,10 +53,13 @@ var pairPage = template.Must(template.New("pair").Parse(`<!doctype html>
 `))
 
 type pairPageData struct {
-	Title     string
-	Message   string
-	Agent     *pairPageAgent
-	Initials  string
+	Title    string
+	Message  string
+	Agent    *pairPageAgent
+	Initials string
+	// AvatarURL is the agent's published picture, when it has one. Empty
+	// falls back to the initials disc.
+	AvatarURL string
 	OwnerName string
 	// AppLink is on the app's own scheme, which the template would otherwise
 	// refuse as an unknown protocol.
@@ -69,7 +73,7 @@ type pairPageAgent struct {
 }
 
 // pairPageHandler serves /p/{code}.
-func pairPageHandler(p *pairing.Service) http.HandlerFunc {
+func pairPageHandler(p *pairing.Service, publicURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		code := chi.URLParam(r, "code")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -94,6 +98,9 @@ func pairPageHandler(p *pairing.Service) http.HandlerFunc {
 				Description: card.Agent.Description,
 			}
 			data.Initials = initialsOf(card.Agent.DisplayName)
+			if card.Agent.AvatarMediaID != nil {
+				data.AvatarURL = publicURL + "/a/" + domain.FormatID(domain.PrefixAgent, card.Agent.ID) + "/avatar"
+			}
 			data.OwnerName = card.OwnerName
 		}
 		_ = pairPage.Execute(w, data)

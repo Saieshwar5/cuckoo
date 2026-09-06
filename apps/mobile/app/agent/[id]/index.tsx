@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useAgent, useAgents, useContact } from '@/agents/AgentsProvider';
 import type { AgentStatus } from '@/api/types';
 import { Avatar } from '@/components/Avatar';
+import { agentAvatar } from '@/media/avatar';
 import { Button } from '@/components/Button';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
 import { EmptyState } from '@/components/EmptyState';
@@ -70,6 +71,7 @@ export default function AgentProfileScreen() {
         description: owned.description,
         status: owned.binding?.status ?? null,
         owner: t('agent.by.you'),
+        hasAvatar: !!owned.has_avatar,
       }
     : contact
       ? {
@@ -78,6 +80,7 @@ export default function AgentProfileScreen() {
           description: contact.agent.description,
           status: contact.agent.status ?? null,
           owner: t('agent.by.someone', { name: contact.agent.owner.display_name }),
+          hasAvatar: !!contact.agent.has_avatar,
         }
       : null;
 
@@ -112,7 +115,12 @@ export default function AgentProfileScreen() {
       />
       <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.head}>
-          <Avatar name={view.name} size={sizes.avatarLarge} status={view.status} />
+          <Avatar
+            name={view.name}
+            size={sizes.avatarLarge}
+            status={view.status}
+            source={agentAvatar(id, view.hasAvatar)}
+          />
           <Text style={styles.name}>{view.name}</Text>
           <Text style={styles.handle}>@{view.handle}</Text>
           <View style={styles.ownerRow}>

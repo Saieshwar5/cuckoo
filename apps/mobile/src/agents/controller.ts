@@ -1,5 +1,6 @@
 import type { Api, CreateAgentInput, SetBindingInput, UpdateAgentInput } from '../api/client';
 import type { Agent, Binding, Contact, PairAccepted } from '../api/types';
+import type { PickedFile } from '../media/pick';
 import { keys, MemoryCache, type Cache } from '../cache/cache';
 import type { Realtime } from '../realtime/realtime';
 import {
@@ -114,17 +115,30 @@ export class AgentsController {
     this.set(setBlocked(this.state, agentId, false));
   };
 
-  create = async (input: CreateAgentInput): Promise<Agent> => {
-    const agent = await this.api.createAgent(input);
+  create = async (input: CreateAgentInput, picture?: PickedFile | null): Promise<Agent> => {
+    const agent = await this.api.createAgent({ ...input, ...(await this.picture(picture)) });
     this.set(upsertAgent(this.state, agent));
     return agent;
   };
 
-  update = async (id: string, input: UpdateAgentInput): Promise<Agent> => {
-    const agent = await this.api.updateAgent(id, input);
+  update = async (id: string, input: UpdateAgentInput, picture?: PickedFile | null): Promise<Agent> => {
+    const agent = await this.api.updateAgent(id, { ...input, ...(await this.picture(picture)) });
     this.set(upsertAgent(this.state, agent));
     return agent;
   };
+
+  // picture uploads a chosen photo, as part of saving rather than as part
+  // of choosing: someone who picks a photo and leaves the screen has not
+  // left a stray file on the hub.
+  private async picture(file: PickedFile | null | undefined): Promise<{ avatar_media_id?: string }> {
+    if (!file) return {};
+    const media = await this.api.uploadMedia({
+      uri: file.uri,
+      name: file.name,
+      mimeType: file.mimeType,
+    });
+    return { avatar_media_id: media.id };
+  }
 
   remove = async (id: string): Promise<void> => {
     await this.api.deleteAgent(id);

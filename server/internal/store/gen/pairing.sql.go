@@ -234,6 +234,7 @@ SELECT c.user_id, c.agent_id, c.dm_conversation_id, c.added_via, c.pair_token_id
        a.handle,
        a.display_name,
        a.description,
+       (a.avatar_media_id IS NOT NULL)::bool AS has_avatar,
        a.deleted_at   AS agent_deleted_at,
        u.display_name AS owner_display_name,
        b.status       AS binding_status
@@ -256,6 +257,7 @@ type ListContactsRow struct {
 	Handle           string
 	DisplayName      string
 	Description      string
+	HasAvatar        bool
 	AgentDeletedAt   *time.Time
 	OwnerDisplayName string
 	BindingStatus    *string
@@ -282,6 +284,7 @@ func (q *Queries) ListContacts(ctx context.Context, userID uuid.UUID) ([]ListCon
 			&i.Handle,
 			&i.DisplayName,
 			&i.Description,
+			&i.HasAvatar,
 			&i.AgentDeletedAt,
 			&i.OwnerDisplayName,
 			&i.BindingStatus,

@@ -17,6 +17,7 @@ import { DayDivider } from '@/components/chat/DayDivider';
 import { QuickReplies } from '@/components/chat/QuickReplies';
 import { TypingBubble } from '@/components/chat/TypingBubble';
 import { t } from '@/i18n';
+import { agentAvatar } from '@/media/avatar';
 import type { PickedFile } from '@/media/pick';
 import { spacing, type, useTheme } from '@/theme';
 import { formatDay, sameDay } from '@/util/time';
@@ -52,6 +53,7 @@ export default function ChatScreen() {
       <ChatHeader
         name={name}
         status={who?.kind === 'agent' ? (who.status ?? null) : undefined}
+        avatar={who?.kind === 'agent' ? agentAvatar(who.id, who.has_avatar) : null}
         typing={chat.typing}
         onBack={back}
       />

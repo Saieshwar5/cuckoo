@@ -46,8 +46,10 @@ type Agent struct {
 	Handle      string
 	DisplayName string
 	Description string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// The picture it is published with, or nil for the initials disc.
+	AvatarMediaID *uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // Binding connects an agent to a backend. The secret is never part of this
@@ -64,13 +66,14 @@ type Binding struct {
 
 func agentFromRow(r gen.Agent) Agent {
 	return Agent{
-		ID:          r.ID,
-		OwnerID:     r.OwnerUserID,
-		Handle:      r.Handle,
-		DisplayName: r.DisplayName,
-		Description: r.Description,
-		CreatedAt:   r.CreatedAt,
-		UpdatedAt:   r.UpdatedAt,
+		ID:            r.ID,
+		OwnerID:       r.OwnerUserID,
+		Handle:        r.Handle,
+		DisplayName:   r.DisplayName,
+		Description:   r.Description,
+		AvatarMediaID: r.AvatarMediaID,
+		CreatedAt:     r.CreatedAt,
+		UpdatedAt:     r.UpdatedAt,
 	}
 }
 
@@ -91,13 +94,17 @@ type CreateInput struct {
 	Handle      string
 	DisplayName string
 	Description string
+	// A picture already uploaded by the owner. A company setting its logo
+	// in the same call that creates the agent.
+	AvatarMediaID *uuid.UUID
 }
 
 // UpdateInput is a partial update; nil leaves a field alone. The handle is
 // not here: it forms the agent's stable identifier and does not change.
 type UpdateInput struct {
-	DisplayName *string
-	Description *string
+	DisplayName   *string
+	Description   *string
+	AvatarMediaID *uuid.UUID
 }
 
 // SetBindingInput describes the backend that will answer for an agent.

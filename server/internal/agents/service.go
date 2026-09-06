@@ -8,6 +8,7 @@ import (
 
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/media"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/store/gen"
@@ -58,6 +59,9 @@ func (s *Service) Create(ctx context.Context, ownerID uuid.UUID, in CreateInput)
 	if err != nil {
 		return Agent{}, err
 	}
+	if err := s.checkPicture(ctx, ownerID, in.AvatarMediaID); err != nil {
+		return Agent{}, err
+	}
 
 	// One transaction for the agent and its DM, so neither exists without the
 	// other. It also contains a duplicate handle: that is a constraint
@@ -68,11 +72,12 @@ func (s *Service) Create(ctx context.Context, ownerID uuid.UUID, in CreateInput)
 	err = s.store.WithTx(ctx, func(tx *store.Store) error {
 		var err error
 		row, err = tx.CreateAgent(ctx, gen.CreateAgentParams{
-			ID:          domain.NewID(),
-			OwnerUserID: ownerID,
-			Handle:      handle,
-			DisplayName: name,
-			Description: desc,
+			ID:            domain.NewID(),
+			OwnerUserID:   ownerID,
+			Handle:        handle,
+			DisplayName:   name,
+			Description:   desc,
+			AvatarMediaID: in.AvatarMediaID,
 		})
 		if err != nil {
 			return err
@@ -150,7 +155,11 @@ func (s *Service) Update(ctx context.Context, callerID, id uuid.UUID, in UpdateI
 		return Agent{}, err
 	}
 
-	params := gen.UpdateAgentParams{ID: id}
+	if err := s.checkPicture(ctx, callerID, in.AvatarMediaID); err != nil {
+		return Agent{}, err
+	}
+
+	params := gen.UpdateAgentParams{ID: id, AvatarMediaID: in.AvatarMediaID}
 	if in.DisplayName != nil {
 		name, err := validateDisplayName(*in.DisplayName)
 		if err != nil {
@@ -165,7 +174,7 @@ func (s *Service) Update(ctx context.Context, callerID, id uuid.UUID, in UpdateI
 		}
 		params.Description = &desc
 	}
-	if params.DisplayName == nil && params.Description == nil {
+	if params.DisplayName == nil && params.Description == nil && params.AvatarMediaID == nil {
 		return Agent{}, domain.Invalid("no_changes", "Provide at least one field to update.")
 	}
 
@@ -214,4 +223,18 @@ func errAgentNotFound() error {
 
 func errNotOwner() error {
 	return domain.Forbidden("not_owner", "Only the agent's owner can do that.")
+}
+
+// checkPicture refuses a face that is not the owner's own upload. The rule
+// itself is the media package's, so a person's photo and an agent's logo
+// are held to one standard.
+func (s *Service) checkPicture(ctx context.Context, ownerID uuid.UUID, mediaID *uuid.UUID) error {
+	if mediaID == nil {
+		return nil
+	}
+	row, err := s.store.GetMedia(ctx, *mediaID)
+	if err != nil && !store.IsNoRows(err) {
+		return domain.Internal(fmt.Errorf("get picture %s: %w", *mediaID, err))
+	}
+	return media.Picture(row, err == nil, media.Owner{Kind: media.OwnerUser, ID: ownerID})
 }

@@ -23,6 +23,7 @@ type Store interface {
 	CreateUser(ctx context.Context, arg gen.CreateUserParams) (gen.User, error)
 	GetUser(ctx context.Context, id uuid.UUID) (gen.User, error)
 	UpdateUserProfile(ctx context.Context, arg gen.UpdateUserProfileParams) (gen.User, error)
+	GetMedia(ctx context.Context, id uuid.UUID) (gen.Medium, error)
 }
 
 // User is a person's account as the rest of the system understands it.
@@ -34,17 +35,21 @@ type User struct {
 	ID          uuid.UUID
 	DisplayName string
 	Locale      string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// Their photo, or nil for the initials disc. Unlike an agent's logo it
+	// is not public: it is behind the session that owns it.
+	AvatarMediaID *uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 func fromRow(row gen.User) User {
 	return User{
-		ID:          row.ID,
-		DisplayName: row.DisplayName,
-		Locale:      row.Locale,
-		CreatedAt:   row.CreatedAt,
-		UpdatedAt:   row.UpdatedAt,
+		ID:            row.ID,
+		DisplayName:   row.DisplayName,
+		Locale:        row.Locale,
+		AvatarMediaID: row.AvatarMediaID,
+		CreatedAt:     row.CreatedAt,
+		UpdatedAt:     row.UpdatedAt,
 	}
 }
 
@@ -57,6 +62,7 @@ type CreateInput struct {
 // UpdateProfileInput describes a partial update: a nil field is left unchanged,
 // which is what lets the app send only what the user actually edited.
 type UpdateProfileInput struct {
-	DisplayName *string
-	Locale      *string
+	AvatarMediaID *uuid.UUID
+	DisplayName   *string
+	Locale        *string
 }

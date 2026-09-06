@@ -25,6 +25,8 @@ type participantResponse struct {
 	// unreachable, and absent when no backend is connected. The dot on the
 	// avatar.
 	Status string `json:"status,omitempty"`
+	// HasAvatar says this agent has a published picture, at /a/{id}/avatar.
+	HasAvatar bool `json:"has_avatar,omitempty"`
 }
 
 // conversationResponse is a row of the chat list. LastMessage is null until
@@ -59,6 +61,7 @@ func newConversationResponse(c conversations.Conversation) conversationResponse 
 			DisplayName: p.DisplayName,
 			Handle:      p.Handle,
 			Status:      p.Status,
+			HasAvatar:   p.HasAvatar,
 		})
 	}
 	if c.LastMessage != nil {

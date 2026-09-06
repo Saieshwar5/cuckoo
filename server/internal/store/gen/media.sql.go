@@ -137,7 +137,10 @@ func (q *Queries) CreateMedia(ctx context.Context, arg CreateMediaParams) (Mediu
 
 const deleteUnclaimedMedia = `-- name: DeleteUnclaimedMedia :many
 DELETE FROM media
- WHERE message_id IS NULL AND created_at < $1
+ WHERE media.message_id IS NULL
+   AND media.created_at < $1
+   AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.avatar_media_id = media.id)
+   AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_media_id = media.id)
 RETURNING storage_key, thumb_key
 `
 
@@ -148,6 +151,9 @@ type DeleteUnclaimedMediaRow struct {
 
 // Uploads nobody ever sent, so an abandoned pick does not sit on the disk
 // forever. Returns their storage keys so the bytes go too.
+//
+// A face is claimed by a profile rather than by a message, so the two
+// profiles that can point at one are asked before anything is removed.
 func (q *Queries) DeleteUnclaimedMedia(ctx context.Context, before time.Time) ([]DeleteUnclaimedMediaRow, error) {
 	rows, err := q.db.Query(ctx, deleteUnclaimedMedia, before)
 	if err != nil {
@@ -166,6 +172,37 @@ func (q *Queries) DeleteUnclaimedMedia(ctx context.Context, before time.Time) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const getAgentAvatar = `-- name: GetAgentAvatar :one
+SELECT m.id, m.owner_kind, m.owner_id, m.kind, m.mime_type, m.byte_size, m.file_name, m.width, m.height, m.storage_key, m.thumb_key, m.message_id, m.created_at, m.duration_ms, m.waveform FROM media m
+  JOIN agents a ON a.avatar_media_id = m.id
+ WHERE a.id = $1 AND a.deleted_at IS NULL
+`
+
+// The picture an agent is published with. Public: this is what a stranger
+// deciding whether to add it looks at.
+func (q *Queries) GetAgentAvatar(ctx context.Context, agentID uuid.UUID) (Medium, error) {
+	row := q.db.QueryRow(ctx, getAgentAvatar, agentID)
+	var i Medium
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerKind,
+		&i.OwnerID,
+		&i.Kind,
+		&i.MimeType,
+		&i.ByteSize,
+		&i.FileName,
+		&i.Width,
+		&i.Height,
+		&i.StorageKey,
+		&i.ThumbKey,
+		&i.MessageID,
+		&i.CreatedAt,
+		&i.DurationMs,
+		&i.Waveform,
+	)
+	return i, err
 }
 
 const getMedia = `-- name: GetMedia :one

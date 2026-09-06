@@ -4,7 +4,7 @@
     export CUCKOO_HUB=https://hub.example.com
 
     cuckoo agents list
-    cuckoo agents create sbi-cards "SBI Cards"
+    cuckoo agents create sbi-cards "SBI Cards" --avatar logo.png
     cuckoo agents connect agt_...            # prints the backend's secret
     cuckoo codes create agt_... --qr card.png
     cuckoo codes create agt_... --once --payload '{"customer_ref": "SBI-8812"}'
@@ -46,8 +46,16 @@ def _agents_list(args: argparse.Namespace) -> None:
 
 def _agents_create(args: argparse.Namespace) -> None:
     with _client(args) as cuckoo:
-        agent = cuckoo.create_agent(args.handle, args.display_name, args.description or "")
+        agent = cuckoo.create_agent(
+            args.handle, args.display_name, args.description or "", avatar=args.avatar
+        )
         print(agent.id)
+
+
+def _agents_avatar(args: argparse.Namespace) -> None:
+    with _client(args) as cuckoo:
+        agent = cuckoo.update_agent(args.agent, avatar=args.path)
+        print(f"{agent.id}  @{agent.handle}  picture published")
 
 
 def _agents_connect(args: argparse.Namespace) -> None:
@@ -107,9 +115,15 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("handle", help="its permanent address on the hub")
     create.add_argument("display_name", help="the name people see")
     create.add_argument("--description", help="one line about what it does")
+    create.add_argument("--avatar", help="path to the picture it is published with")
     create.set_defaults(run=_agents_create)
 
     connect = agents.add_parser("connect", help="attach a backend and print its secret")
+    avatar = agents.add_parser("avatar", help="publish a picture for an agent")
+    avatar.set_defaults(run=_agents_avatar)
+    avatar.add_argument("agent")
+    avatar.add_argument("path", help="the picture file")
+
     connect.add_argument("agent")
     connect.add_argument("--webhook", help="a URL the hub posts to; omit for a socket backend")
     connect.set_defaults(run=_agents_connect)

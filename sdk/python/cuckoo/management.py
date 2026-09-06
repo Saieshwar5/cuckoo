@@ -20,7 +20,10 @@ not the event loop an agent runs in.
 from __future__ import annotations
 
 import base64
+import mimetypes
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Self
 
 import httpx
@@ -43,6 +46,8 @@ class AgentInfo:
     # The backend's connection state: idle, connected, unreachable, or None
     # when no backend is attached.
     status: str | None = None
+    # Whether it is published with a picture, served at /a/<id>/avatar.
+    has_avatar: bool = False
 
     @classmethod
     def from_wire(cls, data: dict[str, Any]) -> AgentInfo:
@@ -53,6 +58,7 @@ class AgentInfo:
             display_name=data.get("display_name", ""),
             description=data.get("description", ""),
             status=binding.get("status"),
+            has_avatar=bool(data.get("has_avatar")),
         )
 
 
@@ -92,13 +98,41 @@ class Management:
 
     # -- agents -----------------------------------------------------------
 
-    def create_agent(self, handle: str, display_name: str, description: str = "") -> AgentInfo:
-        """Create an agent. The handle is its permanent address on this hub."""
-        data = self._call(
-            "POST",
-            "/v1/mgmt/agents",
-            {"handle": handle, "display_name": display_name, "description": description},
+    def upload_avatar(self, path: str | os.PathLike[str]) -> str:
+        """Put a picture on the hub, ready to be an agent's face, and return
+        its id. Uploaded as the owner, because that is who publishes it."""
+        file = Path(path)
+        content_type = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
+        response = self._client.post(
+            "/v1/mgmt/media",
+            files={"file": (file.name, file.read_bytes(), content_type)},
+            timeout=None,
         )
+        _raise_for_status(response)
+        return str(response.json()["media"]["id"])
+
+    def create_agent(
+        self,
+        handle: str,
+        display_name: str,
+        description: str = "",
+        *,
+        avatar: str | os.PathLike[str] | None = None,
+    ) -> AgentInfo:
+        """Create an agent. The handle is its permanent address on this hub.
+
+        ``avatar`` is a path to the picture it is published with — the logo a
+        stranger sees on the card a QR code opens, before they have an
+        account. It is uploaded first and named here.
+        """
+        body: dict[str, Any] = {
+            "handle": handle,
+            "display_name": display_name,
+            "description": description,
+        }
+        if avatar is not None:
+            body["avatar_media_id"] = self.upload_avatar(avatar)
+        data = self._call("POST", "/v1/mgmt/agents", body)
         return AgentInfo.from_wire(data["agent"])
 
     def agents(self) -> list[AgentInfo]:
@@ -111,9 +145,16 @@ class Management:
         return AgentInfo.from_wire(data["agent"])
 
     def update_agent(
-        self, agent_id: str, *, display_name: str | None = None, description: str | None = None
+        self,
+        agent_id: str,
+        *,
+        display_name: str | None = None,
+        description: str | None = None,
+        avatar: str | os.PathLike[str] | None = None,
     ) -> AgentInfo:
         body: dict[str, Any] = {}
+        if avatar is not None:
+            body["avatar_media_id"] = self.upload_avatar(avatar)
         if display_name is not None:
             body["display_name"] = display_name
         if description is not None:
@@ -203,14 +244,21 @@ class Management:
 
     def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         response = self._client.request(method, path, json=body)
-        if response.status_code >= 400:
-            try:
-                error = response.json()["error"]
-            except Exception:  # noqa: BLE001 - a hub that answered with prose
-                raise ProtocolError(
-                    "http_error", f"{response.status_code}: {response.text[:200]}"
-                ) from None
-            raise ProtocolError(error.get("code", "error"), error.get("message", ""))
+        _raise_for_status(response)
         if response.status_code == 204 or not response.content:
             return {}
         return response.json()
+
+
+def _raise_for_status(response: httpx.Response) -> None:
+    """Turn a refusal into the hub's own error, so a caller sees
+    "unknown_picture" rather than "422 Unprocessable Entity"."""
+    if response.status_code < 400:
+        return
+    try:
+        error = response.json()["error"]
+    except Exception:  # noqa: BLE001 - a hub that answered with prose
+        raise ProtocolError(
+            "http_error", f"{response.status_code}: {response.text[:200]}"
+        ) from None
+    raise ProtocolError(error.get("code", "error"), error.get("message", ""))

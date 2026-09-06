@@ -72,11 +72,13 @@ export interface CreateAgentInput {
   handle: string;
   display_name: string;
   description: string;
+  avatar_media_id?: string;
 }
 
 export interface UpdateAgentInput {
   display_name?: string;
   description?: string;
+  avatar_media_id?: string;
 }
 
 export interface SetBindingInput {
@@ -89,7 +91,7 @@ export interface Api {
   verifySignIn(email: string, code: string, deviceName: string): Promise<Verified>;
   logout(): Promise<void>;
   me(): Promise<User>;
-  updateMe(input: { display_name?: string }): Promise<User>;
+  updateMe(input: { display_name?: string; avatar_media_id?: string }): Promise<User>;
   listConversations(): Promise<Conversation[]>;
   listMessages(
     conversationId: string,

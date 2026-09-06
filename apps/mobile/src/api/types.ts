@@ -4,6 +4,9 @@ export interface User {
   id: string;
   display_name: string;
   locale: string;
+  // Their photo, fetched from /media/{id}: theirs alone, unlike an agent's
+  // logo, which is public.
+  avatar_media_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +27,8 @@ export interface Participant {
   display_name: string;
   handle?: string;
   status?: AgentStatus;
+  // An agent published with a picture, at /a/{id}/avatar.
+  has_avatar?: boolean;
 }
 
 export interface Button {
@@ -123,6 +128,7 @@ export interface Agent {
   handle: string;
   display_name: string;
   description: string;
+  has_avatar?: boolean;
   created_at: string;
   updated_at: string;
   binding: Binding | null;
@@ -138,6 +144,7 @@ export interface AgentCard {
   handle: string;
   display_name: string;
   description: string;
+  has_avatar?: boolean;
   owner: { display_name: string };
   status?: AgentStatus;
   verified: boolean;

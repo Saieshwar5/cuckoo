@@ -59,6 +59,18 @@ export async function pickPhotos(): Promise<PickedFile[]> {
   return Promise.all(result.assets.map(fromAsset));
 }
 
+// pickOnePhoto opens the gallery for a single picture: a face, where more
+// than one makes no sense.
+export async function pickOnePhoto(): Promise<PickedFile | null> {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsMultipleSelection: false,
+    quality: QUALITY,
+  });
+  if (result.canceled || !result.assets[0]) return null;
+  return fromAsset(result.assets[0]);
+}
+
 // takePhoto opens the camera. The permission is asked for at the moment it
 // is needed, which is the only moment it makes sense to a person.
 export async function takePhoto(): Promise<PickedFile[]> {

@@ -258,6 +258,37 @@ nothing else: it cannot read a conversation, cannot speak for an agent,
 and cannot create another key. Keys are made and revoked in the app, and
 revoking one stops everything using it at once.
 
+### Giving an agent a face
+
+A picture is uploaded like any other file and pointed at from a profile.
+An agent's is published with it; a person's is theirs.
+
+```bash
+cuckoo agents create sbi-cards "SBI Cards" --avatar logo.png
+cuckoo agents avatar agt_... newlogo.png
+```
+
+The picture goes to `POST /v1/mgmt/media` — the management API's own
+upload — because a company's servers hold an API key, and a key does what
+its owner can do there. It would be a strange rule that let a key create a
+bank's agent but not give it a face.
+
+**An agent's picture is the one public thing in Cuckoo:**
+
+```bash
+curl -s localhost:8080/a/agt_.../avatar > logo.jpg   # no credential
+```
+
+That is deliberate and narrow. The card a stranger opens from a QR code
+renders in a browser before they have an account, and a company asking for
+trust with a grey disc and the word "Unverified" is asking too much. Only
+the small copy is served: nobody needs the original of a face, and a public
+route handing out sixteen megabytes on request is a way to be knocked over.
+
+A person's photo is not like that. It is fetched from `/v1/client/media`
+behind their own session, and today only they can see it — an agent is told
+a display name and nothing more.
+
 ### Handing an agent to other people
 
 An agent starts private: only its owner has a chat with it. A pair token

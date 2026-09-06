@@ -15,6 +15,7 @@ type agentJSON struct {
 	Handle      string `json:"handle"`
 	DisplayName string `json:"display_name"`
 	Description string `json:"description"`
+	HasAvatar   bool   `json:"has_avatar"`
 	Binding     *struct {
 		ID     string  `json:"id"`
 		Mode   string  `json:"mode"`

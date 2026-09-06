@@ -15,7 +15,7 @@ const createUser = `-- name: CreateUser :one
 
 INSERT INTO users (id, display_name, locale)
 VALUES ($1, $2, $3)
-RETURNING id, display_name, locale, created_at, updated_at, deleted_at
+RETURNING id, display_name, locale, created_at, updated_at, deleted_at, avatar_media_id
 `
 
 type CreateUserParams struct {
@@ -37,12 +37,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.AvatarMediaID,
 	)
 	return i, err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, display_name, locale, created_at, updated_at, deleted_at FROM users
+SELECT id, display_name, locale, created_at, updated_at, deleted_at, avatar_media_id FROM users
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -56,6 +57,7 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.AvatarMediaID,
 	)
 	return i, err
 }
@@ -76,23 +78,30 @@ func (q *Queries) SoftDeleteUser(ctx context.Context, id uuid.UUID) (int64, erro
 
 const updateUserProfile = `-- name: UpdateUserProfile :one
 UPDATE users
-SET display_name = COALESCE($1::text, display_name),
-    locale       = COALESCE($2::text, locale),
-    updated_at   = now()
-WHERE id = $3 AND deleted_at IS NULL
-RETURNING id, display_name, locale, created_at, updated_at, deleted_at
+SET display_name    = COALESCE($1::text, display_name),
+    locale          = COALESCE($2::text, locale),
+    avatar_media_id = COALESCE($3::uuid, avatar_media_id),
+    updated_at      = now()
+WHERE id = $4 AND deleted_at IS NULL
+RETURNING id, display_name, locale, created_at, updated_at, deleted_at, avatar_media_id
 `
 
 type UpdateUserProfileParams struct {
-	DisplayName *string
-	Locale      *string
-	ID          uuid.UUID
+	DisplayName   *string
+	Locale        *string
+	AvatarMediaID *uuid.UUID
+	ID            uuid.UUID
 }
 
 // Partial update: an argument left null leaves that column untouched, so a
 // caller changing only their name cannot accidentally blank their locale.
 func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUserProfile, arg.DisplayName, arg.Locale, arg.ID)
+	row := q.db.QueryRow(ctx, updateUserProfile,
+		arg.DisplayName,
+		arg.Locale,
+		arg.AvatarMediaID,
+		arg.ID,
+	)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -101,6 +110,7 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.AvatarMediaID,
 	)
 	return i, err
 }
