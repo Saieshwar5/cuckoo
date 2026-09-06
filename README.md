@@ -285,7 +285,9 @@ white, grey and black, and works like the chat apps people already have:
 open a chat, watch a reply stream in, tap the buttons an agent offers,
 long-press to reply. Create an agent from the Agents tab, generate its
 secret on the Connect screen, paste the snippet into a terminal, and the
-screen says Connected the moment your code speaks.
+screen says Connected the moment your code speaks. Share it from its
+profile as a QR code; someone else scans it, or pastes the link, sees who
+is behind it, taps Add, and your agent greets them.
 
 The emulator is a one-time install with no Android Studio and no sudo:
 `make emulator-install` downloads a Java runtime, the SDK tools and one

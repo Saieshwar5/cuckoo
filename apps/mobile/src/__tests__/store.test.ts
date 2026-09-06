@@ -1,5 +1,5 @@
 import type { Conversation, Message } from '@/api/types';
-import { applyFrame, empty, filterConversations, setConversations } from '@/chats/store';
+import { applyFrame, concernsUnknown, empty, filterConversations, setConversations } from '@/chats/store';
 
 function msg(over: Partial<Message> & { id: string; conversation_id: string; created_at: string }): Message {
   return {
@@ -139,5 +139,20 @@ describe('search', () => {
     expect(filterConversations(list, 'ECHO-').map((c) => c.id)).toEqual(['cnv_b']);
     expect(filterConversations(list, 'refund').map((c) => c.id)).toEqual(['cnv_a']);
     expect(filterConversations(list, 'nothing')).toEqual([]);
+  });
+});
+
+describe('unknown conversations', () => {
+  it('flags a frame about a chat the list has not seen, and nothing else', () => {
+    const s = setConversations(empty, [conv('cnv_known', '2026-09-01T10:00:00Z')]);
+    const frame = (conversation_id: string) =>
+      ({
+        type: 'delivery.updated' as const,
+        data: { conversation_id, message_id: 'm', delivery_status: 'delivered' as const },
+      }) as const;
+    expect(concernsUnknown(s, frame('cnv_known'))).toBe(false);
+    expect(concernsUnknown(s, frame('cnv_new'))).toBe(true);
+    expect(concernsUnknown(s, { type: 'ready', data: { user_id: 'usr_1' } })).toBe(false);
+    expect(concernsUnknown(s, { type: 'agent.status', data: { agent_id: 'a', status: 'idle' } })).toBe(false);
   });
 });

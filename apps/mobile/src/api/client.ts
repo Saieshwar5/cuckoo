@@ -1,4 +1,17 @@
-import type { Agent, Binding, Conversation, Message, Page, User, Verified } from './types';
+import type {
+  Agent,
+  Binding,
+  Contact,
+  Conversation,
+  Message,
+  MintedToken,
+  Page,
+  PairAccepted,
+  PairResolve,
+  PairToken,
+  User,
+  Verified,
+} from './types';
 
 // ApiError is the hub's error envelope as a thrown value. `code` is stable
 // and is what the app matches on; `message` is for people.
@@ -75,6 +88,21 @@ export interface Api {
   // The secret comes back exactly once.
   setBinding(id: string, input: SetBindingInput): Promise<{ binding: Binding; secret: string }>;
   revokeBinding(id: string): Promise<void>;
+  // Handing an agent out, and taking one in.
+  createPairToken(
+    agentId: string,
+    input: { payload?: unknown; max_uses?: number; expires_in?: number },
+  ): Promise<MintedToken>;
+  listPairTokens(agentId: string): Promise<PairToken[]>;
+  revokePairToken(agentId: string, tokenId: string): Promise<void>;
+  // The picture of a code this phone kept: the hub renders it only for
+  // the code that matches the token.
+  pairTokenQR(agentId: string, tokenId: string, code: string): Promise<{ url: string; qr_png: string }>;
+  resolvePair(code: string): Promise<PairResolve>;
+  acceptPair(code: string): Promise<PairAccepted>;
+  listContacts(): Promise<Contact[]>;
+  blockAgent(id: string): Promise<void>;
+  unblockAgent(id: string): Promise<void>;
 }
 
 // newIdempotencyKey is unique enough that two taps of Send never collide,
@@ -155,5 +183,21 @@ export function createApi(opts: ApiOptions): Api {
     setBinding: (id, input) =>
       request<{ binding: Binding; secret: string }>('POST', `/v1/mgmt/agents/${id}/binding`, input),
     revokeBinding: (id) => request('DELETE', `/v1/mgmt/agents/${id}/binding`),
+    createPairToken: (agentId, input) =>
+      request<MintedToken>('POST', `/v1/mgmt/agents/${agentId}/pair-tokens`, input),
+    listPairTokens: async (agentId) =>
+      (await request<{ tokens: PairToken[] }>('GET', `/v1/mgmt/agents/${agentId}/pair-tokens`)).tokens,
+    revokePairToken: (agentId, tokenId) =>
+      request('DELETE', `/v1/mgmt/agents/${agentId}/pair-tokens/${tokenId}`),
+    pairTokenQR: (agentId, tokenId, code) =>
+      request<{ url: string; qr_png: string }>(
+        'GET',
+        `/v1/mgmt/agents/${agentId}/pair-tokens/${tokenId}/qr?code=${encodeURIComponent(code)}`,
+      ),
+    resolvePair: (code) => request<PairResolve>('GET', `/v1/client/pair/${encodeURIComponent(code)}`),
+    acceptPair: (code) => request<PairAccepted>('POST', `/v1/client/pair/${encodeURIComponent(code)}/accept`),
+    listContacts: async () => (await request<{ contacts: Contact[] }>('GET', '/v1/client/contacts')).contacts,
+    blockAgent: (id) => request('POST', `/v1/client/agents/${id}/block`),
+    unblockAgent: (id) => request('DELETE', `/v1/client/agents/${id}/block`),
   };
 }
