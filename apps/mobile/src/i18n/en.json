@@ -66,6 +66,7 @@
   "chat.reply.hint": "Long-press a message to reply to it.",
   "chat.failed": "Not sent. Tap to retry.",
   "chat.truncated": "Cut short",
+  "chat.button.leaves": "Opens outside Cuckoo",
   "chat.quick.label": "Suggested replies",
   "agents.new": "New agent",
   "agent.new.title": "New agent",

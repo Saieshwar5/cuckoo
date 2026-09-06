@@ -11,6 +11,7 @@ type richMessageJSON struct {
 		Text    string `json:"text"`
 		Buttons [][]struct {
 			ID    string `json:"id"`
+			URL   string `json:"url"`
 			Label string `json:"label"`
 			Style string `json:"style"`
 		} `json:"buttons"`
@@ -95,6 +96,55 @@ func TestButtonsOverHTTP(t *testing.T) {
 		agent.Post(agentMessages, map[string]any{"text": "x", "reply_to": "msg_nope"}).
 			ExpectError(http.StatusUnprocessableEntity, "invalid_id")
 	})
+}
+
+// Over HTTP: a url button reaches the app with its link and no id, sits
+// beside an ordinary one, and can never come back as a tap.
+func TestURLButtonsOverHTTP(t *testing.T) {
+	f := setupChat(t)
+	agent := f.srv.AsAgent(t, f.secret)
+	person := f.srv.AsUser(t, f.owner)
+	agentMessages := "/v1/agent/conversations/" + f.dmID + "/messages"
+	personMessages := "/v1/client/conversations/" + f.dmID + "/messages"
+
+	var sent struct {
+		Message richMessageJSON `json:"message"`
+	}
+	agent.Post(agentMessages, map[string]any{
+		"text": "Order 4412 is on its way.",
+		"buttons": [][]map[string]any{{
+			{"url": "https://swiggy.com/track/4412", "label": "Track order", "style": "primary"},
+			{"id": "help", "label": "Something is wrong"},
+		}},
+	}).ExpectStatus(http.StatusCreated).Decode(&sent)
+
+	link := sent.Message.Body.Buttons[0][0]
+	if link.URL != "https://swiggy.com/track/4412" || link.ID != "" || link.Style != "primary" {
+		t.Fatalf("url button = %+v, want the link and no id", link)
+	}
+
+	// The app sees the same thing the agent sent.
+	var seen struct {
+		Messages []richMessageJSON `json:"messages"`
+	}
+	person.Get(personMessages).ExpectStatus(http.StatusOK).Decode(&seen)
+	if got := seen.Messages[0].Body.Buttons[0][0]; got.URL != link.URL || got.ID != "" {
+		t.Errorf("as the app sees it = %+v, want the link and no id", got)
+	}
+
+	// Nothing a person sends can turn a link into a choice.
+	for _, id := range []string{"", "https://swiggy.com/track/4412"} {
+		person.Post(personMessages, map[string]any{
+			"action": map[string]any{"button_id": id, "source_message_id": sent.Message.ID},
+		}).ExpectError(http.StatusUnprocessableEntity, "invalid_action")
+	}
+
+	agent.Post(agentMessages, map[string]any{"text": "x", "buttons": [][]map[string]any{
+		{{"url": "javascript:alert(1)", "label": "Tap"}},
+	}}).ExpectError(http.StatusUnprocessableEntity, "invalid_buttons")
+	agent.Post(agentMessages, map[string]any{"text": "x", "buttons": [][]map[string]any{
+		{{"id": "a", "url": "https://swiggy.in", "label": "Tap"}},
+	}}).ExpectError(http.StatusUnprocessableEntity, "invalid_buttons")
 }
 
 func TestTypingOverHTTP(t *testing.T) {

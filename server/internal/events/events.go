@@ -91,9 +91,11 @@ type Attachment struct {
 	Waveform     []int32 `json:"waveform,omitempty"`
 }
 
-// Button is a choice offered to a person.
+// Button is something offered to a person: a choice, when it has an id, or
+// a link that leaves the app, when it has a url. Never both.
 type Button struct {
-	ID    string `json:"id"`
+	ID    string `json:"id,omitempty"`
+	URL   string `json:"url,omitempty"`
 	Label string `json:"label"`
 	Style string `json:"style"`
 }
@@ -122,7 +124,7 @@ func BodyOf(b conversations.Body) Body {
 	for _, row := range b.Buttons {
 		wire := make([]Button, 0, len(row))
 		for _, btn := range row {
-			wire = append(wire, Button{ID: btn.ID, Label: btn.Label, Style: btn.Style})
+			wire = append(wire, Button{ID: btn.ID, URL: btn.URL, Label: btn.Label, Style: btn.Style})
 		}
 		out.Buttons = append(out.Buttons, wire)
 	}

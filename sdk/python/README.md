@@ -37,6 +37,23 @@ cuckoo.create_agent("sbi-cards", "SBI Cards", avatar="logo.png")
 cuckoo.update_agent(agent.id, avatar="newlogo.png")
 ```
 
+Words are markdown-lite — bold, italic, code, bullet and numbered lists,
+and addresses that become links. A buttons row may carry a `Link`, which
+opens something on the person's phone and tells you nothing:
+
+```python
+from cuckoo import Link
+
+await conv.send(
+    "**Order 4412** is on its way:\n- Rider: Ravi\n- ETA: 12 min",
+    buttons=[[Link("Track order", "https://swiggy.com/t/4412"), ("cancel", "Cancel")]],
+)
+```
+
+`[label](url)` is not a link and is shown as written: a worded link in text
+would let any agent dress up an address as somewhere else. A `Link` button
+is the worded link, and the app draws it as one that leaves.
+
 A voice note arrives with what it needs to be drawn and heard:
 
 ```python

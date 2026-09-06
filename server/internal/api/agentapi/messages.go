@@ -38,8 +38,11 @@ type sendMessageRequest struct {
 	QuickReplies   []quickReplyInput `json:"quick_replies"`
 }
 
+// buttonInput is a button an agent offers: an id to get back when it is
+// tapped, or a url to open instead. One or the other.
 type buttonInput struct {
 	ID    string `json:"id"`
+	URL   string `json:"url"`
 	Label string `json:"label"`
 	Style string `json:"style"`
 }
@@ -56,7 +59,7 @@ func buttonsOf(in [][]buttonInput) [][]conversations.Button {
 	for _, row := range in {
 		btns := make([]conversations.Button, 0, len(row))
 		for _, b := range row {
-			btns = append(btns, conversations.Button{ID: b.ID, Label: b.Label, Style: b.Style})
+			btns = append(btns, conversations.Button{ID: b.ID, URL: b.URL, Label: b.Label, Style: b.Style})
 		}
 		out = append(out, btns)
 	}

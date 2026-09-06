@@ -114,6 +114,57 @@ func TestTapRejections(t *testing.T) {
 	})
 }
 
+// A url button is a way out of the app, not a choice: it is stored with its
+// link, it carries no id, and nothing a person does with it becomes a
+// message the agent receives.
+func TestURLButtons(t *testing.T) {
+	ctx := context.Background()
+	f := setup(t)
+
+	msg, err := f.svc.SendAsAgent(ctx, f.agent.ID, f.dm.ID, conversations.SendInput{
+		Text: "Your order is on its way.",
+		Buttons: [][]conversations.Button{{
+			{URL: "https://swiggy.com/track/4412", Label: " Track order ", Style: "primary"},
+			{ID: "cancel", Label: "Cancel"},
+		}, {
+			{URL: "upi://pay?pa=swiggy@icici&am=499", Label: "Pay ₹499"},
+			{URL: "tel:+911800123456", Label: "Call us"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SendAsAgent: %v", err)
+	}
+	link := msg.Body.Buttons[0][0]
+	if link.URL != "https://swiggy.com/track/4412" || link.ID != "" || link.Label != "Track order" || link.Style != "primary" {
+		t.Errorf("url button = %+v, want the link kept, no id, and the label trimmed", link)
+	}
+	if msg.Body.Buttons[1][0].URL == "" || msg.Body.Buttons[1][1].URL == "" {
+		t.Errorf("upi and tel buttons = %+v, want both kept", msg.Body.Buttons[1])
+	}
+
+	// A tap can only ever name an id. A url button has none, so neither an
+	// empty id nor the link itself reaches one.
+	for _, id := range []string{"", "https://swiggy.com/track/4412"} {
+		_, err := f.svc.SendAsUser(ctx, f.owner.ID, f.dm.ID, conversations.SendInput{
+			Action: &conversations.Action{ButtonID: id, SourceMessageID: msg.ID},
+		})
+		if domain.KindOf(err) != domain.KindInvalid {
+			t.Errorf("tapping a url button with id %q got %v, want invalid", id, err)
+		}
+	}
+
+	// The id button beside it still works, and records the choice.
+	if _, err := f.svc.SendAsUser(ctx, f.owner.ID, f.dm.ID, conversations.SendInput{
+		Action: &conversations.Action{ButtonID: "cancel", SourceMessageID: msg.ID},
+	}); err != nil {
+		t.Fatalf("tap beside a url button: %v", err)
+	}
+	page, _ := f.svc.ListMessages(ctx, f.owner.ID, f.dm.ID, conversations.ListMessagesInput{})
+	if page.Messages[1].Body.SelectedButtonID != "cancel" {
+		t.Errorf("selected = %q, want cancel", page.Messages[1].Body.SelectedButtonID)
+	}
+}
+
 func TestButtonValidation(t *testing.T) {
 	ctx := context.Background()
 	f := setup(t)
@@ -125,16 +176,25 @@ func TestButtonValidation(t *testing.T) {
 		return out
 	}
 	cases := map[string]conversations.SendInput{
-		"four rows":       {Text: "x", Buttons: [][]conversations.Button{row("a"), row("b"), row("c"), row("d")}},
-		"four in a row":   {Text: "x", Buttons: [][]conversations.Button{row("a", "b", "c", "d")}},
-		"empty row":       {Text: "x", Buttons: [][]conversations.Button{{}}},
-		"bad id":          {Text: "x", Buttons: [][]conversations.Button{{{ID: "has space", Label: "ok"}}}},
-		"duplicate id":    {Text: "x", Buttons: [][]conversations.Button{row("a"), row("a")}},
-		"long label":      {Text: "x", Buttons: [][]conversations.Button{{{ID: "a", Label: strings.Repeat("l", 41)}}}},
-		"empty label":     {Text: "x", Buttons: [][]conversations.Button{{{ID: "a", Label: "  "}}}},
-		"bad style":       {Text: "x", Buttons: [][]conversations.Button{{{ID: "a", Label: "ok", Style: "loud"}}}},
-		"seven chips":     {Text: "x", QuickReplies: make([]conversations.QuickReply, 7)},
-		"chip with break": {Text: "x", QuickReplies: []conversations.QuickReply{{Label: "a\nb"}}},
+		"four rows":        {Text: "x", Buttons: [][]conversations.Button{row("a"), row("b"), row("c"), row("d")}},
+		"four in a row":    {Text: "x", Buttons: [][]conversations.Button{row("a", "b", "c", "d")}},
+		"empty row":        {Text: "x", Buttons: [][]conversations.Button{{}}},
+		"bad id":           {Text: "x", Buttons: [][]conversations.Button{{{ID: "has space", Label: "ok"}}}},
+		"duplicate id":     {Text: "x", Buttons: [][]conversations.Button{row("a"), row("a")}},
+		"long label":       {Text: "x", Buttons: [][]conversations.Button{{{ID: "a", Label: strings.Repeat("l", 41)}}}},
+		"empty label":      {Text: "x", Buttons: [][]conversations.Button{{{ID: "a", Label: "  "}}}},
+		"bad style":        {Text: "x", Buttons: [][]conversations.Button{{{ID: "a", Label: "ok", Style: "loud"}}}},
+		"id and url":       {Text: "x", Buttons: [][]conversations.Button{{{ID: "a", URL: "https://x.in", Label: "ok"}}}},
+		"script url":       {Text: "x", Buttons: [][]conversations.Button{{{URL: "javascript:alert(1)", Label: "ok"}}}},
+		"data url":         {Text: "x", Buttons: [][]conversations.Button{{{URL: "data:text/html,<b>", Label: "ok"}}}},
+		"file url":         {Text: "x", Buttons: [][]conversations.Button{{{URL: "file:///etc/passwd", Label: "ok"}}}},
+		"url with space":   {Text: "x", Buttons: [][]conversations.Button{{{URL: "https://x.in/a b", Label: "ok"}}}},
+		"url with break":   {Text: "x", Buttons: [][]conversations.Button{{{URL: "https://x.in\nhttps://evil.in", Label: "ok"}}}},
+		"url with no host": {Text: "x", Buttons: [][]conversations.Button{{{URL: "https://", Label: "ok"}}}},
+		"tel with nothing": {Text: "x", Buttons: [][]conversations.Button{{{URL: "tel:", Label: "ok"}}}},
+		"long url":         {Text: "x", Buttons: [][]conversations.Button{{{URL: "https://x.in/" + strings.Repeat("p", 2048), Label: "ok"}}}},
+		"seven chips":      {Text: "x", QuickReplies: make([]conversations.QuickReply, 7)},
+		"chip with break":  {Text: "x", QuickReplies: []conversations.QuickReply{{Label: "a\nb"}}},
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {

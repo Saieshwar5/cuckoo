@@ -139,11 +139,20 @@ type Body struct {
 	SelectedButtonID string       `json:"selected_button_id,omitempty"`
 }
 
-// Button is something a person can tap. The backend chooses the id and gets
-// it back exactly, which is the whole point: a choice it can match rather
-// than text it has to interpret.
+// Button is something a person can tap. A button has an id or a url, never
+// both, and the two do different things.
+//
+// An id button is a choice: the backend picks the id and gets it back
+// exactly, which is the whole point — something it can match rather than
+// text it has to interpret.
+//
+// A url button leaves the app and tells the backend nothing. It is how an
+// agent hands someone to a page it already has: a tracking link, a payment,
+// a phone number, or its own site to sign in to when a poster's code could
+// not say who scanned it.
 type Button struct {
-	ID    string `json:"id"`
+	ID    string `json:"id,omitempty"`
+	URL   string `json:"url,omitempty"`
 	Label string `json:"label"`
 	Style string `json:"style,omitempty"`
 }

@@ -2,6 +2,7 @@ package conversations
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -29,11 +30,21 @@ const (
 	buttonsPerRowMax = 3
 	quickRepliesMax  = 6
 	labelMaxLen      = 40
-	previewMaxLen    = 100
+
+	// buttonURLMaxLen is generous enough for a signed link with a token in
+	// it and short enough that a url is not a payload.
+	buttonURLMaxLen = 2048
+	previewMaxLen   = 100
 )
 
 // buttonIDPattern: something a backend generates and matches on, not prose.
 var buttonIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+
+// buttonURLSchemes is what a button may open. The web, the way India pays,
+// and the call every support line offers. Everything else is refused —
+// javascript:, data:, file: and an app's private scheme are not things an
+// unverified agent gets to put under a person's thumb.
+var buttonURLSchemes = map[string]bool{"https": true, "http": true, "upi": true, "tel": true}
 
 // validateButtons normalises and checks rows of buttons. Ids are unique
 // within the message, since a tap names one of them.
@@ -53,30 +64,99 @@ func validateButtons(rows [][]Button) ([][]Button, error) {
 		}
 		clean := make([]Button, 0, len(row))
 		for _, b := range row {
-			if !buttonIDPattern.MatchString(b.ID) {
-				return nil, invalid("Button ids are 1 to 64 characters: letters, digits, _ . : or -.")
-			}
-			if seen[b.ID] {
-				return nil, invalid(fmt.Sprintf("Button id %q appears twice.", b.ID))
-			}
-			seen[b.ID] = true
-			label, err := validateLabel("buttons", "invalid_buttons", b.Label)
+			btn, err := validateButton(b, seen)
 			if err != nil {
 				return nil, err
 			}
-			style := b.Style
-			switch style {
-			case "":
-				style = ButtonDefault
-			case ButtonDefault, ButtonPrimary, ButtonDanger:
-			default:
-				return nil, invalid(`Button style must be "default", "primary" or "danger".`)
-			}
-			clean = append(clean, Button{ID: b.ID, Label: label, Style: style})
+			clean = append(clean, btn)
 		}
 		out = append(out, clean)
 	}
 	return out, nil
+}
+
+// validateButton checks one button and records its id, if it has one.
+func validateButton(b Button, seen map[string]bool) (Button, error) {
+	invalid := func(msg string) error { return domain.InvalidField("buttons", "invalid_buttons", msg) }
+
+	label, err := validateLabel("buttons", "invalid_buttons", b.Label)
+	if err != nil {
+		return Button{}, err
+	}
+	style, err := validateButtonStyle(b.Style)
+	if err != nil {
+		return Button{}, err
+	}
+
+	if b.URL != "" {
+		if b.ID != "" {
+			return Button{}, invalid("A button has an id or a url, not both.")
+		}
+		url, err := validateButtonURL(b.URL)
+		if err != nil {
+			return Button{}, err
+		}
+		return Button{URL: url, Label: label, Style: style}, nil
+	}
+
+	if !buttonIDPattern.MatchString(b.ID) {
+		return Button{}, invalid("Button ids are 1 to 64 characters: letters, digits, _ . : or -.")
+	}
+	if seen[b.ID] {
+		return Button{}, invalid(fmt.Sprintf("Button id %q appears twice.", b.ID))
+	}
+	seen[b.ID] = true
+	return Button{ID: b.ID, Label: label, Style: style}, nil
+}
+
+func validateButtonStyle(raw string) (string, error) {
+	switch raw {
+	case "":
+		return ButtonDefault, nil
+	case ButtonDefault, ButtonPrimary, ButtonDanger:
+		return raw, nil
+	}
+	return "", domain.InvalidField("buttons", "invalid_buttons",
+		`Button style must be "default", "primary" or "danger".`)
+}
+
+// validateButtonURL checks where a button leads. It is the one field in a
+// message that acts on the person's device rather than being read, so it is
+// checked for what it is rather than only for how long it is.
+func validateButtonURL(raw string) (string, error) {
+	invalid := func(msg string) error { return domain.InvalidField("buttons", "invalid_buttons", msg) }
+
+	link := strings.TrimSpace(raw)
+	if !utf8.ValidString(link) || strings.ContainsFunc(link, isURLBreaking) {
+		return "", invalid("A button url cannot contain spaces, line breaks or control characters.")
+	}
+	if len(link) > buttonURLMaxLen {
+		return "", invalid(fmt.Sprintf("A button url must be at most %d characters.", buttonURLMaxLen))
+	}
+	u, err := url.Parse(link)
+	if err != nil {
+		return "", invalid("That button url is not a url.")
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if !buttonURLSchemes[scheme] {
+		return "", invalid("A button url must start with https, http, upi or tel.")
+	}
+	// http and https address a host; tel carries a number and upi its
+	// parameters. What is refused here is a scheme with nothing after it.
+	if scheme == "https" || scheme == "http" {
+		if u.Host == "" {
+			return "", invalid("That button url has no address.")
+		}
+	} else if u.Host == "" && u.Opaque == "" {
+		return "", invalid("That button url has no address.")
+	}
+	return link, nil
+}
+
+// isURLBreaking reports whether a rune must not appear in a url: spaces and
+// control characters, which is how a link is dressed up as another one.
+func isURLBreaking(r rune) bool {
+	return r <= 0x20 || r == 0x7f || r == '\u2028' || r == '\u2029'
 }
 
 // validateQuickReplies normalises and checks suggested answers.
