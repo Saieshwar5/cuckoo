@@ -137,6 +137,35 @@ func (q *Queries) GetContact(ctx context.Context, arg GetContactParams) (Contact
 	return i, err
 }
 
+const getPairToken = `-- name: GetPairToken :one
+SELECT id, token_hash, kind, agent_id, payload, max_uses, use_count, created_by_user_id, expires_at, created_at, revoked_at FROM pair_tokens
+WHERE id = $1 AND agent_id = $2
+`
+
+type GetPairTokenParams struct {
+	ID      uuid.UUID
+	AgentID uuid.UUID
+}
+
+func (q *Queries) GetPairToken(ctx context.Context, arg GetPairTokenParams) (PairToken, error) {
+	row := q.db.QueryRow(ctx, getPairToken, arg.ID, arg.AgentID)
+	var i PairToken
+	err := row.Scan(
+		&i.ID,
+		&i.TokenHash,
+		&i.Kind,
+		&i.AgentID,
+		&i.Payload,
+		&i.MaxUses,
+		&i.UseCount,
+		&i.CreatedByUserID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
 const getPairTokenByHash = `-- name: GetPairTokenByHash :one
 SELECT t.id, t.token_hash, t.kind, t.agent_id, t.payload, t.max_uses, t.use_count, t.created_by_user_id, t.expires_at, t.created_at, t.revoked_at, a.deleted_at AS agent_deleted_at
 FROM pair_tokens t

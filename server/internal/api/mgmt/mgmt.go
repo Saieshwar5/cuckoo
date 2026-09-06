@@ -49,6 +49,7 @@ func (h *Handler) Routes() chi.Router {
 		r.Post("/pair-tokens", h.createPairToken)
 		r.Get("/pair-tokens", h.listPairTokens)
 		r.Delete("/pair-tokens/{tid}", h.revokePairToken)
+		r.Get("/pair-tokens/{tid}/qr", h.pairTokenPicture)
 	})
 
 	return r

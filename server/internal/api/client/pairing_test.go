@@ -122,6 +122,17 @@ func TestPairOverHTTP(t *testing.T) {
 		t.Errorf("tokens = %+v", tokens.Tokens)
 	}
 	f.srv.AsUser(t, f.other).Get("/v1/mgmt/agents/" + agentID + "/pair-tokens").ExpectStatus(http.StatusForbidden)
+	// The picture again, for the code this device kept; never for a wrong code.
+	var pic struct {
+		URL   string `json:"url"`
+		QRPNG string `json:"qr_png"`
+	}
+	f.srv.AsUser(t, f.owner).Get("/v1/mgmt/agents/" + agentID + "/pair-tokens/" + minted.Token.ID + "/qr?code=" + minted.Code).
+		ExpectStatus(http.StatusOK).Decode(&pic)
+	if pic.URL != minted.URL || !strings.HasPrefix(pic.QRPNG, "data:image/png;base64,") {
+		t.Errorf("picture = %+v", pic)
+	}
+	f.srv.AsUser(t, f.owner).Get("/v1/mgmt/agents/" + agentID + "/pair-tokens/" + minted.Token.ID + "/qr?code=pair_wrong").ExpectStatus(http.StatusNotFound)
 	f.srv.AsUser(t, f.owner).Delete("/v1/mgmt/agents/" + agentID + "/pair-tokens/" + minted.Token.ID).ExpectStatus(http.StatusNoContent)
 	f.srv.AsUser(t, f.other).Get("/v1/client/pair/" + minted.Code).ExpectStatus(http.StatusNotFound)
 }

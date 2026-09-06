@@ -78,3 +78,7 @@ SELECT EXISTS (
     JOIN participants pa ON pa.conversation_id = $1 AND pa.agent_id = c.agent_id
     WHERE c.blocked_at IS NOT NULL
 );
+
+-- name: GetPairToken :one
+SELECT * FROM pair_tokens
+WHERE id = $1 AND agent_id = $2;

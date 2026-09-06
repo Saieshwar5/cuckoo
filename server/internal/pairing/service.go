@@ -1,6 +1,7 @@
 package pairing
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -127,6 +128,27 @@ func (s *Service) RevokeToken(ctx context.Context, callerID, agentID, tokenID uu
 		return domain.NotFound("token_not_found", "No such live token.")
 	}
 	return nil
+}
+
+// Picture confirms a code belongs to one of the owner's tokens and returns
+// the link it encodes, so a device that kept the code can have its QR
+// drawn again. The hub keeps only the hash, so it can check but never
+// reveal a code.
+func (s *Service) Picture(ctx context.Context, callerID, agentID, tokenID uuid.UUID, plaintext string) (string, error) {
+	if _, err := s.agents.GetOwned(ctx, callerID, agentID); err != nil {
+		return "", err
+	}
+	row, err := s.store.GetPairToken(ctx, gen.GetPairTokenParams{ID: tokenID, AgentID: agentID})
+	if err != nil {
+		if store.IsNoRows(err) {
+			return "", domain.NotFound("token_not_found", "No such token.")
+		}
+		return "", domain.Internal(fmt.Errorf("get pair token %s: %w", tokenID, err))
+	}
+	if !bytes.Equal(row.TokenHash, domain.HashSecret(plaintext)) {
+		return "", domain.NotFound("token_not_found", "That code does not belong to this token.")
+	}
+	return s.URL(plaintext), nil
 }
 
 // lookup resolves the token in a link and checks it is still good for

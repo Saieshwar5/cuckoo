@@ -110,6 +110,44 @@ func (h *Handler) createPairToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// pictureEnvelope is the QR picture of a code the device kept.
+type pictureEnvelope struct {
+	URL   string `json:"url"`
+	QRPNG string `json:"qr_png"`
+}
+
+func (h *Handler) pairTokenPicture(w http.ResponseWriter, r *http.Request) {
+	userID, ok := principal.UserID(r.Context())
+	if !ok {
+		httpx.Error(w, r, domain.Unauthorized("unauthorized", "Sign in to continue."))
+		return
+	}
+	id, err := agentIDParam(r)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	tokenID, err := domain.ParseID(domain.PrefixToken, chi.URLParam(r, "tid"))
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	url, err := h.pairing.Picture(r.Context(), userID, id, tokenID, r.URL.Query().Get("code"))
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	png, err := qrcode.Encode(url, qrcode.Medium, qrSize)
+	if err != nil {
+		httpx.Error(w, r, domain.Internal(err))
+		return
+	}
+	httpx.JSON(w, r, http.StatusOK, pictureEnvelope{
+		URL:   url,
+		QRPNG: "data:image/png;base64," + base64.StdEncoding.EncodeToString(png),
+	})
+}
+
 func (h *Handler) listPairTokens(w http.ResponseWriter, r *http.Request) {
 	userID, ok := principal.UserID(r.Context())
 	if !ok {
