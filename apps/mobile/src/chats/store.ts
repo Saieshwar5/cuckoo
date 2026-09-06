@@ -30,6 +30,13 @@ function update(state: ChatsState, id: string, fn: (c: Conversation) => Conversa
   return { conversations: sorted(next) };
 }
 
+// concernsUnknown says whether a frame is about a conversation the list
+// does not have: the sign that a reload is due.
+export function concernsUnknown(state: ChatsState, frame: Frame): boolean {
+  if (frame.type === 'ready' || frame.type === 'agent.status') return false;
+  return !state.conversations.some((c) => c.id === frame.data.conversation_id);
+}
+
 // applyFrame folds one live frame into the list. A message in a conversation
 // we do not know about is ignored; the next refresh brings the conversation.
 export function applyFrame(state: ChatsState, frame: Frame): ChatsState {

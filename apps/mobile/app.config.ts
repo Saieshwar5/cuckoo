@@ -27,6 +27,7 @@ const config: ExpoConfig = {
   plugins: [
     'expo-router',
     'expo-secure-store',
+    ['expo-camera', { cameraPermission: 'Cuckoo uses the camera to scan agent codes.' }],
     [
       'expo-splash-screen',
       {

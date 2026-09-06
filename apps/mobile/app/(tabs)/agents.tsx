@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
 
 import { useAgents } from '@/agents/AgentsProvider';
 import type { AgentStatus } from '@/api/types';
@@ -14,15 +14,48 @@ import { t } from '@/i18n';
 import { useSession } from '@/session/SessionProvider';
 import { radius, spacing, type, useStyles, useTheme, type Palette, type Theme } from '@/theme';
 
-// Agents: the ones you own, with their connection state, live. Tap one for
-// its profile; the button makes a new one. Signing out lives here for now.
+interface Row {
+  id: string;
+  name: string;
+  handle: string;
+  status: AgentStatus | null;
+  blocked: boolean;
+  owned: boolean;
+}
+
+// Agents: the ones you own and the ones you added, with their connection
+// state, live. Tap one for its profile; the button makes a new one.
+// Signing out lives here for now.
 export default function AgentsScreen() {
   const { signOut } = useSession();
-  const { agents, loading, controller } = useAgents();
+  const { agents, contacts, loading, controller } = useAgents();
   const { colors } = useTheme();
   const styles = useStyles(makeStyles);
   const router = useRouter();
   const create = () => router.push('/agent/new');
+
+  const yours: Row[] = agents.map((a) => ({
+    id: a.id,
+    name: a.display_name,
+    handle: a.handle,
+    status: a.binding?.status ?? null,
+    blocked: false,
+    owned: true,
+  }));
+  const added: Row[] = contacts
+    .filter((c) => c.added_via === 'pair_token' && !c.agent_deleted)
+    .map((c) => ({
+      id: c.agent.id,
+      name: c.agent.display_name,
+      handle: c.agent.handle,
+      status: c.agent.status ?? null,
+      blocked: c.blocked,
+      owned: false,
+    }));
+  const sections = [
+    ...(yours.length ? [{ title: t('agents.yours'), data: yours }] : []),
+    ...(added.length ? [{ title: t('agents.added'), data: added }] : []),
+  ];
 
   return (
     <Screen padded={false}>
@@ -32,10 +65,10 @@ export default function AgentsScreen() {
           <IconButton icon="log-out-outline" label={t('settings.signout')} onPress={() => void signOut()} />
         }
       />
-      <FlatList
-        data={agents}
-        keyExtractor={(a) => a.id}
-        ListHeaderComponent={agents.length ? <Text style={styles.section}>{t('agents.yours')}</Text> : null}
+      <SectionList
+        sections={sections}
+        keyExtractor={(row) => row.id}
+        renderSectionHeader={({ section }) => <Text style={styles.section}>{section.title}</Text>}
         renderItem={({ item }) => (
           <Pressable
             accessibilityRole="button"
@@ -43,16 +76,16 @@ export default function AgentsScreen() {
             style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surface }]}
             testID={`agent-row-${item.id}`}
           >
-            <Avatar name={item.display_name} status={item.binding?.status ?? null} />
+            <Avatar name={item.name} status={item.status} />
             <View style={styles.body}>
               <Text style={styles.name} numberOfLines={1}>
-                {item.display_name}
+                {item.name}
               </Text>
               <Text style={styles.handle} numberOfLines={1}>
                 @{item.handle}
               </Text>
             </View>
-            <StatusChip status={item.binding?.status ?? null} colors={colors} />
+            <StatusChip status={item.status} blocked={item.blocked} colors={colors} />
           </Pressable>
         )}
         refreshControl={
@@ -72,7 +105,8 @@ export default function AgentsScreen() {
             />
           )
         }
-        contentContainerStyle={agents.length === 0 ? styles.grow : styles.padded}
+        contentContainerStyle={sections.length === 0 ? styles.grow : styles.padded}
+        stickySectionHeadersEnabled={false}
       />
       <Fab icon="add" label={t('agents.new')} onPress={create} testID="new-agent" />
     </Screen>
@@ -90,15 +124,27 @@ function statusColor(colors: Palette, status: AgentStatus | null): string {
   }
 }
 
-// StatusChip says in a word what the avatar's dot says in a colour.
-function StatusChip({ status, colors }: { status: AgentStatus | null; colors: Palette }) {
-  const tint = statusColor(colors, status);
+// StatusChip says in a word what the avatar's dot says in a colour, or
+// that the person has blocked this one.
+function StatusChip({
+  status,
+  blocked,
+  colors,
+}: {
+  status: AgentStatus | null;
+  blocked: boolean;
+  colors: Palette;
+}) {
+  const tint = blocked ? colors.danger : statusColor(colors, status);
+  const label = blocked
+    ? t('agent.blocked')
+    : status
+      ? t(`agents.status.${status}`)
+      : t('agents.status.none');
   return (
     <View style={[chip.wrap, { backgroundColor: colors.surface }]}>
       <View style={[chip.dot, { backgroundColor: tint }]} />
-      <Text style={[chip.text, { color: colors.textSecondary }]}>
-        {status ? t(`agents.status.${status}`) : t('agents.status.none')}
-      </Text>
+      <Text style={[chip.text, { color: colors.textSecondary }]}>{label}</Text>
     </View>
   );
 }
@@ -122,7 +168,7 @@ const makeStyles = ({ colors }: Theme) =>
       ...type.label,
       color: colors.textSecondary,
       paddingHorizontal: spacing.lg,
-      paddingTop: spacing.sm,
+      paddingTop: spacing.md,
       paddingBottom: spacing.xs,
       textTransform: 'uppercase',
       letterSpacing: 0.4,

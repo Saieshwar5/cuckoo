@@ -1,30 +1,51 @@
-import type { Agent, AgentLiveStatus, Frame } from '../api/types';
+import type { Agent, AgentLiveStatus, Contact, Frame } from '../api/types';
 
-// The agents a person owns, and how live announcements change them. Pure,
-// so it is tested without a screen.
+// The agents a person owns and the ones they added, and how live
+// announcements change them. Pure, so it is tested without a screen.
 
 export interface AgentsState {
   // In the hub's order: oldest first.
   agents: Agent[];
+  // Newest first, owned ones included with added_via 'owner'.
+  contacts: Contact[];
 }
 
-export const empty: AgentsState = { agents: [] };
+export const empty: AgentsState = { agents: [], contacts: [] };
 
-export function setAgents(_: AgentsState, list: Agent[]): AgentsState {
-  return { agents: list };
+export function setAgents(state: AgentsState, list: Agent[]): AgentsState {
+  return { ...state, agents: list };
+}
+
+export function setContacts(state: AgentsState, list: Contact[]): AgentsState {
+  return { ...state, contacts: list };
+}
+
+export function setBlocked(state: AgentsState, agentId: string, blocked: boolean): AgentsState {
+  return {
+    ...state,
+    contacts: state.contacts.map((c) => (c.agent.id === agentId ? { ...c, blocked } : c)),
+  };
+}
+
+// upsertContact puts a freshly added agent at the top of the list.
+export function upsertContact(state: AgentsState, contact: Contact): AgentsState {
+  return { ...state, contacts: [contact, ...state.contacts.filter((c) => c.agent.id !== contact.agent.id)] };
 }
 
 export function upsertAgent(state: AgentsState, agent: Agent): AgentsState {
   const i = state.agents.findIndex((a) => a.id === agent.id);
-  if (i < 0) return { agents: [...state.agents, agent] };
+  if (i < 0) return { ...state, agents: [...state.agents, agent] };
   const next = state.agents.slice();
   next[i] = agent;
-  return { agents: next };
+  return { ...state, agents: next };
 }
 
 export function removeAgent(state: AgentsState, id: string): AgentsState {
-  if (!state.agents.some((a) => a.id === id)) return state;
-  return { agents: state.agents.filter((a) => a.id !== id) };
+  if (!state.agents.some((a) => a.id === id) && !state.contacts.some((c) => c.agent.id === id)) return state;
+  return {
+    agents: state.agents.filter((a) => a.id !== id),
+    contacts: state.contacts.filter((c) => c.agent.id !== id),
+  };
 }
 
 // applyStatus folds an announcement in. It returns whether the agent was
@@ -35,15 +56,27 @@ export function applyStatus(
   id: string,
   status: AgentLiveStatus,
 ): { state: AgentsState; stale: boolean } {
-  const agent = state.agents.find((a) => a.id === id);
-  if (!agent) return { state, stale: false };
-  if (status === 'none') {
-    if (!agent.binding) return { state, stale: false };
-    return { state: upsertAgent(state, { ...agent, binding: null }), stale: false };
+  // The card of an added agent carries the status directly.
+  let next = state;
+  if (state.contacts.some((c) => c.agent.id === id)) {
+    next = {
+      ...state,
+      contacts: state.contacts.map((c) =>
+        c.agent.id === id
+          ? { ...c, agent: { ...c.agent, status: status === 'none' ? undefined : status } }
+          : c,
+      ),
+    };
   }
-  if (!agent.binding) return { state, stale: true };
-  if (agent.binding.status === status) return { state, stale: false };
-  return { state: upsertAgent(state, { ...agent, binding: { ...agent.binding, status } }), stale: false };
+  const agent = next.agents.find((a) => a.id === id);
+  if (!agent) return { state: next, stale: false };
+  if (status === 'none') {
+    if (!agent.binding) return { state: next, stale: false };
+    return { state: upsertAgent(next, { ...agent, binding: null }), stale: false };
+  }
+  if (!agent.binding) return { state: next, stale: true };
+  if (agent.binding.status === status) return { state: next, stale: false };
+  return { state: upsertAgent(next, { ...agent, binding: { ...agent.binding, status } }), stale: false };
 }
 
 export function applyFrame(state: AgentsState, frame: Frame): { state: AgentsState; stale: boolean } {

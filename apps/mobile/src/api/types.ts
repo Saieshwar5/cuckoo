@@ -93,6 +93,60 @@ export interface Agent {
 // status, or none when there is no binding at all.
 export type AgentLiveStatus = AgentStatus | 'none';
 
+// An agent as someone deciding to add it sees it.
+export interface AgentCard {
+  id: string;
+  handle: string;
+  display_name: string;
+  description: string;
+  owner: { display_name: string };
+  status?: AgentStatus;
+  verified: boolean;
+}
+
+// What a scanned code resolves to.
+export interface PairResolve {
+  kind: 'add_agent';
+  agent: AgentCard;
+  already_added: boolean;
+  blocked: boolean;
+  conversation_id: string | null;
+}
+
+export interface PairAccepted {
+  conversation: Conversation;
+  new: boolean;
+}
+
+// An agent in a person's list.
+export interface Contact {
+  agent: AgentCard;
+  added_via: 'owner' | 'pair_token';
+  blocked: boolean;
+  conversation_id: string;
+  created_at: string;
+  agent_deleted: boolean;
+}
+
+export interface PairToken {
+  id: string;
+  kind: 'add_agent';
+  payload: unknown;
+  max_uses: number | null;
+  use_count: number;
+  expires_at: string | null;
+  created_at: string;
+  revoked_at: string | null;
+}
+
+// A freshly minted token: the only time the code and the picture exist.
+export interface MintedToken {
+  token: PairToken;
+  code: string;
+  url: string;
+  qr_png: string;
+}
+
 // Frames on the live-update socket.
 export type Frame =
   | { type: 'ready'; data: { user_id: string } }

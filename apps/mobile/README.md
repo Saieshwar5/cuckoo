@@ -92,6 +92,23 @@ webhook, generate the secret (shown once), copy the three-line SDK snippet
 with the secret and this hub's address filled in, and watch the status
 line flip to Connected when the code speaks.
 
+## Handing an agent out, and taking one in
+
+An owner's profile has **Share**: it mints one static code for the agent
+(the hub shows a code once, so the phone keeps it in the keychain, or
+localStorage on the web, and asks the hub to draw the picture again on a
+later visit), shows the QR and the link, counts the people who used it,
+and **Stop sharing** withdraws it. The Chats button offers **Scan a code**
+(the camera on a phone, and a paste-a-link field that is also how the
+browser gets by) and **Create an agent**. A scanned or opened link lands
+on `app/p/[code]`: the agent's card with its owner's name and the
+Unverified label, and one button. Adding opens the chat, and the chat
+list reloads because the hub's frames name a conversation it has not
+seen. Added agents sit under **Added** on the Agents tab; their profile
+has **Block**, which closes the chat both ways and puts a banner where the
+composer was, with Unblock on it. `AgentsController` holds the contacts
+beside the owned agents and applies the same status frames to both.
+
 Long-press a bubble to reply to it. A tap on an agent's button sends the
 choice as an action; quick replies are chips above the composer, shown while
 the agent's question is the last word. In a browser, Enter sends and

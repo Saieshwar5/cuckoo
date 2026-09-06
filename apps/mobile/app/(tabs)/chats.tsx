@@ -4,6 +4,7 @@ import { FlatList, RefreshControl } from 'react-native';
 
 import { filterConversations } from '@/chats/store';
 import { useChats } from '@/chats/useChats';
+import { ActionSheet } from '@/components/ActionSheet';
 import { ChatRow } from '@/components/ChatRow';
 import { EmptyState } from '@/components/EmptyState';
 import { Fab } from '@/components/Fab';
@@ -20,6 +21,7 @@ export default function ChatsScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const [query, setQuery] = useState('');
+  const [sheet, setSheet] = useState(false);
   const shown = filterConversations(conversations, query);
   const goToAgents = () => router.push('/(tabs)/agents');
 
@@ -63,7 +65,30 @@ export default function ChatsScreen() {
         contentContainerStyle={shown.length === 0 ? grow : padded}
         keyboardShouldPersistTaps="handled"
       />
-      <Fab icon="chatbubble-ellipses" label={t('chats.new')} onPress={goToAgents} testID="new-chat" />
+      <Fab
+        icon="chatbubble-ellipses"
+        label={t('chats.new')}
+        onPress={() => setSheet(true)}
+        testID="new-chat"
+      />
+      <ActionSheet
+        visible={sheet}
+        onClose={() => setSheet(false)}
+        actions={[
+          {
+            icon: 'qr-code-outline',
+            label: t('chats.new.scan'),
+            onPress: () => router.push('/scan'),
+            testID: 'sheet-scan',
+          },
+          {
+            icon: 'sparkles-outline',
+            label: t('chats.new.create'),
+            onPress: () => router.push('/agent/new'),
+            testID: 'sheet-create',
+          },
+        ]}
+      />
     </Screen>
   );
 }

@@ -1,10 +1,21 @@
 import type { Api, CreateAgentInput, SetBindingInput, UpdateAgentInput } from '../api/client';
-import type { Agent, Binding } from '../api/types';
+import type { Agent, Binding, Contact, PairAccepted } from '../api/types';
 import type { Realtime } from '../realtime/realtime';
-import { applyFrame, empty, removeAgent, setAgents, upsertAgent, type AgentsState } from './store';
+import {
+  applyFrame,
+  empty,
+  removeAgent,
+  setAgents,
+  setBlocked,
+  setContacts,
+  upsertAgent,
+  upsertContact,
+  type AgentsState,
+} from './store';
 
 export interface AgentsSnapshot {
   agents: Agent[];
+  contacts: Contact[];
   loading: boolean;
   error: unknown;
 }
@@ -16,7 +27,7 @@ export interface AgentsSnapshot {
 // so the list is right without a reload.
 export class AgentsController {
   private state: AgentsState = empty;
-  private snapshot: AgentsSnapshot = { agents: [], loading: true, error: null };
+  private snapshot: AgentsSnapshot = { agents: [], contacts: [], loading: true, error: null };
   private listeners = new Set<() => void>();
   private unsubscribe: (() => void) | null = null;
   private stopped = false;
@@ -56,12 +67,37 @@ export class AgentsController {
 
   refresh = async (): Promise<void> => {
     try {
-      const list = await this.api.listAgents();
+      const [list, contacts] = await Promise.all([this.api.listAgents(), this.api.listContacts()]);
       if (this.stopped) return;
-      this.set(setAgents(this.state, list), { error: null, loading: false });
+      this.set(setContacts(setAgents(this.state, list), contacts), { error: null, loading: false });
     } catch (error) {
       if (!this.stopped) this.patch({ error, loading: false });
     }
+  };
+
+  // accept takes in the agent behind a scanned code. The list of contacts
+  // is reloaded rather than guessed at: the hub's row has the owner's name.
+  accept = async (code: string): Promise<PairAccepted> => {
+    const result = await this.api.acceptPair(code);
+    const contacts = await this.api.listContacts();
+    this.set(setContacts(this.state, contacts));
+    return result;
+  };
+
+  // remember puts a contact on the list without a round trip, for the
+  // moment between accepting and the reload.
+  remember = (contact: Contact): void => {
+    this.set(upsertContact(this.state, contact));
+  };
+
+  block = async (agentId: string): Promise<void> => {
+    await this.api.blockAgent(agentId);
+    this.set(setBlocked(this.state, agentId, true));
+  };
+
+  unblock = async (agentId: string): Promise<void> => {
+    await this.api.unblockAgent(agentId);
+    this.set(setBlocked(this.state, agentId, false));
   };
 
   create = async (input: CreateAgentInput): Promise<Agent> => {
@@ -97,7 +133,7 @@ export class AgentsController {
 
   private set(state: AgentsState, extra: Partial<AgentsSnapshot> = {}): void {
     this.state = state;
-    this.patch({ agents: state.agents, ...extra });
+    this.patch({ agents: state.agents, contacts: state.contacts, ...extra });
   }
 
   private patch(extra: Partial<AgentsSnapshot>): void {

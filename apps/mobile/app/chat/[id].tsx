@@ -4,9 +4,11 @@ import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-nativ
 
 import type { Button as ButtonSpec } from '@/api/types';
 import type { ChatMessage } from '@/chat/store';
+import { useAgents, useContact } from '@/agents/AgentsProvider';
 import { useChat } from '@/chat/useChat';
 import { useConversation } from '@/chats/useChats';
 import { counterpart } from '@/components/ChatRow';
+import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { Bubble } from '@/components/chat/Bubble';
 import { ChatHeader } from '@/components/chat/ChatHeader';
@@ -28,6 +30,8 @@ export default function ChatScreen() {
   const conversation = useConversation(id);
   const who = conversation ? counterpart(conversation) : undefined;
   const name = who?.display_name ?? '';
+  const contact = useContact(who?.kind === 'agent' ? who.id : '');
+  const { controller: agentsController } = useAgents();
   const chat = useChat(id);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
 
@@ -96,8 +100,23 @@ export default function ChatScreen() {
           />
         )}
       </View>
-      {chat.quickReplies.length ? <QuickReplies labels={chat.quickReplies} onPick={send} /> : null}
-      <Composer replyTo={replyTo} agentName={name} onCancelReply={() => setReplyTo(null)} onSend={send} />
+      {contact?.blocked ? (
+        <View style={[styles.blocked, { backgroundColor: colors.surface }]} testID="blocked-banner">
+          <Text style={[styles.blockedText, { color: colors.textSecondary }]}>{t('chat.blocked')}</Text>
+          <Button
+            title={t('chat.blocked.action')}
+            onPress={() => void agentsController?.unblock(contact.agent.id)}
+            variant="outline"
+            compact
+            testID="chat-unblock"
+          />
+        </View>
+      ) : (
+        <>
+          {chat.quickReplies.length ? <QuickReplies labels={chat.quickReplies} onPick={send} /> : null}
+          <Composer replyTo={replyTo} agentName={name} onCancelReply={() => setReplyTo(null)} onSend={send} />
+        </>
+      )}
     </Screen>
   );
 }
@@ -109,4 +128,6 @@ const styles = StyleSheet.create({
   empty: { ...type.body, textAlign: 'center' },
   hint: { ...type.caption, textAlign: 'center' },
   older: { paddingVertical: spacing.md },
+  blocked: { padding: spacing.lg, gap: spacing.md, alignItems: 'center' },
+  blockedText: { ...type.secondary, textAlign: 'center', lineHeight: 20 },
 });

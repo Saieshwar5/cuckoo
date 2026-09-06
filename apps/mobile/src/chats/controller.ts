@@ -1,7 +1,7 @@
 import type { Api } from '../api/client';
 import type { Conversation } from '../api/types';
 import type { Realtime } from '../realtime/realtime';
-import { applyFrame, empty, setConversations, type ChatsState } from './store';
+import { applyFrame, concernsUnknown, empty, setConversations, type ChatsState } from './store';
 
 export interface ChatsSnapshot {
   conversations: Conversation[];
@@ -40,7 +40,15 @@ export class ChatsController {
     this.patch({ connected: this.realtime.connected });
     void this.refresh();
     this.unsubscribe = this.realtime.subscribe({
-      onFrame: (frame) => this.set(applyFrame(this.state, frame)),
+      onFrame: (frame) => {
+        if (concernsUnknown(this.state, frame)) {
+          // A chat this list has never seen: opened by a scan, or by an
+          // agent reaching out. The hub has it; ask.
+          void this.refresh();
+          return;
+        }
+        this.set(applyFrame(this.state, frame));
+      },
       onOpen: (reconnect) => {
         this.patch({ connected: true });
         if (reconnect) void this.refresh();
