@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -19,16 +19,32 @@ interface Props {
   agentName: string;
   onCancelReply: () => void;
   onSend: (text: string, files: PickedFile[]) => void;
+  // Words left here last time, put back once when they arrive; and every
+  // change, so they can be kept for next time.
+  draft?: string | null;
+  onDraft?: (text: string) => void;
 }
 
 // Composer is the bar at the bottom: what is being quoted, the words, and
 // the one button. Enter sends in a browser, where a keyboard has a shift
 // key for a new line; on a phone the button sends.
-export function Composer({ replyTo, agentName, onCancelReply, onSend }: Props) {
+export function Composer({ replyTo, agentName, onCancelReply, onSend, draft, onDraft }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const [text, setText] = useState('');
+  const [text, setTextState] = useState('');
   const [files, setFiles] = useState<PickedFile[]>([]);
+  const restored = useRef(false);
+  // The draft arrives after the first render, from the device's memory.
+  // It is put back once, and never over something already typed.
+  useEffect(() => {
+    if (restored.current || !draft) return;
+    restored.current = true;
+    setTextState((current) => current || draft);
+  }, [draft]);
+  const setText = (next: string) => {
+    setTextState(next);
+    onDraft?.(next);
+  };
   const [picking, setPicking] = useState(false);
   const recorder = useRecorder();
   // A photo with nothing written under it is a message; an empty one is not.

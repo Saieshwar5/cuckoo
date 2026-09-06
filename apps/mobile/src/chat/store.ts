@@ -180,3 +180,16 @@ export function removeMessage(state: ChatState, id: string): ChatState {
 export function clearMessages(state: ChatState): ChatState {
   return { ...state, messages: [], nextBefore: null };
 }
+
+// unseenSince counts what others said after a message the person was
+// looking at when they scrolled away. Ids are time-ordered, so newer means
+// greater; our own sends do not count — the person wrote them.
+export function unseenSince(messages: ChatMessage[], sinceId: string | null): number {
+  if (!sinceId) return 0;
+  let n = 0;
+  for (const m of messages) {
+    if (m.id <= sinceId) break;
+    if (m.sender.kind !== 'user') n += 1;
+  }
+  return n;
+}

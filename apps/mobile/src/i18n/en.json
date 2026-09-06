@@ -71,7 +71,7 @@
   "chat.action.copy": "Copy",
   "chat.action.delete": "Delete for me",
   "chat.failed": "Not sent. Tap to retry.",
-  "chat.truncated": "Cut short",
+  "chat.truncated": "Reply was cut short — ask again.",
   "chat.button.leaves": "Opens outside Cuckoo",
   "chat.quick.label": "Suggested replies",
   "agents.new": "New agent",
@@ -247,5 +247,7 @@
   "profile.open": "Your profile",
   "profile.note": "Your photo is only ever shown to people you share a chat with. Agents are told your name, and nothing else.",
   "chats.empty.scan": "Scan a code",
-  "agents.empty.scan": "Scan a code"
+  "agents.empty.scan": "Scan a code",
+  "chat.offline": "{name} isn't connected right now. What you send will be delivered when it's back.",
+  "chat.newer": "Newer messages"
 }

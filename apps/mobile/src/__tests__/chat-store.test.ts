@@ -13,6 +13,7 @@ import {
   quickReplies,
   removeMessage,
   setPage,
+  unseenSince,
   upsert,
   type ChatMessage,
 } from '@/chat/store';
@@ -190,5 +191,23 @@ describe('out of my sight', () => {
     );
     expect(s.messages).toEqual([]);
     expect(s.nextBefore).toBeNull();
+  });
+});
+
+describe('scrolled away', () => {
+  it('counts what others said since, and not our own', () => {
+    const list = setPage(empty, {
+      messages: [
+        msg({ id: 'e', created_at: '2026-09-05T10:04:00Z' }),
+        { ...msg({ id: 'd', created_at: '2026-09-05T10:03:00Z' }), sender: { kind: 'user', id: 'usr_1' } },
+        msg({ id: 'c', created_at: '2026-09-05T10:02:00Z' }),
+        msg({ id: 'b', created_at: '2026-09-05T10:01:00Z' }),
+      ],
+      next_before: null,
+      next_after: null,
+    }).messages;
+    expect(unseenSince(list, 'b')).toBe(2);
+    expect(unseenSince(list, 'e')).toBe(0);
+    expect(unseenSince(list, null)).toBe(0);
   });
 });
