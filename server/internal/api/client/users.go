@@ -112,3 +112,24 @@ func (h *Handler) updateMe(w http.ResponseWriter, r *http.Request) {
 
 	httpx.JSON(w, r, http.StatusOK, meEnvelope{User: newUserResponse(user)})
 }
+
+// deleteMe closes the caller's account. Their agents are retired first, so
+// the people who added them see "Deleted" the way they would for any
+// retired agent; then the account itself is closed and every session with
+// it. The response is the last thing this token ever gets.
+func (h *Handler) deleteMe(w http.ResponseWriter, r *http.Request) {
+	userID, ok := principal.UserID(r.Context())
+	if !ok {
+		httpx.Error(w, r, domain.Unauthorized("unauthorized", "Sign in to continue."))
+		return
+	}
+	if err := h.agents.DeleteAllOwned(r.Context(), userID); err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	if err := h.users.Delete(r.Context(), userID); err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

@@ -127,3 +127,10 @@ RETURNING *;
 -- is enough to be looked at, and a second within the day adds nothing.
 SELECT count(*) FROM reports
 WHERE reporter_user_id = $1 AND agent_id = $2 AND created_at > sqlc.arg('since');
+
+-- name: RemoveAllContacts :exec
+-- Everything the person had in their list leaves it. Owner rows too: their
+-- agents are being retired alongside.
+UPDATE contacts
+SET removed_at = now(), pinned_at = NULL, archived_at = NULL, muted_until = NULL
+WHERE user_id = $1 AND removed_at IS NULL;

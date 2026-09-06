@@ -23,6 +23,8 @@ WHERE id = sqlc.arg('id') AND deleted_at IS NULL
 RETURNING *;
 
 -- name: SoftDeleteUser :execrows
+-- The account is closed and its name and face taken off: what remains in
+-- other people's history reads as "Deleted account".
 UPDATE users
-SET deleted_at = now(), updated_at = now()
+SET deleted_at = now(), updated_at = now(), display_name = 'Deleted account', avatar_media_id = NULL
 WHERE id = $1 AND deleted_at IS NULL;

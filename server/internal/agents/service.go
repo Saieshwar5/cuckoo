@@ -264,3 +264,18 @@ func (s *Service) GetByHandle(ctx context.Context, handle string) (Agent, error)
 	}
 	return agentFromRow(row), nil
 }
+
+// DeleteAllOwned retires every agent an owner has, as deleting each would:
+// bindings revoked, handles kept off the market, history readable.
+func (s *Service) DeleteAllOwned(ctx context.Context, ownerID uuid.UUID) error {
+	rows, err := s.store.ListAgentsByOwner(ctx, ownerID)
+	if err != nil {
+		return domain.Internal(fmt.Errorf("list agents of %s: %w", ownerID, err))
+	}
+	for _, r := range rows {
+		if err := s.Delete(ctx, ownerID, r.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}

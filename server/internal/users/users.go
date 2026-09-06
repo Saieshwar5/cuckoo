@@ -7,6 +7,7 @@ package users
 
 import (
 	"context"
+	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,6 +25,9 @@ type Store interface {
 	GetUser(ctx context.Context, id uuid.UUID) (gen.User, error)
 	UpdateUserProfile(ctx context.Context, arg gen.UpdateUserProfileParams) (gen.User, error)
 	GetMedia(ctx context.Context, id uuid.UUID) (gen.Medium, error)
+	// WithTx runs fn inside one transaction, for the changes that must land
+	// together or not at all.
+	WithTx(ctx context.Context, fn func(*store.Store) error) error
 }
 
 // User is a person's account as the rest of the system understands it.

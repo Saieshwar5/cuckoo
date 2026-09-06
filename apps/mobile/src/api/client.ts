@@ -92,6 +92,8 @@ export interface Api {
   startSignIn(email: string): Promise<void>;
   verifySignIn(email: string, code: string, deviceName: string): Promise<Verified>;
   logout(): Promise<void>;
+  // Close the account. The token is dead when this returns.
+  deleteMe(): Promise<void>;
   me(): Promise<User>;
   updateMe(input: { display_name?: string; avatar_media_id?: string }): Promise<User>;
   listConversations(): Promise<Conversation[]>;
@@ -202,6 +204,7 @@ export function createApi(opts: ApiOptions): Api {
     verifySignIn: (email, code, device_name) =>
       request('POST', '/v1/auth/email/verify', { email, code, device_name }),
     logout: () => request('POST', '/v1/auth/logout'),
+    deleteMe: () => request('DELETE', '/v1/client/me'),
     me: async () => (await request<{ user: User }>('GET', '/v1/client/me')).user,
     updateMe: async (input) => (await request<{ user: User }>('PATCH', '/v1/client/me', input)).user,
     listConversations: async () =>

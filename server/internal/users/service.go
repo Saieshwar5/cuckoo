@@ -110,3 +110,30 @@ func (s *Service) UpdateProfile(ctx context.Context, id uuid.UUID, in UpdateProf
 func errUserNotFound() error {
 	return domain.NotFound("user_not_found", "That account does not exist.")
 }
+
+// Delete closes an account: every session is revoked, every way of signing
+// in is cut so the address can start again, every contact leaves the list,
+// and the row is kept under "Deleted account" so nobody else's history loses
+// a name. The person's agents are retired by the agents service before this
+// is called; messages stay, because the agents they were sent to have them.
+func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
+	return s.store.WithTx(ctx, func(tx *store.Store) error {
+		if _, err := tx.RevokeUserSessions(ctx, id); err != nil {
+			return domain.Internal(fmt.Errorf("revoke sessions of %s: %w", id, err))
+		}
+		if err := tx.DeleteIdentities(ctx, id); err != nil {
+			return domain.Internal(fmt.Errorf("delete identities of %s: %w", id, err))
+		}
+		if err := tx.RemoveAllContacts(ctx, id); err != nil {
+			return domain.Internal(fmt.Errorf("remove contacts of %s: %w", id, err))
+		}
+		n, err := tx.SoftDeleteUser(ctx, id)
+		if err != nil {
+			return domain.Internal(fmt.Errorf("delete user %s: %w", id, err))
+		}
+		if n == 0 {
+			return domain.NotFound("user_not_found", "That account does not exist.")
+		}
+		return nil
+	})
+}

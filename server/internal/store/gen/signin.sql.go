@@ -150,6 +150,16 @@ func (q *Queries) CreateSignInCode(ctx context.Context, arg CreateSignInCodePara
 	return i, err
 }
 
+const deleteIdentities = `-- name: DeleteIdentities :exec
+DELETE FROM user_identities WHERE user_id = $1
+`
+
+// Cut the ways in. The address is free to open a fresh account afterwards.
+func (q *Queries) DeleteIdentities(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteIdentities, userID)
+	return err
+}
+
 const getIdentity = `-- name: GetIdentity :one
 SELECT id, user_id, kind, value, verified_at, created_at FROM user_identities
 WHERE kind = $1 AND value = $2

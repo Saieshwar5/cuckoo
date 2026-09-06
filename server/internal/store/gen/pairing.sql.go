@@ -425,6 +425,19 @@ func (q *Queries) ListPairTokensByAgent(ctx context.Context, agentID uuid.UUID) 
 	return items, nil
 }
 
+const removeAllContacts = `-- name: RemoveAllContacts :exec
+UPDATE contacts
+SET removed_at = now(), pinned_at = NULL, archived_at = NULL, muted_until = NULL
+WHERE user_id = $1 AND removed_at IS NULL
+`
+
+// Everything the person had in their list leaves it. Owner rows too: their
+// agents are being retired alongside.
+func (q *Queries) RemoveAllContacts(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, removeAllContacts, userID)
+	return err
+}
+
 const removeContact = `-- name: RemoveContact :execrows
 UPDATE contacts
 SET removed_at = now(), pinned_at = NULL, archived_at = NULL, muted_until = NULL

@@ -106,7 +106,7 @@ func NewRouter(d Deps) http.Handler {
 	// The app's API. Every route below requires a signed-in person.
 	r.Route("/v1/client", func(r chi.Router) {
 		r.Use(middleware.RequireUser(d.UserAuth))
-		r.Mount("/", client.New(d.Users, d.Conversations, d.Hub, d.Pairing, d.APIKeys, d.Media).Routes())
+		r.Mount("/", client.New(d.Users, d.Agents, d.Conversations, d.Hub, d.Pairing, d.APIKeys, d.Media).Routes())
 	})
 
 	// Agent management: owners creating agents, connecting backends and
