@@ -68,10 +68,25 @@ type Sender struct {
 // offering message, is the button that was taken.
 type Body struct {
 	Text             string       `json:"text,omitempty"`
+	Attachments      []Attachment `json:"attachments,omitempty"`
 	Buttons          [][]Button   `json:"buttons,omitempty"`
 	QuickReplies     []QuickReply `json:"quick_replies,omitempty"`
 	Action           *Action      `json:"action,omitempty"`
 	SelectedButtonID string       `json:"selected_button_id,omitempty"`
+}
+
+// Attachment is a file a message carries. Its bytes are fetched from the
+// media endpoint by media_id; everything needed to draw it before they
+// arrive is here.
+type Attachment struct {
+	MediaID      string `json:"media_id"`
+	Kind         string `json:"kind"`
+	MimeType     string `json:"mime_type"`
+	ByteSize     int64  `json:"byte_size"`
+	FileName     string `json:"file_name"`
+	Width        int32  `json:"width,omitempty"`
+	Height       int32  `json:"height,omitempty"`
+	HasThumbnail bool   `json:"has_thumbnail,omitempty"`
 }
 
 // Button is a choice offered to a person.
@@ -101,7 +116,7 @@ type ReplyTo struct {
 
 // BodyOf is the wire form of a message body.
 func BodyOf(b conversations.Body) Body {
-	out := Body{Text: b.Text, SelectedButtonID: b.SelectedButtonID}
+	out := Body{Text: b.Text, SelectedButtonID: b.SelectedButtonID, Attachments: AttachmentsOf(b.Attachments)}
 	for _, row := range b.Buttons {
 		wire := make([]Button, 0, len(row))
 		for _, btn := range row {
@@ -117,6 +132,27 @@ func BodyOf(b conversations.Body) Body {
 			ButtonID:        b.Action.ButtonID,
 			SourceMessageID: domain.FormatID(domain.PrefixMessage, b.Action.SourceMessageID),
 		}
+	}
+	return out
+}
+
+// AttachmentsOf is the wire form of the files a message carries.
+func AttachmentsOf(atts []conversations.Attachment) []Attachment {
+	if len(atts) == 0 {
+		return nil
+	}
+	out := make([]Attachment, 0, len(atts))
+	for _, a := range atts {
+		out = append(out, Attachment{
+			MediaID:      domain.FormatID(domain.PrefixMedia, a.MediaID),
+			Kind:         a.Kind,
+			MimeType:     a.MimeType,
+			ByteSize:     a.ByteSize,
+			FileName:     a.FileName,
+			Width:        a.Width,
+			Height:       a.Height,
+			HasThumbnail: a.HasThumbnail,
+		})
 	}
 	return out
 }

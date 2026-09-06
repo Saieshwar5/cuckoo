@@ -99,6 +99,40 @@ app asks for what it missed and then resumes:
 curl -s -H "$H" "localhost:8080/v1/client/conversations/cnv_.../messages?after=msg_...&limit=50"
 ```
 
+### Sending a photo or a file
+
+A file is uploaded first and named by the message that carries it, so a slow
+photo never holds a half-sent message open, and a failed upload leaves
+nothing behind.
+
+```bash
+curl -s -H "$H" -X POST --data-binary @bill.jpg 'localhost:8080/v1/client/media?name=bill.jpg'
+# {"media":{"id":"med_...","kind":"image","width":1600,"height":1067,"has_thumbnail":true,...}}
+
+curl -s -H "$H" -X POST localhost:8080/v1/client/conversations/cnv_.../messages \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"is this right?","attachments":["med_..."]}'
+```
+
+The hub decides what a file is from its bytes, never from its name or from
+what the caller claimed. Limits are the protocol's, so an agent behaves the
+same on any hub: 16 MB for a picture or a recording, 64 MB for a video or a
+document, ten files in one message. A picture is measured and given a small
+copy, so a bubble is the right shape before the bytes arrive:
+
+```bash
+curl -s -H "$H" localhost:8080/v1/client/media/med_...              # the file
+curl -s -H "$H" 'localhost:8080/v1/client/media/med_...?variant=thumb'  # the small copy
+```
+
+A file is readable by whoever uploaded it and by everyone in the conversation
+it was sent into. Nobody else, and an id nobody may read answers exactly like
+one that does not exist. Uploads no message ever claimed are removed after a
+day.
+
+The agent protocol has the same two endpoints under `/v1/agent`, so a backend
+downloads what it was sent and sends files back.
+
 ### Receiving events as an agent backend
 
 Connect a webhook backend to an agent and the hub POSTs every message in the

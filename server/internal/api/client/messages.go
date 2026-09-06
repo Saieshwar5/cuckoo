@@ -22,10 +22,25 @@ type senderResponse struct {
 // the app can dim the row.
 type bodyResponse struct {
 	Text             string               `json:"text,omitempty"`
+	Attachments      []attachmentResponse `json:"attachments,omitempty"`
 	Buttons          [][]buttonResponse   `json:"buttons,omitempty"`
 	QuickReplies     []quickReplyResponse `json:"quick_replies,omitempty"`
 	Action           *actionResponse      `json:"action,omitempty"`
 	SelectedButtonID string               `json:"selected_button_id,omitempty"`
+}
+
+// attachmentResponse is a file the message carries. The bytes come from
+// /media/{media_id}; the size and shape are here so the bubble is drawn
+// correctly before they do.
+type attachmentResponse struct {
+	MediaID      string `json:"media_id"`
+	Kind         string `json:"kind"`
+	MimeType     string `json:"mime_type"`
+	ByteSize     int64  `json:"byte_size"`
+	FileName     string `json:"file_name"`
+	Width        int32  `json:"width,omitempty"`
+	Height       int32  `json:"height,omitempty"`
+	HasThumbnail bool   `json:"has_thumbnail,omitempty"`
 }
 
 type buttonResponse struct {
@@ -52,6 +67,18 @@ type replyToResponse struct {
 
 func newBodyResponse(b conversations.Body) bodyResponse {
 	out := bodyResponse{Text: b.Text, SelectedButtonID: b.SelectedButtonID}
+	for _, a := range b.Attachments {
+		out.Attachments = append(out.Attachments, attachmentResponse{
+			MediaID:      domain.FormatID(domain.PrefixMedia, a.MediaID),
+			Kind:         a.Kind,
+			MimeType:     a.MimeType,
+			ByteSize:     a.ByteSize,
+			FileName:     a.FileName,
+			Width:        a.Width,
+			Height:       a.Height,
+			HasThumbnail: a.HasThumbnail,
+		})
+	}
 	for _, row := range b.Buttons {
 		wire := make([]buttonResponse, 0, len(row))
 		for _, btn := range row {
@@ -132,6 +159,7 @@ func newMessageResponse(m conversations.Message) messageResponse {
 // of text, is a tap on a button an agent offered.
 type sendMessageRequest struct {
 	Text           string         `json:"text"`
+	Attachments    []string       `json:"attachments"`
 	IdempotencyKey string         `json:"idempotency_key"`
 	ReplyTo        string         `json:"reply_to"`
 	Action         *actionRequest `json:"action"`
@@ -160,7 +188,14 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	in := conversations.SendInput{Text: req.Text, IdempotencyKey: req.IdempotencyKey}
+	attachments, err := mediaIDsOf(req.Attachments)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	in := conversations.SendInput{
+		Text: req.Text, Attachments: attachments, IdempotencyKey: req.IdempotencyKey,
+	}
 	if req.ReplyTo != "" {
 		id, err := domain.ParseID(domain.PrefixMessage, req.ReplyTo)
 		if err != nil {

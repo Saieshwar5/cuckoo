@@ -137,6 +137,9 @@ func (s *Service) create(ctx context.Context, sender Sender, conversationID uuid
 				return err
 			}
 		}
+		if err := claimAttachments(ctx, tx, sender, msg.ID, attachmentIDs(body.Attachments)); err != nil {
+			return err
+		}
 		if streaming {
 			return nil
 		}
@@ -239,6 +242,10 @@ func (s *Service) composeBody(ctx context.Context, sender Sender, conversationID
 		if in.Action != nil {
 			return Body{}, nil, domain.InvalidField("action", "action_not_allowed", "Only people tap buttons.")
 		}
+		if len(in.Attachments) > 0 {
+			return Body{}, nil, domain.InvalidField("attachments", "stream_with_attachments",
+				"A streamed message is text. Send files as their own message.")
+		}
 		if s.streams == nil {
 			return Body{}, nil, domain.Internal(errors.New("streaming is not configured"))
 		}
@@ -256,6 +263,10 @@ func (s *Service) composeBody(ctx context.Context, sender Sender, conversationID
 				return Body{}, nil, domain.InvalidField("text", "invalid_action",
 					"A tap carries no text; the button's label becomes the text.")
 			}
+			if len(in.Attachments) > 0 {
+				return Body{}, nil, domain.InvalidField("attachments", "invalid_action",
+					"A tap carries no files.")
+			}
 			source, button, err := s.resolveTap(ctx, conversationID, *in.Action)
 			if err != nil {
 				return Body{}, nil, err
@@ -263,17 +274,25 @@ func (s *Service) composeBody(ctx context.Context, sender Sender, conversationID
 			return Body{Text: button.Label, Action: &Action{ButtonID: button.ID, SourceMessageID: source.ID}},
 				&tap{source: source, buttonID: button.ID}, nil
 		}
-		text, err := validateText(in.Text)
+		atts, err := s.resolveAttachments(ctx, sender, in.Attachments)
 		if err != nil {
 			return Body{}, nil, err
 		}
-		return Body{Text: text}, nil, nil
+		text, err := validateCaption(in.Text, len(atts) > 0)
+		if err != nil {
+			return Body{}, nil, err
+		}
+		return Body{Text: text, Attachments: atts}, nil, nil
 
 	default:
 		if in.Action != nil {
 			return Body{}, nil, domain.InvalidField("action", "action_not_allowed", "Only people tap buttons.")
 		}
-		text, err := validateText(in.Text)
+		atts, err := s.resolveAttachments(ctx, sender, in.Attachments)
+		if err != nil {
+			return Body{}, nil, err
+		}
+		text, err := validateCaption(in.Text, len(atts) > 0)
 		if err != nil {
 			return Body{}, nil, err
 		}
@@ -285,7 +304,7 @@ func (s *Service) composeBody(ctx context.Context, sender Sender, conversationID
 		if err != nil {
 			return Body{}, nil, err
 		}
-		return Body{Text: text, Buttons: buttons, QuickReplies: quick}, nil, nil
+		return Body{Text: text, Attachments: atts, Buttons: buttons, QuickReplies: quick}, nil, nil
 	}
 }
 

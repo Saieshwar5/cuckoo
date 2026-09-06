@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -20,10 +21,12 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/api"
 	"github.com/Saieshwar5/cuckoo/server/internal/apikeys"
 	"github.com/Saieshwar5/cuckoo/server/internal/auth"
+	"github.com/Saieshwar5/cuckoo/server/internal/blobs"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/mail"
+	"github.com/Saieshwar5/cuckoo/server/internal/media"
 	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/signin"
@@ -90,6 +93,12 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 	userService := users.New(db)
 	pairingService := pairing.New(db, agentService, conversationService, userService, "https://hub.test")
 	apiKeyService := apikeys.New(db)
+	// Uploads land in a directory the test framework removes with the test.
+	blobStore, err := blobs.NewDisk(t.TempDir())
+	if err != nil {
+		t.Fatalf("testutil: media storage: %v", err)
+	}
+	mediaService := media.New(db, blobStore, media.WithLogger(quiet))
 	userAuth := auth.NewDevOrSession(auth.NewDev(), auth.NewSession(signinService))
 	handler := api.NewRouter(api.Deps{
 		Logger:        quiet,
@@ -103,6 +112,7 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 		Delivery:      delivery.New(db, conversationService),
 		Pairing:       pairingService,
 		APIKeys:       apiKeyService,
+		Media:         mediaService,
 		Hub:           hub,
 		Bus:           bus,
 		CORSOrigins:   []string{"*"},
@@ -323,4 +333,29 @@ func (c *Client) send(method, path string, body []byte, contentType string) *Res
 	}
 
 	return &Response{t: c.t, Status: resp.StatusCode, Header: resp.Header, Body: payload}
+}
+
+// Upload posts a file as a multipart form, the way a phone does.
+func (c *Client) Upload(path, fileName string, data []byte) *Response {
+	c.t.Helper()
+
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	part, err := form.CreateFormFile("file", fileName)
+	if err != nil {
+		c.t.Fatalf("testutil: build upload: %v", err)
+	}
+	if _, err := part.Write(data); err != nil {
+		c.t.Fatalf("testutil: write upload: %v", err)
+	}
+	if err := form.Close(); err != nil {
+		c.t.Fatalf("testutil: finish upload: %v", err)
+	}
+	return c.send(http.MethodPost, path, body.Bytes(), form.FormDataContentType())
+}
+
+// UploadRaw posts a file as the request body, the way one line of curl does.
+func (c *Client) UploadRaw(path string, data []byte) *Response {
+	c.t.Helper()
+	return c.send(http.MethodPost, path, data, "application/octet-stream")
 }

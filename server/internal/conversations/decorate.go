@@ -57,7 +57,7 @@ func (s *Service) attachReplyPreviews(ctx context.Context, msgs []Message) error
 		}
 		if orig, ok := originals[msgs[i].ReplyTo.ID]; ok {
 			msgs[i].ReplyTo.SenderKind = orig.Sender.Kind
-			msgs[i].ReplyTo.TextPreview = previewOf(orig.Body.Text)
+			msgs[i].ReplyTo.TextPreview = previewOfBody(orig.Body)
 		}
 	}
 	return nil

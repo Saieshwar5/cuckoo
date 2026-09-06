@@ -40,6 +40,11 @@ type Config struct {
 	LogLevel        slog.Level
 	ShutdownTimeout time.Duration
 
+	// MediaDir is the directory uploaded files are kept in. A folder on
+	// this machine is the whole of storage today; the seam for a bucket is
+	// in the blobs package, not here.
+	MediaDir string
+
 	// Mail is how sign-in codes are delivered. "console" prints them to the
 	// log, which is right for development and for a private hub whose
 	// operator is its only user; it is never assumed in production.
@@ -71,6 +76,7 @@ func Load() (Config, error) {
 		RedisURL:        l.str("CUCKOO_REDIS_URL", "redis://localhost:6380/0"),
 		LogLevel:        l.logLevel("CUCKOO_LOG_LEVEL", slog.LevelInfo),
 		ShutdownTimeout: l.duration("CUCKOO_SHUTDOWN_TIMEOUT", 15*time.Second),
+		MediaDir:        l.str("CUCKOO_MEDIA_DIR", "./.data/media"),
 		Mail:            l.str("CUCKOO_MAIL", ""),
 		CORSOrigins:     l.list("CUCKOO_CORS_ORIGINS"),
 	}

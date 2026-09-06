@@ -30,6 +30,7 @@ type messagePageEnvelope struct {
 // empty message to append to instead of sending text.
 type sendMessageRequest struct {
 	Text           string            `json:"text"`
+	Attachments    []string          `json:"attachments"`
 	IdempotencyKey string            `json:"idempotency_key"`
 	Stream         bool              `json:"stream"`
 	ReplyTo        string            `json:"reply_to"`
@@ -109,8 +110,13 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, err)
 		return
 	}
+	attachments, err := mediaIDsOf(req.Attachments)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
 	in := conversations.SendInput{
-		Text: req.Text, IdempotencyKey: req.IdempotencyKey, ReplyTo: replyTo,
+		Text: req.Text, Attachments: attachments, IdempotencyKey: req.IdempotencyKey, ReplyTo: replyTo,
 		Buttons: buttonsOf(req.Buttons), QuickReplies: quickRepliesOf(req.QuickReplies),
 	}
 	var res conversations.SendResult

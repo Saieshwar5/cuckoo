@@ -11,6 +11,7 @@ import (
 
 	"github.com/Saieshwar5/cuckoo/server/internal/apikeys"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
+	"github.com/Saieshwar5/cuckoo/server/internal/media"
 	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
@@ -23,14 +24,15 @@ type Handler struct {
 	hub           *realtime.Hub
 	pairing       *pairing.Service
 	apiKeys       *apikeys.Service
+	media         *media.Service
 }
 
 // New builds the client API handler.
 func New(userService *users.Service, conversationService *conversations.Service, hub *realtime.Hub,
-	pairingService *pairing.Service, apiKeyService *apikeys.Service) *Handler {
+	pairingService *pairing.Service, apiKeyService *apikeys.Service, mediaService *media.Service) *Handler {
 	return &Handler{
 		users: userService, conversations: conversationService, hub: hub,
-		pairing: pairingService, apiKeys: apiKeyService,
+		pairing: pairingService, apiKeys: apiKeyService, media: mediaService,
 	}
 }
 
@@ -49,6 +51,11 @@ func (h *Handler) Routes() chi.Router {
 		r.Get("/messages", h.listMessages)
 		r.Post("/messages", h.sendMessage)
 	})
+
+	// Files: uploaded before the message that carries them, and read back
+	// by anyone in the conversation it was sent into.
+	r.Post("/media", h.uploadMedia)
+	r.Get("/media/{id}", h.getMedia)
 
 	// Adding agents: what a scanned code resolves to, and accepting it.
 	r.Get("/pair/{code}", h.resolvePair)

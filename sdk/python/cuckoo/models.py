@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .agent import Agent, Buttons, Stream
+    from .agent import Agent, Attachable, Buttons, Stream
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,68 @@ class ReplyRef:
 
 
 @dataclass(frozen=True)
+class Attachment:
+    """A file on a message: a photo of a bill, a voice note, a document.
+
+    The bytes are not here. ``download`` fetches them when you want them,
+    which matters when the message is a 40 MB video and your handler only
+    wanted to read the caption.
+    """
+
+    media_id: str
+    kind: str
+    mime_type: str
+    file_name: str
+    byte_size: int = 0
+    width: int = 0
+    height: int = 0
+    has_thumbnail: bool = False
+    _agent: Agent | None = field(default=None, repr=False, compare=False)
+
+    @property
+    def is_image(self) -> bool:
+        return self.kind == "image"
+
+    @property
+    def is_audio(self) -> bool:
+        return self.kind == "audio"
+
+    @classmethod
+    def from_wire(cls, data: dict[str, Any], agent: Agent | None = None) -> Attachment:
+        return cls(
+            # An upload calls it id; a message calls it media_id. Same file.
+            media_id=data.get("media_id") or data.get("id", ""),
+            kind=data.get("kind", ""),
+            mime_type=data.get("mime_type", ""),
+            file_name=data.get("file_name", ""),
+            byte_size=int(data.get("byte_size") or 0),
+            width=int(data.get("width") or 0),
+            height=int(data.get("height") or 0),
+            has_thumbnail=bool(data.get("has_thumbnail")),
+            _agent=agent,
+        )
+
+    async def download(self, *, thumbnail: bool = False) -> bytes:
+        """Fetch the bytes. ``thumbnail=True`` gets the small copy of a
+        picture, which is enough to look at and a fraction of the size."""
+        return await self._attached().download(self.media_id, thumbnail=thumbnail)
+
+    async def save(self, path: str | os.PathLike[str], *, thumbnail: bool = False) -> Path:
+        """Write the bytes to a file, or into a directory under the name the
+        sender gave it. Returns where it went."""
+        target = Path(path)
+        if target.is_dir():
+            target = target / (self.file_name or self.media_id)
+        target.write_bytes(await self.download(thumbnail=thumbnail))
+        return target
+
+    def _attached(self) -> Agent:
+        if self._agent is None:
+            raise RuntimeError("this attachment is not attached to a running agent")
+        return self._agent
+
+
+@dataclass(frozen=True)
 class Message:
     """One thing said in a conversation. ``action`` is set when the person
     tapped one of your buttons; ``text`` is then the button's label."""
@@ -61,10 +125,19 @@ class Message:
     action: Action | None = None
     reply_to: ReplyRef | None = None
     event_id: str | None = None
+    attachments: tuple[Attachment, ...] = ()
+
+    @property
+    def has_attachments(self) -> bool:
+        return bool(self.attachments)
 
     @classmethod
     def from_wire(
-        cls, data: dict[str, Any], conversation_id: str, event_id: str | None = None
+        cls,
+        data: dict[str, Any],
+        conversation_id: str,
+        event_id: str | None = None,
+        agent: Agent | None = None,
     ) -> Message:
         sender = data.get("sender") or {}
         body = data.get("body") or {}
@@ -89,10 +162,12 @@ class Message:
             if reply
             else None,
             event_id=event_id,
+            attachments=tuple(
+                Attachment.from_wire(a, agent) for a in (body.get("attachments") or [])
+            ),
         )
 
 
-@dataclass
 @dataclass
 class PairToken:
     """The code someone scanned to reach the agent, with whatever the owner
@@ -140,8 +215,9 @@ class Conversation:
 
     async def send(
         self,
-        text: str,
+        text: str = "",
         *,
+        attachments: list[Attachable] | None = None,
         buttons: Buttons | None = None,
         quick_replies: list[str] | None = None,
         reply_to: str | None = None,
@@ -149,13 +225,17 @@ class Conversation:
     ) -> Message:
         """Say something in this conversation.
 
-        ``buttons`` is rows of ``(id, label)`` or ``(id, label, style)``; the
-        person's tap comes back as a message whose ``action.button_id`` is
-        the id. ``quick_replies`` are suggested answers sent as plain text.
+        ``attachments`` are paths to files, or things already uploaded; they
+        are uploaded and sent with the message, and ``text`` becomes their
+        caption and may be empty. ``buttons`` is rows of ``(id, label)`` or
+        ``(id, label, style)``; the person's tap comes back as a message
+        whose ``action.button_id`` is the id. ``quick_replies`` are suggested
+        answers sent as plain text.
         """
         return await self._attached().send(
             self.id,
             text,
+            attachments=attachments,
             buttons=buttons,
             quick_replies=quick_replies,
             reply_to=reply_to,
