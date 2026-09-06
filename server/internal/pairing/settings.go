@@ -89,7 +89,7 @@ func (s *Service) Remove(ctx context.Context, callerID, agentID uuid.UUID) error
 	if err != nil {
 		return err
 	}
-	if c.AddedVia != "pair_token" {
+	if c.AddedVia == "owner" {
 		return domain.Conflict("own_agent", "You own this agent. Delete it instead of removing it.")
 	}
 	if _, err := s.store.RemoveContact(ctx, gen.RemoveContactParams{UserID: callerID, AgentID: agentID}); err != nil {

@@ -21,7 +21,9 @@ type agentResponse struct {
 	DisplayName string `json:"display_name"`
 	Description string `json:"description"`
 	// HasAvatar says a picture is published at /a/{id}/avatar.
-	HasAvatar bool             `json:"has_avatar"`
+	HasAvatar bool `json:"has_avatar"`
+	// Starters are what an empty chat suggests saying first; up to four.
+	Starters  []string         `json:"starters"`
 	CreatedAt time.Time        `json:"created_at"`
 	UpdatedAt time.Time        `json:"updated_at"`
 	Binding   *bindingResponse `json:"binding"`
@@ -43,6 +45,7 @@ func newAgentResponse(a agents.Agent, b *agents.Binding) agentResponse {
 		DisplayName: a.DisplayName,
 		Description: a.Description,
 		HasAvatar:   a.AvatarMediaID != nil,
+		Starters:    a.Starters,
 		CreatedAt:   a.CreatedAt,
 		UpdatedAt:   a.UpdatedAt,
 	}
@@ -78,6 +81,8 @@ type createAgentRequest struct {
 	Description string `json:"description"`
 	// A picture already uploaded, to publish the agent with.
 	AvatarMediaID string `json:"avatar_media_id"`
+	// Up to four things to suggest saying first.
+	Starters []string `json:"starters"`
 }
 
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +108,7 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		DisplayName:   req.DisplayName,
 		Description:   req.Description,
 		AvatarMediaID: avatar,
+		Starters:      req.Starters,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)
@@ -168,6 +174,8 @@ type updateAgentRequest struct {
 	DisplayName   *string `json:"display_name"`
 	Description   *string `json:"description"`
 	AvatarMediaID *string `json:"avatar_media_id"`
+	// Starters replaces the list when present; send [] to clear it.
+	Starters *[]string `json:"starters"`
 }
 
 // avatarIDOf parses the id of a picture a profile is being given.
@@ -212,6 +220,7 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 		DisplayName:   req.DisplayName,
 		Description:   req.Description,
 		AvatarMediaID: avatar,
+		Starters:      req.Starters,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)

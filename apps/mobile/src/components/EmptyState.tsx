@@ -11,10 +11,12 @@ interface Props {
   title: string;
   subtitle: string;
   action?: { title: string; onPress: () => void };
+  // A second way forward, drawn plainer than the first.
+  secondary?: { title: string; onPress: () => void };
 }
 
 // EmptyState fills a list that has nothing in it with what to do about it.
-export function EmptyState({ icon, title, subtitle, action }: Props) {
+export function EmptyState({ icon, title, subtitle, action, secondary }: Props) {
   const { colors } = useTheme();
   return (
     <View style={styles.wrap}>
@@ -27,6 +29,9 @@ export function EmptyState({ icon, title, subtitle, action }: Props) {
         <View style={styles.action}>
           <Button title={action.title} onPress={action.onPress} variant="outline" compact />
         </View>
+      ) : null}
+      {secondary ? (
+        <Button title={secondary.title} onPress={secondary.onPress} variant="plain" compact />
       ) : null}
     </View>
   );

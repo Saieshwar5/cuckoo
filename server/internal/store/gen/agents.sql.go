@@ -12,9 +12,9 @@ import (
 )
 
 const createAgent = `-- name: CreateAgent :one
-INSERT INTO agents (id, owner_user_id, handle, display_name, description, avatar_media_id)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id
+INSERT INTO agents (id, owner_user_id, handle, display_name, description, avatar_media_id, starters)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters
 `
 
 type CreateAgentParams struct {
@@ -24,6 +24,7 @@ type CreateAgentParams struct {
 	DisplayName   string
 	Description   string
 	AvatarMediaID *uuid.UUID
+	Starters      []byte
 }
 
 func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent, error) {
@@ -34,6 +35,7 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		arg.DisplayName,
 		arg.Description,
 		arg.AvatarMediaID,
+		arg.Starters,
 	)
 	var i Agent
 	err := row.Scan(
@@ -46,12 +48,13 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.AvatarMediaID,
+		&i.Starters,
 	)
 	return i, err
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id FROM agents
+SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters FROM agents
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -68,12 +71,36 @@ func (q *Queries) GetAgent(ctx context.Context, id uuid.UUID) (Agent, error) {
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.AvatarMediaID,
+		&i.Starters,
+	)
+	return i, err
+}
+
+const getAgentByHandle = `-- name: GetAgentByHandle :one
+SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters FROM agents
+WHERE handle = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetAgentByHandle(ctx context.Context, handle string) (Agent, error) {
+	row := q.db.QueryRow(ctx, getAgentByHandle, handle)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerUserID,
+		&i.Handle,
+		&i.DisplayName,
+		&i.Description,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.AvatarMediaID,
+		&i.Starters,
 	)
 	return i, err
 }
 
 const listAgentsByOwner = `-- name: ListAgentsByOwner :many
-SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id FROM agents
+SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters FROM agents
 WHERE owner_user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at ASC, id ASC
 `
@@ -97,6 +124,7 @@ func (q *Queries) ListAgentsByOwner(ctx context.Context, ownerUserID uuid.UUID) 
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.AvatarMediaID,
+			&i.Starters,
 		); err != nil {
 			return nil, err
 		}
@@ -127,15 +155,17 @@ UPDATE agents
 SET display_name    = COALESCE($1::text, display_name),
     description     = COALESCE($2::text, description),
     avatar_media_id = COALESCE($3::uuid, avatar_media_id),
+    starters        = COALESCE($4::jsonb, starters),
     updated_at      = now()
-WHERE id = $4 AND deleted_at IS NULL
-RETURNING id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id
+WHERE id = $5 AND deleted_at IS NULL
+RETURNING id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters
 `
 
 type UpdateAgentParams struct {
 	DisplayName   *string
 	Description   *string
 	AvatarMediaID *uuid.UUID
+	Starters      []byte
 	ID            uuid.UUID
 }
 
@@ -145,6 +175,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Agent
 		arg.DisplayName,
 		arg.Description,
 		arg.AvatarMediaID,
+		arg.Starters,
 		arg.ID,
 	)
 	var i Agent
@@ -158,6 +189,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Agent
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.AvatarMediaID,
+		&i.Starters,
 	)
 	return i, err
 }

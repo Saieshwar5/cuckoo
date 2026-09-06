@@ -47,7 +47,8 @@ def _agents_list(args: argparse.Namespace) -> None:
 def _agents_create(args: argparse.Namespace) -> None:
     with _client(args) as cuckoo:
         agent = cuckoo.create_agent(
-            args.handle, args.display_name, args.description or "", avatar=args.avatar
+            args.handle, args.display_name, args.description or "", avatar=args.avatar,
+            starters=args.starters
         )
         print(agent.id)
 
@@ -116,6 +117,13 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("display_name", help="the name people see")
     create.add_argument("--description", help="one line about what it does")
     create.add_argument("--avatar", help="path to the picture it is published with")
+    create.add_argument(
+        "--starter",
+        action="append",
+        dest="starters",
+        metavar="TEXT",
+        help="something the empty chat suggests saying first; up to four",
+    )
     create.set_defaults(run=_agents_create)
 
     connect = agents.add_parser("connect", help="attach a backend and print its secret")

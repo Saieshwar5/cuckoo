@@ -29,6 +29,8 @@ export interface Participant {
   status?: AgentStatus;
   // An agent published with a picture, at /a/{id}/avatar.
   has_avatar?: boolean;
+  // What an agent suggests saying first, shown as chips in an empty chat.
+  starters?: string[];
 }
 
 // A button is a choice or a link, never both. A choice has an id, which
@@ -149,6 +151,7 @@ export interface AgentCard {
   display_name: string;
   description: string;
   has_avatar?: boolean;
+  starters?: string[];
   owner: { display_name: string };
   status?: AgentStatus;
   verified: boolean;

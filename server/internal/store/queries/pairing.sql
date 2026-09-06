@@ -49,6 +49,7 @@ SELECT c.*,
        a.display_name,
        a.description,
        (a.avatar_media_id IS NOT NULL)::bool AS has_avatar,
+       a.starters,
        a.deleted_at   AS agent_deleted_at,
        u.display_name AS owner_display_name,
        b.status       AS binding_status
@@ -84,7 +85,7 @@ WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL;
 -- so scanning it again starts clean.
 UPDATE contacts
 SET removed_at = now(), pinned_at = NULL, archived_at = NULL, muted_until = NULL
-WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL AND added_via = 'pair_token';
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL AND added_via IN ('pair_token', 'hub');
 
 -- name: RestoreContact :execrows
 UPDATE contacts

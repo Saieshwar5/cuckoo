@@ -1,7 +1,11 @@
 -- name: CreateAgent :one
-INSERT INTO agents (id, owner_user_id, handle, display_name, description, avatar_media_id)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO agents (id, owner_user_id, handle, display_name, description, avatar_media_id, starters)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
+
+-- name: GetAgentByHandle :one
+SELECT * FROM agents
+WHERE handle = $1 AND deleted_at IS NULL;
 
 -- name: GetAgent :one
 SELECT * FROM agents
@@ -18,6 +22,7 @@ UPDATE agents
 SET display_name    = COALESCE(sqlc.narg('display_name')::text, display_name),
     description     = COALESCE(sqlc.narg('description')::text, description),
     avatar_media_id = COALESCE(sqlc.narg('avatar_media_id')::uuid, avatar_media_id),
+    starters        = COALESCE(sqlc.narg('starters')::jsonb, starters),
     updated_at      = now()
 WHERE id = sqlc.arg('id') AND deleted_at IS NULL
 RETURNING *;

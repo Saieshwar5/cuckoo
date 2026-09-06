@@ -34,8 +34,8 @@
   "chats.connecting": "Connecting…",
   "chats.new": "New chat",
   "chats.empty.title": "No chats yet",
-  "chats.empty.subtitle": "Every agent you create gets a chat here, the moment it exists.",
-  "chats.empty.action": "See your agents",
+  "chats.empty.subtitle": "Scan a company's code to add its agent, or create your own and connect your code to it. Every agent gets a chat here.",
+  "chats.empty.action": "Create an agent",
   "chats.nomatch.title": "Nothing matches",
   "chats.nomatch.subtitle": "No chat has a name or a message like that.",
   "chats.preview.none": "No messages yet",
@@ -47,7 +47,7 @@
   "agents.title": "Agents",
   "agents.yours": "Your agents",
   "agents.empty.title": "No agents yet",
-  "agents.empty.subtitle": "Agents you create show up here with their connection state.",
+  "agents.empty.subtitle": "Two ways in: scan a company's code to add its agent, or create your own and connect your code to it.",
   "agents.status.connected": "Connected",
   "agents.status.idle": "Not connected",
   "agents.status.unreachable": "Unreachable",
@@ -245,5 +245,7 @@
   "profile.photo.change": "Change photo",
   "profile.name": "Your name",
   "profile.open": "Your profile",
-  "profile.note": "Your photo is only ever shown to people you share a chat with. Agents are told your name, and nothing else."
+  "profile.note": "Your photo is only ever shown to people you share a chat with. Agents are told your name, and nothing else.",
+  "chats.empty.scan": "Scan a code",
+  "agents.empty.scan": "Scan a code"
 }

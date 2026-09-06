@@ -59,6 +59,10 @@ func (s *Service) Create(ctx context.Context, ownerID uuid.UUID, in CreateInput)
 	if err != nil {
 		return Agent{}, err
 	}
+	starters, err := validateStarters(in.Starters)
+	if err != nil {
+		return Agent{}, err
+	}
 	if err := s.checkPicture(ctx, ownerID, in.AvatarMediaID); err != nil {
 		return Agent{}, err
 	}
@@ -78,6 +82,7 @@ func (s *Service) Create(ctx context.Context, ownerID uuid.UUID, in CreateInput)
 			DisplayName:   name,
 			Description:   desc,
 			AvatarMediaID: in.AvatarMediaID,
+			Starters:      startersJSON(starters),
 		})
 		if err != nil {
 			return err
@@ -159,7 +164,16 @@ func (s *Service) Update(ctx context.Context, callerID, id uuid.UUID, in UpdateI
 		return Agent{}, err
 	}
 
-	params := gen.UpdateAgentParams{ID: id, AvatarMediaID: in.AvatarMediaID}
+	var starters []byte
+	if in.Starters != nil {
+		list, err := validateStarters(*in.Starters)
+		if err != nil {
+			return Agent{}, err
+		}
+		starters = startersJSON(list)
+	}
+	params := gen.UpdateAgentParams{
+		Starters: starters, ID: id, AvatarMediaID: in.AvatarMediaID}
 	if in.DisplayName != nil {
 		name, err := validateDisplayName(*in.DisplayName)
 		if err != nil {
@@ -174,7 +188,7 @@ func (s *Service) Update(ctx context.Context, callerID, id uuid.UUID, in UpdateI
 		}
 		params.Description = &desc
 	}
-	if params.DisplayName == nil && params.Description == nil && params.AvatarMediaID == nil {
+	if params.DisplayName == nil && params.Description == nil && params.AvatarMediaID == nil && params.Starters == nil {
 		return Agent{}, domain.Invalid("no_changes", "Provide at least one field to update.")
 	}
 
@@ -237,4 +251,16 @@ func (s *Service) checkPicture(ctx context.Context, ownerID uuid.UUID, mediaID *
 		return domain.Internal(fmt.Errorf("get picture %s: %w", *mediaID, err))
 	}
 	return media.Picture(row, err == nil, media.Owner{Kind: media.OwnerUser, ID: ownerID})
+}
+
+// GetByHandle finds a live agent by its address on this hub.
+func (s *Service) GetByHandle(ctx context.Context, handle string) (Agent, error) {
+	row, err := s.store.GetAgentByHandle(ctx, handle)
+	if err != nil {
+		if store.IsNoRows(err) {
+			return Agent{}, domain.NotFound("agent_not_found", "That agent does not exist.")
+		}
+		return Agent{}, domain.Internal(fmt.Errorf("get agent @%s: %w", handle, err))
+	}
+	return agentFromRow(row), nil
 }

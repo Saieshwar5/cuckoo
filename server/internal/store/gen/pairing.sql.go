@@ -312,6 +312,7 @@ SELECT c.user_id, c.agent_id, c.dm_conversation_id, c.added_via, c.pair_token_id
        a.display_name,
        a.description,
        (a.avatar_media_id IS NOT NULL)::bool AS has_avatar,
+       a.starters,
        a.deleted_at   AS agent_deleted_at,
        u.display_name AS owner_display_name,
        b.status       AS binding_status
@@ -339,6 +340,7 @@ type ListContactsRow struct {
 	DisplayName      string
 	Description      string
 	HasAvatar        bool
+	Starters         []byte
 	AgentDeletedAt   *time.Time
 	OwnerDisplayName string
 	BindingStatus    *string
@@ -370,6 +372,7 @@ func (q *Queries) ListContacts(ctx context.Context, userID uuid.UUID) ([]ListCon
 			&i.DisplayName,
 			&i.Description,
 			&i.HasAvatar,
+			&i.Starters,
 			&i.AgentDeletedAt,
 			&i.OwnerDisplayName,
 			&i.BindingStatus,
@@ -425,7 +428,7 @@ func (q *Queries) ListPairTokensByAgent(ctx context.Context, agentID uuid.UUID) 
 const removeContact = `-- name: RemoveContact :execrows
 UPDATE contacts
 SET removed_at = now(), pinned_at = NULL, archived_at = NULL, muted_until = NULL
-WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL AND added_via = 'pair_token'
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL AND added_via IN ('pair_token', 'hub')
 `
 
 type RemoveContactParams struct {

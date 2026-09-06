@@ -102,6 +102,11 @@ export default function ChatScreen() {
           <View style={styles.center}>
             <Text style={[styles.empty, { color: colors.textSecondary }]}>{t('chat.empty', { name })}</Text>
             <Text style={[styles.hint, { color: colors.textSecondary }]}>{t('chat.reply.hint')}</Text>
+            {who?.kind === 'agent' && who.starters?.length ? (
+              <View style={styles.starters}>
+                <QuickReplies labels={who.starters} onPick={(label) => send(label, [])} />
+              </View>
+            ) : null}
           </View>
         ) : (
           <FlatList
@@ -171,6 +176,8 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
+  // The agent's suggestions, under the words that say the chat is new.
+  starters: { marginTop: spacing.md, alignSelf: 'stretch' },
   wall: { flex: 1 },
   list: { paddingVertical: spacing.sm },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },

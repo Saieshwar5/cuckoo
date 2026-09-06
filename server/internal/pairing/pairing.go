@@ -93,6 +93,7 @@ type Contact struct {
 	DisplayName    string
 	Description    string
 	HasAvatar      bool
+	Starters       []string
 	OwnerName      string
 	Status         *agents.Status
 	AddedVia       string
@@ -119,6 +120,7 @@ func contactFromRow(r gen.ListContactsRow) Contact {
 		DisplayName:    r.DisplayName,
 		Description:    r.Description,
 		HasAvatar:      r.HasAvatar,
+		Starters:       startersOf(r.Starters),
 		OwnerName:      r.OwnerDisplayName,
 		AddedVia:       r.AddedVia,
 		Blocked:        r.BlockedAt != nil,
@@ -134,4 +136,16 @@ func contactFromRow(r gen.ListContactsRow) Contact {
 		c.Status = &s
 	}
 	return c
+}
+
+// startersOf decodes an agent's suggestions; none when the row has none.
+func startersOf(raw []byte) []string {
+	out := []string{}
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &out)
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out
 }

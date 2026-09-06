@@ -21,6 +21,7 @@ type Agent struct {
 	UpdatedAt     time.Time
 	DeletedAt     *time.Time
 	AvatarMediaID *uuid.UUID
+	Starters      []byte
 }
 
 type AgentBinding struct {

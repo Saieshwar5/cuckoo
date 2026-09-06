@@ -93,7 +93,8 @@ export default function ChatsScreen() {
               icon="chatbubbles-outline"
               title={t('chats.empty.title')}
               subtitle={t('chats.empty.subtitle')}
-              action={{ title: t('chats.empty.action'), onPress: goToAgents }}
+              action={{ title: t('chats.empty.scan'), onPress: () => router.push('/scan') }}
+              secondary={{ title: t('chats.empty.action'), onPress: goToAgents }}
             />
           )
         }

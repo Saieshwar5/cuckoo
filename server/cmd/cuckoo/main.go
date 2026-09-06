@@ -92,8 +92,6 @@ func run() error {
 	}
 
 	limits := ratelimit.NewRedis(redisClient, "cuckoo:")
-	signinService := signin.New(db, mail.NewConsole(log), signin.WithLimiter(limits))
-	userAuth := newUserAuthenticator(cfg, signinService)
 
 	agentService := agents.New(db, agents.WithPublisher(bus))
 	conversationService := conversations.New(db,
@@ -103,6 +101,13 @@ func run() error {
 	deliveryService := delivery.New(db, conversationService)
 	userService := users.New(db)
 	pairingService := pairing.New(db, agentService, conversationService, userService, cfg.PublicURL)
+	// Sign-in is built after pairing, whose welcomer it calls for every new
+	// account; the session authenticator is built after sign-in, which it
+	// resolves tokens with. Order matters here and nothing checks it but
+	// the first request.
+	signinService := signin.New(db, mail.NewConsole(log), signin.WithLimiter(limits),
+		signin.WithWelcome(pairingService.Welcomer(cfg.WelcomeHandle)))
+	userAuth := newUserAuthenticator(cfg, signinService)
 	apiKeyService := apikeys.New(db)
 
 	blobStore, err := blobs.NewDisk(cfg.MediaDir)

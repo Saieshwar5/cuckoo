@@ -30,10 +30,12 @@ async def handle(msg, conv):
 ```
 
 An agent can be published with its logo, which is what a stranger sees on
-the card a QR code opens:
+the card a QR code opens, and with a few starters — what an empty chat
+suggests saying first, so nobody stares at a blank screen:
 
 ```python
-cuckoo.create_agent("sbi-cards", "SBI Cards", avatar="logo.png")
+cuckoo.create_agent("sbi-cards", "SBI Cards", avatar="logo.png",
+                    starters=["Card blocked", "Statement", "Talk to a person"])
 cuckoo.update_agent(agent.id, avatar="newlogo.png")
 ```
 

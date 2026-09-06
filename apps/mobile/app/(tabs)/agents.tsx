@@ -46,7 +46,7 @@ export default function AgentsScreen() {
     hasAvatar: !!a.has_avatar,
   }));
   const added: Row[] = contacts
-    .filter((c) => c.added_via === 'pair_token' && !c.agent_deleted)
+    .filter((c) => c.added_via !== 'owner' && !c.agent_deleted)
     .map((c) => ({
       id: c.agent.id,
       name: c.agent.display_name,
@@ -120,6 +120,7 @@ export default function AgentsScreen() {
               title={t('agents.empty.title')}
               subtitle={t('agents.empty.subtitle')}
               action={{ title: t('agents.empty.action'), onPress: create }}
+              secondary={{ title: t('agents.empty.scan'), onPress: () => router.push('/scan') }}
             />
           )
         }

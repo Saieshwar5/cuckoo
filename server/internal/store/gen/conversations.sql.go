@@ -186,6 +186,8 @@ SELECT p.conversation_id, p.kind, p.user_id, p.agent_id, p.joined_at,
        -- Whether the agent has a published picture, so the app knows to
        -- ask for it rather than guessing and getting a 404.
        (a.avatar_media_id IS NOT NULL)::bool AS agent_has_avatar,
+       -- What the agent suggests saying first, for an empty chat.
+       a.starters     AS agent_starters,
        -- The dot on the avatar: the agent's live binding's health, or
        -- nothing when no backend is connected.
        b.status       AS agent_status
@@ -207,6 +209,7 @@ type ListParticipantsRow struct {
 	AgentDisplayName *string
 	AgentHandle      *string
 	AgentHasAvatar   bool
+	AgentStarters    []byte
 	AgentStatus      *string
 }
 
@@ -232,6 +235,7 @@ func (q *Queries) ListParticipants(ctx context.Context, conversationIds []uuid.U
 			&i.AgentDisplayName,
 			&i.AgentHandle,
 			&i.AgentHasAvatar,
+			&i.AgentStarters,
 			&i.AgentStatus,
 		); err != nil {
 			return nil, err

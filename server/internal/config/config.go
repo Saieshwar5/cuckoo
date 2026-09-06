@@ -40,6 +40,12 @@ type Config struct {
 	LogLevel        slog.Level
 	ShutdownTimeout time.Duration
 
+	// WelcomeHandle names the agent every new account is given on arrival,
+	// by its handle on this hub. Empty means nobody: a new account opens on
+	// an empty list. The agent is created and run by the hub's operator
+	// like any other; this only says which one is the greeter.
+	WelcomeHandle string
+
 	// MediaDir is the directory uploaded files are kept in. A folder on
 	// this machine is the whole of storage today; the seam for a bucket is
 	// in the blobs package, not here.
@@ -77,6 +83,7 @@ func Load() (Config, error) {
 		LogLevel:        l.logLevel("CUCKOO_LOG_LEVEL", slog.LevelInfo),
 		ShutdownTimeout: l.duration("CUCKOO_SHUTDOWN_TIMEOUT", 15*time.Second),
 		MediaDir:        l.str("CUCKOO_MEDIA_DIR", "./.data/media"),
+		WelcomeHandle:   l.str("CUCKOO_WELCOME_HANDLE", ""),
 		Mail:            l.str("CUCKOO_MAIL", ""),
 		CORSOrigins:     l.list("CUCKOO_CORS_ORIGINS"),
 	}

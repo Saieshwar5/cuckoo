@@ -22,7 +22,9 @@ type agentCardResponse struct {
 	Description string `json:"description"`
 	// A published picture, at /a/{id}/avatar.
 	HasAvatar bool `json:"has_avatar"`
-	Owner     struct {
+	// What an empty chat suggests saying first.
+	Starters []string `json:"starters"`
+	Owner    struct {
 		DisplayName string `json:"display_name"`
 	} `json:"owner"`
 	Status string `json:"status,omitempty"`
@@ -38,6 +40,7 @@ func newAgentCard(c pairing.Card) agentCardResponse {
 		DisplayName: c.Agent.DisplayName,
 		Description: c.Agent.Description,
 		HasAvatar:   c.Agent.AvatarMediaID != nil,
+		Starters:    c.Agent.Starters,
 	}
 	resp.Owner.DisplayName = c.OwnerName
 	if c.Status != nil {
@@ -146,6 +149,7 @@ func (h *Handler) listContacts(w http.ResponseWriter, r *http.Request) {
 			DisplayName: c.DisplayName,
 			Description: c.Description,
 			HasAvatar:   c.HasAvatar,
+			Starters:    c.Starters,
 		}
 		card.Owner.DisplayName = c.OwnerName
 		if c.Status != nil {
