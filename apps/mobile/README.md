@@ -77,6 +77,32 @@ retry a failure with the same key. One live connection per session
 (`src/realtime/realtime.ts`, opened by `RealtimeProvider`) feeds both the
 chat list and the open chat.
 
+## Remembering, and sending with no signal
+
+The hub is the record; the app keeps a copy of the parts it has seen. The
+chat list, every chat that was opened, and the agents are written to a
+store on the device as they arrive (`src/cache`), and read back before the
+hub is asked the next time. A screen shows what it remembered on its first
+frame and corrects it the moment the hub answers; with no signal it shows
+what it remembered for as long as that lasts. Pictures already looked at
+are kept too (`src/media/source.ts`). Signing out wipes all of it.
+
+The store is a handful of JSON documents by key, one per thing a screen
+loads, capped at five hundred messages a chat. SQLite on the phone,
+IndexedDB in the browser, behind one four-method interface, guarded so a
+device that cannot remember runs the app as it was rather than a broken
+one.
+
+A send is written to a queue (`src/outbox`) before anything else happens
+to it, and shows in the chat with the pending tick. The queue drains in
+order whenever the hub can be reached: at once, when the socket comes
+back, when the platform says the network is back, and on a short backoff
+besides. Because every send carries an idempotency key, one that was
+halfway through when the app was killed goes again on the next open and
+lands exactly once. A send the hub refuses is marked failed and waits for
+a tap; one the hub could not be reached for stays pending, which is the
+truth of it.
+
 ## Photos and files
 
 The clip on the composer opens photos, the camera, or a document. What is

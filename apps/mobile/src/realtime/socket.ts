@@ -25,6 +25,7 @@ export interface SocketOptions {
 
 export interface SocketHandle {
   close(): void;
+  retryNow(): void;
 }
 
 // The token travels as a WebSocket subprotocol: "cuckoo" plus the token.
@@ -87,6 +88,15 @@ export function connectSocket(opts: SocketOptions): SocketHandle {
       const ws = current;
       current = null;
       ws?.close();
+    },
+    // retryNow forgets the backoff and connects at once: the network came
+    // back, and waiting out a delay meant for a dead hub is wrong for it.
+    retryNow() {
+      if (closed || current) return;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      backoff = 1_000;
+      connect();
     },
   };
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 
+import { useMemory } from '../cache/CacheProvider';
 import { useRealtime } from '../realtime/RealtimeProvider';
 import { useSession } from '../session/SessionProvider';
 import { ChatController, type ChatSnapshot } from './controller';
@@ -23,10 +24,14 @@ const noop = async () => {};
 export function useChat(conversationId: string) {
   const { api, user } = useSession();
   const realtime = useRealtime();
+  const memory = useMemory();
   const userId = user?.id ?? null;
   const controller = useMemo(
-    () => (realtime && userId ? new ChatController(api, realtime, conversationId, userId) : null),
-    [api, realtime, conversationId, userId],
+    () =>
+      realtime && userId && memory
+        ? new ChatController(api, realtime, conversationId, userId, Date.now, memory)
+        : null,
+    [api, realtime, conversationId, userId, memory],
   );
 
   useEffect(() => {

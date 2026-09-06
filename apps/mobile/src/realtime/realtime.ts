@@ -19,6 +19,8 @@ export interface Realtime {
 export interface RealtimeHandle extends Realtime {
   start(): void;
   stop(): void;
+  // The network is back: connect now rather than after the backoff.
+  retryNow(): void;
 }
 
 export function createRealtime(opts: {
@@ -62,6 +64,9 @@ export function createRealtime(opts: {
       socket?.close();
       socket = null;
       connected = false;
+    },
+    retryNow() {
+      socket?.retryNow();
     },
   };
 }

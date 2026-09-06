@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 
 import { useSession } from '@/session/SessionProvider';
 
+import { clearBlobs, getBlob, putBlob } from './blobs.web';
+
 // The browser's version of reaching a file on the hub.
 //
 // An <img> tag cannot carry an Authorization header, and the bytes are not
@@ -26,20 +28,28 @@ export function useMediaSource(
     let objectUrl: string | null = null;
     let cancelled = false;
 
+    const key = `${mediaId}${thumb ? ':thumb' : ''}`;
     void (async () => {
-      try {
-        const res = await fetch(api.mediaUrl(mediaId, thumb ? 'thumb' : undefined), {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const blob = await res.blob();
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setUri(objectUrl);
-      } catch {
-        // A picture that will not load is a broken bubble, not a broken
-        // chat: the placeholder stays and the rest of the screen works.
+      // What this browser fetched before is shown first and fastest; with
+      // no signal it is all that is shown, which is the point of keeping it.
+      let blob = await getBlob(key);
+      if (!blob) {
+        try {
+          const res = await fetch(api.mediaUrl(mediaId, thumb ? 'thumb' : undefined), {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) return;
+          blob = await res.blob();
+          void putBlob(key, blob);
+        } catch {
+          // A picture that will not load is a broken bubble, not a broken
+          // chat: the placeholder stays and the rest of the screen works.
+          return;
+        }
       }
+      if (cancelled) return;
+      objectUrl = URL.createObjectURL(blob);
+      setUri(objectUrl);
     })();
 
     return () => {
@@ -50,4 +60,9 @@ export function useMediaSource(
 
   if (localUri) return { uri: localUri };
   return uri ? { uri } : null;
+}
+
+// forgetMedia removes every copy. Signing out calls it.
+export function forgetMedia(): void {
+  void clearBlobs();
 }
