@@ -23,6 +23,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/mail"
+	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/signin"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
@@ -42,6 +43,8 @@ type Server struct {
 	// live-update bus, for tests that need to drive it from outside a
 	// request — running the delivery worker, say.
 	Conversations *conversations.Service
+	// Pairing is the service behind the pair and contact routes.
+	Pairing *pairing.Service
 	// Mail holds every email the server "sent", so a test can read a
 	// sign-in code back.
 	Mail *mail.Memory
@@ -83,15 +86,18 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 		conversations.WithLimiter(NewLimiter(t)),
 		conversations.WithPublisher(bus),
 		conversations.WithStreams(NewStreamStore(t)))
+	userService := users.New(db)
+	pairingService := pairing.New(db, agentService, conversationService, userService, "https://hub.test")
 	handler := api.NewRouter(api.Deps{
 		Logger:        quiet,
 		UserAuth:      auth.NewDevOrSession(auth.NewDev(), auth.NewSession(signinService)),
 		AgentAuth:     auth.NewBinding(agentService),
-		Users:         users.New(db),
+		Users:         userService,
 		SignIn:        signinService,
 		Agents:        agentService,
 		Conversations: conversationService,
 		Delivery:      delivery.New(db, conversationService),
+		Pairing:       pairingService,
 		Hub:           hub,
 		Bus:           bus,
 		CORSOrigins:   []string{"*"},
@@ -101,7 +107,7 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
-	return &Server{Server: srv, Store: db, Conversations: conversationService, Mail: mailer}
+	return &Server{Server: srv, Store: db, Conversations: conversationService, Pairing: pairingService, Mail: mailer}
 }
 
 // AsSession returns a client authenticated with a session token, as the app

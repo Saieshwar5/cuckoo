@@ -39,6 +39,16 @@ ORDER BY COALESCE(
     c.id
 ) DESC;
 
+-- name: FindDM :one
+-- The chat between a person and an agent, if they have one.
+SELECT c.*
+FROM conversations c
+JOIN participants pu ON pu.conversation_id = c.id AND pu.user_id = sqlc.arg('user_id')::uuid
+JOIN participants pa ON pa.conversation_id = c.id AND pa.agent_id = sqlc.arg('agent_id')::uuid
+WHERE c.kind = 'dm'
+ORDER BY c.id
+LIMIT 1;
+
 -- name: ListParticipants :many
 -- Members of a set of conversations with their current names. Deleted people
 -- and retired agents still appear: they are part of the history, and the

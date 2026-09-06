@@ -14,7 +14,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("echo")
 
 agent = Agent(
-    secret=os.environ["CUCKOO_SECRET"], hub=os.environ.get("CUCKOO_HUB", "http://localhost:8080")
+    secret=os.environ["CUCKOO_SECRET"],
+    hub=os.environ.get("CUCKOO_HUB", "http://localhost:8080"),
 )
 
 

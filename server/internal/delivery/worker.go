@@ -236,7 +236,10 @@ func (w *Worker) markFailed(ctx context.Context, d Delivery, reason string) erro
 // tickChanged tells the sender's devices the tick mark moved. It cannot fail
 // the pass: the outcome is recorded, and a device catches up on reconnect.
 func (w *Worker) tickChanged(ctx context.Context, d Delivery) {
-	if err := w.deliveries.conversations.DeliveryChanged(ctx, d.MessageID); err != nil {
+	if d.MessageID == nil {
+		return // a membership event: nobody's tick mark depends on it
+	}
+	if err := w.deliveries.conversations.DeliveryChanged(ctx, *d.MessageID); err != nil {
 		w.log.Warn("could not announce delivery change", "event", d.ID, "error", err)
 	}
 }

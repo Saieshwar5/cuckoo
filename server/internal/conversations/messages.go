@@ -37,6 +37,9 @@ func (s *Service) SendAsUser(ctx context.Context, userID, conversationID uuid.UU
 	if _, err := s.member(ctx, userID, conversationID); err != nil {
 		return SendResult{}, err
 	}
+	if err := s.ensureOpen(ctx, conversationID); err != nil {
+		return SendResult{}, err
+	}
 	return s.send(ctx, Sender{Kind: ParticipantUser, ID: userID}, conversationID, in, userSendPolicy)
 }
 
@@ -45,6 +48,9 @@ func (s *Service) SendAsUser(ctx context.Context, userID, conversationID uuid.UU
 // itself never hears its own message back.
 func (s *Service) SendAsAgent(ctx context.Context, agentID, conversationID uuid.UUID, in SendInput) (SendResult, error) {
 	if _, err := s.agentMember(ctx, agentID, conversationID); err != nil {
+		return SendResult{}, err
+	}
+	if err := s.ensureOpen(ctx, conversationID); err != nil {
 		return SendResult{}, err
 	}
 	return s.send(ctx, Sender{Kind: ParticipantAgent, ID: agentID}, conversationID, in, agentSendPolicy)

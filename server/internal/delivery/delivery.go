@@ -10,6 +10,7 @@ package delivery
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -32,31 +33,36 @@ const (
 	StatusFailed    Status = "failed"
 )
 
-// Delivery is one event owed to one agent.
+// Delivery is one event owed to one agent. MessageID is set for a message
+// event; a membership event has none and carries Payload instead.
 type Delivery struct {
-	ID            uuid.UUID
-	MessageID     uuid.UUID
-	AgentID       uuid.UUID
-	EventType     string
-	Status        Status
-	Attempts      int
-	NextAttemptAt time.Time
-	LastError     string
-	DeliveredAt   *time.Time
-	CreatedAt     time.Time
+	ID             uuid.UUID
+	MessageID      *uuid.UUID
+	ConversationID uuid.UUID
+	AgentID        uuid.UUID
+	EventType      string
+	Payload        []byte
+	Status         Status
+	Attempts       int
+	NextAttemptAt  time.Time
+	LastError      string
+	DeliveredAt    *time.Time
+	CreatedAt      time.Time
 }
 
 func fromRow(r gen.MessageDelivery) Delivery {
 	d := Delivery{
-		ID:            r.ID,
-		MessageID:     r.MessageID,
-		AgentID:       r.AgentID,
-		EventType:     r.EventType,
-		Status:        Status(r.Status),
-		Attempts:      int(r.Attempts),
-		NextAttemptAt: r.NextAttemptAt,
-		DeliveredAt:   r.DeliveredAt,
-		CreatedAt:     r.CreatedAt,
+		ID:             r.ID,
+		MessageID:      r.MessageID,
+		ConversationID: r.ConversationID,
+		AgentID:        r.AgentID,
+		EventType:      r.EventType,
+		Payload:        r.Payload,
+		Status:         Status(r.Status),
+		Attempts:       int(r.Attempts),
+		NextAttemptAt:  r.NextAttemptAt,
+		DeliveredAt:    r.DeliveredAt,
+		CreatedAt:      r.CreatedAt,
 	}
 	if r.LastError != nil {
 		d.LastError = *r.LastError
@@ -161,7 +167,11 @@ func (s *Service) Ack(ctx context.Context, agentID, eventID uuid.UUID) (bool, er
 		}
 		return false, domain.Internal(fmt.Errorf("ack %s for %s: %w", eventID, agentID, err))
 	}
-	return true, s.conversations.DeliveryChanged(ctx, messageID)
+	if messageID == nil {
+		// A membership event: nobody's tick mark depends on it.
+		return true, nil
+	}
+	return true, s.conversations.DeliveryChanged(ctx, *messageID)
 }
 
 // envelopes builds the wire form of a batch of deliveries, in order, loading
@@ -173,18 +183,22 @@ func (s *Service) envelopes(ctx context.Context, ds []Delivery) ([]events.Envelo
 	}
 
 	msgIDs := make([]uuid.UUID, 0, len(ds))
+	convIDs := make([]uuid.UUID, 0, len(ds))
 	for _, d := range ds {
-		msgIDs = append(msgIDs, d.MessageID)
+		if d.MessageID != nil {
+			msgIDs = append(msgIDs, *d.MessageID)
+		}
+		convIDs = append(convIDs, d.ConversationID)
 	}
-	msgs, err := s.conversations.GetMessages(ctx, msgIDs)
-	if err != nil {
-		return nil, err
-	}
-	byMessage := make(map[uuid.UUID]conversations.Message, len(msgs))
-	convIDs := make([]uuid.UUID, 0, len(msgs))
-	for _, m := range msgs {
-		byMessage[m.ID] = m
-		convIDs = append(convIDs, m.ConversationID)
+	byMessage := make(map[uuid.UUID]conversations.Message, len(msgIDs))
+	if len(msgIDs) > 0 {
+		msgs, err := s.conversations.GetMessages(ctx, msgIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range msgs {
+			byMessage[m.ID] = m
+		}
 	}
 	convs, err := s.conversations.GetConversations(ctx, convIDs)
 	if err != nil {
@@ -196,15 +210,44 @@ func (s *Service) envelopes(ctx context.Context, ds []Delivery) ([]events.Envelo
 	}
 
 	for _, d := range ds {
-		msg, ok := byMessage[d.MessageID]
+		conv, ok := byConversation[d.ConversationID]
 		if !ok {
-			return nil, domain.Internal(fmt.Errorf("delivery %s refers to missing message %s", d.ID, d.MessageID))
+			return nil, domain.Internal(fmt.Errorf("delivery %s refers to missing conversation %s", d.ID, d.ConversationID))
 		}
-		conv, ok := byConversation[msg.ConversationID]
-		if !ok {
-			return nil, domain.Internal(fmt.Errorf("message %s refers to missing conversation %s", msg.ID, msg.ConversationID))
+		env, err := envelopeOf(d, conv, byMessage)
+		if err != nil {
+			return nil, err
 		}
-		out = append(out, events.NewMessageCreated(d.ID, d.CreatedAt, d.AgentID, msg, conv))
+		out = append(out, env)
 	}
 	return out, nil
+}
+
+// envelopeOf renders one delivery in the wire form of its kind.
+func envelopeOf(d Delivery, conv conversations.Conversation, byMessage map[uuid.UUID]conversations.Message) (events.Envelope, error) {
+	switch d.EventType {
+	case conversations.EventMessageCreated:
+		if d.MessageID == nil {
+			return events.Envelope{}, domain.Internal(fmt.Errorf("delivery %s has no message", d.ID))
+		}
+		msg, ok := byMessage[*d.MessageID]
+		if !ok {
+			return events.Envelope{}, domain.Internal(fmt.Errorf("delivery %s refers to missing message %s", d.ID, *d.MessageID))
+		}
+		return events.NewMessageCreated(d.ID, d.CreatedAt, d.AgentID, msg, conv), nil
+	case conversations.EventConversationJoined:
+		var p conversations.JoinedPayload
+		if err := json.Unmarshal(d.Payload, &p); err != nil {
+			return events.Envelope{}, domain.Internal(fmt.Errorf("delivery %s payload: %w", d.ID, err))
+		}
+		return events.NewConversationJoined(d.ID, d.CreatedAt, d.AgentID, conv, p), nil
+	case conversations.EventConversationLeft:
+		var p conversations.LeftPayload
+		if err := json.Unmarshal(d.Payload, &p); err != nil {
+			return events.Envelope{}, domain.Internal(fmt.Errorf("delivery %s payload: %w", d.ID, err))
+		}
+		return events.NewConversationLeft(d.ID, d.CreatedAt, d.AgentID, conv, p.Reason), nil
+	default:
+		return events.Envelope{}, domain.Internal(fmt.Errorf("delivery %s has unknown type %q", d.ID, d.EventType))
+	}
 }

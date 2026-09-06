@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Agent struct {
@@ -34,6 +35,16 @@ type AgentBinding struct {
 	FailureStreakStartedAt *time.Time
 }
 
+type Contact struct {
+	UserID           uuid.UUID
+	AgentID          uuid.UUID
+	DmConversationID uuid.UUID
+	AddedVia         string
+	PairTokenID      *uuid.UUID
+	BlockedAt        *time.Time
+	CreatedAt        time.Time
+}
+
 type Conversation struct {
 	ID        uuid.UUID
 	Kind      string
@@ -55,16 +66,32 @@ type Message struct {
 }
 
 type MessageDelivery struct {
-	ID            uuid.UUID
-	MessageID     uuid.UUID
-	AgentID       uuid.UUID
-	EventType     string
-	Status        string
-	Attempts      int32
-	NextAttemptAt time.Time
-	LastError     *string
-	DeliveredAt   *time.Time
-	CreatedAt     time.Time
+	ID             uuid.UUID
+	MessageID      *uuid.UUID
+	AgentID        uuid.UUID
+	EventType      string
+	Status         string
+	Attempts       int32
+	NextAttemptAt  time.Time
+	LastError      *string
+	DeliveredAt    *time.Time
+	CreatedAt      time.Time
+	ConversationID uuid.UUID
+	Payload        []byte
+}
+
+type PairToken struct {
+	ID              uuid.UUID
+	TokenHash       []byte
+	Kind            string
+	AgentID         uuid.UUID
+	Payload         []byte
+	MaxUses         pgtype.Int4
+	UseCount        int32
+	CreatedByUserID uuid.UUID
+	ExpiresAt       *time.Time
+	CreatedAt       time.Time
+	RevokedAt       *time.Time
 }
 
 type Participant struct {

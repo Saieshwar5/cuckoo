@@ -30,6 +30,9 @@ func (s *Service) Typing(ctx context.Context, agentID, conversationID uuid.UUID,
 	if _, err := s.agentMember(ctx, agentID, conversationID); err != nil {
 		return err
 	}
+	if err := s.ensureOpen(ctx, conversationID); err != nil {
+		return err
+	}
 
 	wait, err := s.limiter.Allow(ctx, "typing:agent:"+agentID.String(), agentDeltaPolicy)
 	if err != nil {

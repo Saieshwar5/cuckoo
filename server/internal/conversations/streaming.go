@@ -35,6 +35,9 @@ func (s *Service) StartStream(ctx context.Context, agentID, conversationID uuid.
 	if _, err := s.agentMember(ctx, agentID, conversationID); err != nil {
 		return SendResult{}, err
 	}
+	if err := s.ensureOpen(ctx, conversationID); err != nil {
+		return SendResult{}, err
+	}
 	return s.create(ctx, Sender{Kind: ParticipantAgent, ID: agentID}, conversationID, in, agentSendPolicy, true)
 }
 

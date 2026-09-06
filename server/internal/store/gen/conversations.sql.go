@@ -52,6 +52,29 @@ func (q *Queries) CreateConversation(ctx context.Context, arg CreateConversation
 	return i, err
 }
 
+const findDM = `-- name: FindDM :one
+SELECT c.id, c.kind, c.created_at
+FROM conversations c
+JOIN participants pu ON pu.conversation_id = c.id AND pu.user_id = $1::uuid
+JOIN participants pa ON pa.conversation_id = c.id AND pa.agent_id = $2::uuid
+WHERE c.kind = 'dm'
+ORDER BY c.id
+LIMIT 1
+`
+
+type FindDMParams struct {
+	UserID  uuid.UUID
+	AgentID uuid.UUID
+}
+
+// The chat between a person and an agent, if they have one.
+func (q *Queries) FindDM(ctx context.Context, arg FindDMParams) (Conversation, error) {
+	row := q.db.QueryRow(ctx, findDM, arg.UserID, arg.AgentID)
+	var i Conversation
+	err := row.Scan(&i.ID, &i.Kind, &i.CreatedAt)
+	return i, err
+}
+
 const getConversation = `-- name: GetConversation :one
 SELECT id, kind, created_at FROM conversations
 WHERE id = $1

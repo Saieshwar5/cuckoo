@@ -14,7 +14,7 @@ import httpx
 import websockets
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
-from .models import Conversation, Message
+from .models import Conversation, Message, PairToken
 
 log = logging.getLogger("cuckoo")
 
@@ -30,6 +30,7 @@ _REMEMBER = 1000
 _REPLY_TIMEOUT = 30.0
 
 Handler = Callable[[Message, Conversation], Awaitable[None]]
+JoinHandler = Callable[[Conversation, PairToken | None], Awaitable[None]]
 
 # Rows of buttons: each button is (id, label) or (id, label, style), or a
 # dict with those keys.
@@ -84,6 +85,7 @@ class Agent:
         self._hub = hub.rstrip("/")
         self._max_backoff = max_backoff
         self._handler: Handler | None = None
+        self._join_handler: JoinHandler | None = None
         self._seen: OrderedDict[str, None] = OrderedDict()
         self._http: httpx.AsyncClient | None = None
         self._ws: Any = None
@@ -95,6 +97,13 @@ class Agent:
     def on_message(self, fn: Handler) -> Handler:
         """Register the coroutine called for every message the agent receives."""
         self._handler = fn
+        return fn
+
+    def on_join(self, fn: JoinHandler) -> JoinHandler:
+        """Register the coroutine called when someone adds the agent: a new
+        conversation exists, and the token they scanned, if any, says who they
+        are on your side. The place to say hello first."""
+        self._join_handler = fn
         return fn
 
     # -- running ----------------------------------------------------------
@@ -186,6 +195,19 @@ class Agent:
     async def _handle(self, ws: Any, event: dict[str, Any]) -> None:
         event_id = event["id"]
         if event_id in self._seen:
+            await self._ack(ws, event_id)
+            return
+        if event.get("type") == "conversation.joined" and self._join_handler is not None:
+            data = event.get("data") or {}
+            conv = Conversation.from_wire(
+                data["conversation"], data.get("participants") or [], self
+            )
+            try:
+                await self._join_handler(conv, PairToken.from_wire(data.get("pair_token")))
+            except Exception:  # a handler bug must not stop the agent
+                log.exception("join handler failed for %s; the hub will send it again", event_id)
+                return
+            self._remember(event_id)
             await self._ack(ws, event_id)
             return
         if event.get("type") != "message.created":
