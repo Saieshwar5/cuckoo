@@ -57,9 +57,22 @@ SELECT EXISTS (
       )
 );
 
+-- name: GetAgentAvatar :one
+-- The picture an agent is published with. Public: this is what a stranger
+-- deciding whether to add it looks at.
+SELECT m.* FROM media m
+  JOIN agents a ON a.avatar_media_id = m.id
+ WHERE a.id = sqlc.arg('agent_id') AND a.deleted_at IS NULL;
+
 -- name: DeleteUnclaimedMedia :many
 -- Uploads nobody ever sent, so an abandoned pick does not sit on the disk
 -- forever. Returns their storage keys so the bytes go too.
+--
+-- A face is claimed by a profile rather than by a message, so the two
+-- profiles that can point at one are asked before anything is removed.
 DELETE FROM media
- WHERE message_id IS NULL AND created_at < sqlc.arg('before')
+ WHERE media.message_id IS NULL
+   AND media.created_at < sqlc.arg('before')
+   AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.avatar_media_id = media.id)
+   AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_media_id = media.id)
 RETURNING storage_key, thumb_key;

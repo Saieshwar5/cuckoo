@@ -48,6 +48,7 @@ SELECT c.*,
        a.handle,
        a.display_name,
        a.description,
+       (a.avatar_media_id IS NOT NULL)::bool AS has_avatar,
        a.deleted_at   AS agent_deleted_at,
        u.display_name AS owner_display_name,
        b.status       AS binding_status

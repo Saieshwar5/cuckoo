@@ -43,7 +43,9 @@ type Participant struct {
 	DisplayName string
 	Handle      string
 	Status      string
-	JoinedAt    time.Time
+	// HasAvatar says an agent has a published picture to fetch.
+	HasAvatar bool
+	JoinedAt  time.Time
 }
 
 // Conversation is what the chat list shows: who is in it and what was said
@@ -258,6 +260,7 @@ func participantFromRow(r gen.ListParticipantsRow) Participant {
 		p.DisplayName = derefString(r.AgentDisplayName)
 		p.Handle = derefString(r.AgentHandle)
 		p.Status = derefString(r.AgentStatus)
+		p.HasAvatar = r.AgentHasAvatar
 	}
 	return p
 }

@@ -55,8 +55,11 @@ type Deps struct {
 	Pairing       *pairing.Service
 	APIKeys       *apikeys.Service
 	Media         *media.Service
-	Hub           *realtime.Hub
-	Bus           realtime.Publisher
+	// PublicURL is where people reach this hub from outside: the base of
+	// the addresses inside a page a stranger opens.
+	PublicURL string
+	Hub       *realtime.Hub
+	Bus       realtime.Publisher
 	// CORSOrigins are the browser origins allowed to call the API; empty
 	// means browsers are not served at all.
 	CORSOrigins []string
@@ -88,8 +91,11 @@ func NewRouter(d Deps) http.Handler {
 
 	r.Get("/healthz", healthHandler(d.Health))
 
-	// What a QR code opens for someone without the app.
-	r.Get("/p/{code}", pairPageHandler(d.Pairing))
+	// What a QR code opens for someone without the app, and the picture on
+	// it. Both are public: this is the moment a stranger decides whether to
+	// trust an agent, and it happens before they have an account.
+	r.Get("/p/{code}", pairPageHandler(d.Pairing, d.PublicURL))
+	r.Get("/a/{id}/avatar", agentAvatarHandler(d.Media))
 
 	// Signing in: the only routes a person reaches before they have a
 	// credential, plus signing out, which needs the one it ends.
@@ -109,7 +115,7 @@ func NewRouter(d Deps) http.Handler {
 	// they are the same powers.
 	r.Route("/v1/mgmt", func(r chi.Router) {
 		r.Use(middleware.RequireUser(d.MgmtAuth))
-		r.Mount("/", mgmt.New(d.Agents, d.Pairing).Routes())
+		r.Mount("/", mgmt.New(d.Agents, d.Pairing, d.Media).Routes())
 	})
 
 	// The agent protocol. Only a binding secret gets in.

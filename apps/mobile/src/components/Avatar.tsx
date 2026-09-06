@@ -1,13 +1,17 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 
 import type { AgentStatus } from '@/api/types';
+import type { MediaSource } from '@/media/source';
 import { sizes, useTheme, type Palette } from '@/theme';
 import { avatarIndex, initials } from '@/util/avatar';
 
 interface Props {
   name: string;
   size?: number;
+  // The photo, when there is one. Without it the disc is the initials,
+  // which is what everyone starts with and many people keep.
+  source?: MediaSource | null;
   // Present for agents. The dot is the one thing WhatsApp does not have
   // and a person talking to an agent needs at a glance.
   status?: AgentStatus | null;
@@ -24,9 +28,10 @@ function dotColor(colors: Palette, status: AgentStatus): string {
   }
 }
 
-// Avatar is a grey disc with the name's initials. The shade comes from the
-// name, so an agent looks the same everywhere it appears.
-export function Avatar({ name, size = sizes.avatar, status }: Props) {
+// Avatar is the disc beside a name: a photo when there is one, and the
+// name's initials when there is not. The shade of an initials disc comes
+// from the name, so an agent looks the same everywhere it appears.
+export function Avatar({ name, size = sizes.avatar, status, source }: Props) {
   const { colors } = useTheme();
   const dot = Math.round(size * 0.27);
   const shade = colors.avatars[avatarIndex(name, colors.avatars.length)] ?? colors.surfaceStrong;
@@ -35,9 +40,19 @@ export function Avatar({ name, size = sizes.avatar, status }: Props) {
       <View
         style={[styles.disc, { width: size, height: size, borderRadius: size / 2, backgroundColor: shade }]}
       >
-        <Text style={[styles.initials, { fontSize: Math.round(size * 0.38), color: colors.onAvatar }]}>
-          {initials(name)}
-        </Text>
+        {source ? (
+          <Image
+            source={source}
+            style={{ width: size, height: size }}
+            resizeMode="cover"
+            accessibilityIgnoresInvertColors
+            testID="avatar-photo"
+          />
+        ) : (
+          <Text style={[styles.initials, { fontSize: Math.round(size * 0.38), color: colors.onAvatar }]}>
+            {initials(name)}
+          </Text>
+        )}
       </View>
       {status !== undefined ? (
         <View
@@ -57,7 +72,7 @@ export function Avatar({ name, size = sizes.avatar, status }: Props) {
 }
 
 const styles = StyleSheet.create({
-  disc: { alignItems: 'center', justifyContent: 'center' },
+  disc: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   initials: { fontWeight: '600' },
   dot: { position: 'absolute', right: -1, bottom: -1, borderWidth: 2.5 },
 });

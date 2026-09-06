@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/media"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/store/gen"
 )
@@ -64,7 +65,17 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (User, error) {
 
 // UpdateProfile changes the fields the user supplied and leaves the rest alone.
 func (s *Service) UpdateProfile(ctx context.Context, id uuid.UUID, in UpdateProfileInput) (User, error) {
-	params := gen.UpdateUserProfileParams{ID: id}
+	if in.AvatarMediaID != nil {
+		row, err := s.store.GetMedia(ctx, *in.AvatarMediaID)
+		if err != nil && !store.IsNoRows(err) {
+			return User{}, domain.Internal(fmt.Errorf("get picture %s: %w", *in.AvatarMediaID, err))
+		}
+		if err := media.Picture(row, err == nil, media.Owner{Kind: media.OwnerUser, ID: id}); err != nil {
+			return User{}, err
+		}
+	}
+
+	params := gen.UpdateUserProfileParams{ID: id, AvatarMediaID: in.AvatarMediaID}
 
 	if in.DisplayName != nil {
 		name, err := validateDisplayName(*in.DisplayName)
@@ -82,7 +93,7 @@ func (s *Service) UpdateProfile(ctx context.Context, id uuid.UUID, in UpdateProf
 		params.Locale = &locale
 	}
 
-	if params.DisplayName == nil && params.Locale == nil {
+	if params.DisplayName == nil && params.Locale == nil && params.AvatarMediaID == nil {
 		return User{}, domain.Invalid("no_changes", "Provide at least one field to update.")
 	}
 

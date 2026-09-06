@@ -11,6 +11,7 @@ import { Header } from '@/components/Header';
 import { IconButton } from '@/components/IconButton';
 import { Screen } from '@/components/Screen';
 import { t } from '@/i18n';
+import { agentAvatar } from '@/media/avatar';
 import { useSession } from '@/session/SessionProvider';
 import { radius, spacing, type, useStyles, useTheme, type Palette, type Theme } from '@/theme';
 
@@ -21,6 +22,7 @@ interface Row {
   status: AgentStatus | null;
   blocked: boolean;
   owned: boolean;
+  hasAvatar: boolean;
 }
 
 // Agents: the ones you own and the ones you added, with their connection
@@ -41,6 +43,7 @@ export default function AgentsScreen() {
     status: a.binding?.status ?? null,
     blocked: false,
     owned: true,
+    hasAvatar: !!a.has_avatar,
   }));
   const added: Row[] = contacts
     .filter((c) => c.added_via === 'pair_token' && !c.agent_deleted)
@@ -51,6 +54,7 @@ export default function AgentsScreen() {
       status: c.agent.status ?? null,
       blocked: c.blocked,
       owned: false,
+      hasAvatar: !!c.agent.has_avatar,
     }));
   const sections = [
     ...(yours.length ? [{ title: t('agents.yours'), data: yours }] : []),
@@ -63,6 +67,12 @@ export default function AgentsScreen() {
         title={t('agents.title')}
         actions={
           <>
+            <IconButton
+              icon="person-circle-outline"
+              label={t('profile.open')}
+              onPress={() => router.push('/me')}
+              testID="open-profile"
+            />
             <IconButton
               icon="key-outline"
               label={t('keys.title')}
@@ -84,7 +94,7 @@ export default function AgentsScreen() {
             style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surface }]}
             testID={`agent-row-${item.id}`}
           >
-            <Avatar name={item.name} status={item.status} />
+            <Avatar name={item.name} status={item.status} source={agentAvatar(item.id, item.hasAvatar)} />
             <View style={styles.body}>
               <Text style={styles.name} numberOfLines={1}>
                 {item.name}

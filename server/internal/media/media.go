@@ -302,3 +302,24 @@ func storageKey(id uuid.UUID, variant string) string {
 	}
 	return key
 }
+
+// Picture is what a profile may point at: an image, uploaded by whoever is
+// setting it, and not already spoken for by a message.
+//
+// The rule lives here, once, and is applied by every profile that can have
+// a face. A caller naming someone else's upload and one naming an id that
+// does not exist get the same answer, so ids cannot be probed for.
+func Picture(row gen.Medium, found bool, owner Owner) error {
+	if !found || row.OwnerKind != owner.Kind || row.OwnerID != owner.ID {
+		return domain.InvalidField("avatar_media_id", "unknown_picture",
+			"That picture is not yours to use, or does not exist.")
+	}
+	if row.Kind != KindImage {
+		return domain.InvalidField("avatar_media_id", "not_a_picture", "A face has to be a picture.")
+	}
+	if row.MessageID != nil {
+		return domain.InvalidField("avatar_media_id", "picture_already_sent",
+			"That picture was sent in a message. Upload it again to use it as a face.")
+	}
+	return nil
+}

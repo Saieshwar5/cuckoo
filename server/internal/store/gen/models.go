@@ -12,14 +12,15 @@ import (
 )
 
 type Agent struct {
-	ID          uuid.UUID
-	OwnerUserID uuid.UUID
-	Handle      string
-	DisplayName string
-	Description string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	DeletedAt   *time.Time
+	ID            uuid.UUID
+	OwnerUserID   uuid.UUID
+	Handle        string
+	DisplayName   string
+	Description   string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	DeletedAt     *time.Time
+	AvatarMediaID *uuid.UUID
 }
 
 type AgentBinding struct {
@@ -151,12 +152,13 @@ type SignInCode struct {
 }
 
 type User struct {
-	ID          uuid.UUID
-	DisplayName string
-	Locale      string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	DeletedAt   *time.Time
+	ID            uuid.UUID
+	DisplayName   string
+	Locale        string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	DeletedAt     *time.Time
+	AvatarMediaID *uuid.UUID
 }
 
 type UserIdentity struct {

@@ -4,13 +4,14 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAgents } from '@/agents/AgentsProvider';
 import { describeAgentError } from '@/agents/form';
-import { Avatar } from '@/components/Avatar';
+import { AvatarPicker } from '@/components/AvatarPicker';
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { TextField } from '@/components/TextField';
 import { TopBar } from '@/components/TopBar';
 import { t } from '@/i18n';
-import { sizes, spacing, type, useStyles, type Theme } from '@/theme';
+import type { PickedFile } from '@/media/pick';
+import { spacing, type, useStyles, type Theme } from '@/theme';
 import { isValidHandle, suggestHandle } from '@/util/handle';
 
 // New agent: a name, a handle suggested from it, a line about it. It exists
@@ -23,6 +24,7 @@ export default function NewAgentScreen() {
   const [handle, setHandle] = useState('');
   const [handleEdited, setHandleEdited] = useState(false);
   const [description, setDescription] = useState('');
+  const [picture, setPicture] = useState<PickedFile | null>(null);
   const [error, setError] = useState<{ message: string; field: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -44,11 +46,14 @@ export default function NewAgentScreen() {
     setBusy(true);
     setError(null);
     try {
-      const agent = await controller.create({
-        handle,
-        display_name: name.trim(),
-        description: description.trim(),
-      });
+      const agent = await controller.create(
+        {
+          handle,
+          display_name: name.trim(),
+          description: description.trim(),
+        },
+        picture,
+      );
       router.replace({ pathname: '/agent/[id]', params: { id: agent.id } });
     } catch (err) {
       setError(describeAgentError(err));
@@ -61,7 +66,7 @@ export default function NewAgentScreen() {
       <TopBar title={t('agent.new.title')} onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <View style={styles.avatar}>
-          <Avatar name={name.trim() || '?'} size={sizes.avatarLarge} />
+          <AvatarPicker name={name.trim() || '?'} onPicked={setPicture} />
         </View>
         <Text style={styles.subtitle}>{t('agent.new.subtitle')}</Text>
         <TextField

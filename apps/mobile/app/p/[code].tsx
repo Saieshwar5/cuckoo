@@ -7,6 +7,7 @@ import { useChats } from '@/chats/useChats';
 import type { PairResolve } from '@/api/types';
 import { ApiError } from '@/api/client';
 import { Avatar } from '@/components/Avatar';
+import { agentAvatar } from '@/media/avatar';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
@@ -82,6 +83,7 @@ export default function PairScreen() {
             name={card.agent.display_name}
             size={sizes.avatarLarge}
             status={card.agent.status ?? null}
+            source={agentAvatar(card.agent.id, card.agent.has_avatar)}
           />
           <Text style={styles.name} testID="pair-name">
             {card.agent.display_name}

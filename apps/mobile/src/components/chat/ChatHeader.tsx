@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { AgentStatus } from '@/api/types';
 import { t } from '@/i18n';
+import type { MediaSource } from '@/media/source';
 import { sizes, spacing, type, useTheme } from '@/theme';
 
 import { Avatar } from '../Avatar';
@@ -12,12 +13,13 @@ interface Props {
   name: string;
   status: AgentStatus | null | undefined;
   typing: boolean;
+  avatar?: MediaSource | null;
   onBack: () => void;
 }
 
 // ChatHeader names who the conversation is with and what they are doing:
 // online, typing, or out of reach.
-export function ChatHeader({ name, status, typing, onBack }: Props) {
+export function ChatHeader({ name, status, typing, avatar, onBack }: Props) {
   const { colors } = useTheme();
   const line = typing
     ? t('chat.typing')
@@ -29,7 +31,7 @@ export function ChatHeader({ name, status, typing, onBack }: Props) {
   return (
     <View style={[styles.bar, { backgroundColor: colors.surface }]}>
       <IconButton icon="arrow-back" label={t('chat.back')} onPress={onBack} testID="chat-back" />
-      <Avatar name={name || '?'} size={sizes.avatarSmall} status={status} />
+      <Avatar name={name || '?'} size={sizes.avatarSmall} status={status} source={avatar} />
       <View style={styles.titles}>
         <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
           {name}

@@ -15,9 +15,10 @@ WHERE id = $1 AND deleted_at IS NULL;
 -- Partial update: an argument left null leaves that column untouched, so a
 -- caller changing only their name cannot accidentally blank their locale.
 UPDATE users
-SET display_name = COALESCE(sqlc.narg('display_name')::text, display_name),
-    locale       = COALESCE(sqlc.narg('locale')::text, locale),
-    updated_at   = now()
+SET display_name    = COALESCE(sqlc.narg('display_name')::text, display_name),
+    locale          = COALESCE(sqlc.narg('locale')::text, locale),
+    avatar_media_id = COALESCE(sqlc.narg('avatar_media_id')::uuid, avatar_media_id),
+    updated_at      = now()
 WHERE id = sqlc.arg('id') AND deleted_at IS NULL
 RETURNING *;
 

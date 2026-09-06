@@ -29,6 +29,14 @@ async def handle(msg, conv):
             await conv.send("Got your photo.", attachments=[path])
 ```
 
+An agent can be published with its logo, which is what a stranger sees on
+the card a QR code opens:
+
+```python
+cuckoo.create_agent("sbi-cards", "SBI Cards", avatar="logo.png")
+cuckoo.update_agent(agent.id, avatar="newlogo.png")
+```
+
 A voice note arrives with what it needs to be drawn and heard:
 
 ```python

@@ -125,6 +125,7 @@ func run() error {
 		Pairing:       pairingService,
 		APIKeys:       apiKeyService,
 		Media:         mediaService,
+		PublicURL:     cfg.PublicURL,
 		Hub:           hub,
 		Bus:           bus,
 		CORSOrigins:   cfg.CORSOrigins,

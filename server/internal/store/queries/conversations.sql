@@ -57,6 +57,9 @@ SELECT p.conversation_id, p.kind, p.user_id, p.agent_id, p.joined_at,
        u.display_name AS user_display_name,
        a.display_name AS agent_display_name,
        a.handle       AS agent_handle,
+       -- Whether the agent has a published picture, so the app knows to
+       -- ask for it rather than guessing and getting a 404.
+       (a.avatar_media_id IS NOT NULL)::bool AS agent_has_avatar,
        -- The dot on the avatar: the agent's live binding's health, or
        -- nothing when no backend is connected.
        b.status       AS agent_status
