@@ -4,13 +4,16 @@ import {
   addOlder,
   appendDelta,
   applyFrame,
+  clearMessages,
   confirmLocal,
   empty,
   failLocal,
   isTyping,
   newestServerId,
   quickReplies,
+  removeMessage,
   setPage,
+  unseenSince,
   upsert,
   type ChatMessage,
 } from '@/chat/store';
@@ -159,5 +162,52 @@ describe('chat store', () => {
     );
     expect(s.messages[0]?.delivery_status).toBe('delivered');
     expect(appendDelta(s, 'missing', 'x')).toEqual(s);
+  });
+});
+
+describe('out of my sight', () => {
+  it('removes one message and leaves the rest', () => {
+    let s = setPage(empty, {
+      messages: [
+        msg({ id: 'b', created_at: '2026-09-05T10:01:00Z' }),
+        msg({ id: 'a', created_at: '2026-09-05T10:00:00Z' }),
+      ],
+      next_before: 'a',
+      next_after: null,
+    });
+    s = removeMessage(s, 'b');
+    expect(s.messages.map((m) => m.id)).toEqual(['a']);
+    expect(s.nextBefore).toBe('a');
+    expect(removeMessage(s, 'zzz')).toBe(s);
+  });
+
+  it('clears everything, with nothing older to page to', () => {
+    const s = clearMessages(
+      setPage(empty, {
+        messages: [msg({ id: 'a', created_at: '2026-09-05T10:00:00Z' })],
+        next_before: 'a',
+        next_after: null,
+      }),
+    );
+    expect(s.messages).toEqual([]);
+    expect(s.nextBefore).toBeNull();
+  });
+});
+
+describe('scrolled away', () => {
+  it('counts what others said since, and not our own', () => {
+    const list = setPage(empty, {
+      messages: [
+        msg({ id: 'e', created_at: '2026-09-05T10:04:00Z' }),
+        { ...msg({ id: 'd', created_at: '2026-09-05T10:03:00Z' }), sender: { kind: 'user', id: 'usr_1' } },
+        msg({ id: 'c', created_at: '2026-09-05T10:02:00Z' }),
+        msg({ id: 'b', created_at: '2026-09-05T10:01:00Z' }),
+      ],
+      next_before: null,
+      next_after: null,
+    }).messages;
+    expect(unseenSince(list, 'b')).toBe(2);
+    expect(unseenSince(list, 'e')).toBe(0);
+    expect(unseenSince(list, null)).toBe(0);
   });
 });

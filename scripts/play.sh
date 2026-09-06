@@ -62,6 +62,7 @@ stop() {
     fi
   done
   pkill -f "venv/bin/python echo.py" 2>/dev/null && echo "stopped the echo agent" || true
+  pkill -f "venv/bin/python welcome.py" 2>/dev/null && echo "stopped the welcome agent" || true
   pkill -f "tail -n0 -F $HUB_LOG" 2>/dev/null || true
   echo "done"
 }
@@ -108,7 +109,7 @@ start_hub() {
   # laptop's wifi address, not localhost.
   local public="http://${CUCKOO_HUB_HOST:-$(lan_address)}:$PORT"
   case "${TARGET:-phone}" in web) public="http://localhost:$PORT" ;; emulator) public="http://10.0.2.2:$PORT" ;; esac
-  (cd "$ROOT/server" && CUCKOO_ENV=dev CUCKOO_MAIL=console CUCKOO_HTTP_ADDR=":$PORT" CUCKOO_PUBLIC_URL="$public" exec "$ROOT/bin/cuckoo" >> "$HUB_LOG" 2>&1) &
+  (cd "$ROOT/server" && CUCKOO_ENV=dev CUCKOO_MAIL=console CUCKOO_HTTP_ADDR=":$PORT" CUCKOO_PUBLIC_URL="$public" CUCKOO_WELCOME_HANDLE=welcome exec "$ROOT/bin/cuckoo" >> "$HUB_LOG" 2>&1) &
   pids+=("$!")
   wait_for "$HUB/healthz" 30 || { tail -5 "$HUB_LOG" >&2; die "the hub did not start; log: $HUB_LOG"; }
   echo "hub is up (log: $HUB_LOG)"
@@ -169,6 +170,34 @@ c = [x for x in d['conversations'] if any(p['kind'] == 'agent' and p['id'] == '$
 print(c[0]['id'] if c else '')")
   [ -n "$CONV_ID" ] || die "could not find the chat with the agent"
   printf 'PLAY_USER_ID=%s\nPLAY_AGENT_ID=%s\nPLAY_CONV_ID=%s\n' "$USER_ID" "$AGENT_ID" "$CONV_ID" > "$ENV_FILE"
+}
+
+# set_up_welcome creates the greeter every new account meets, at the handle
+# the hub was started with, and binds it. Yours to own; nothing special.
+set_up_welcome() {
+  local h="X-Dev-User: $USER_ID" body
+  say_hdr "The welcome agent"
+  WELCOME_ID=$(curl -s -H "$h" "$HUB/v1/mgmt/agents" | json 'a = [x for x in d["agents"] if x["handle"] == "welcome"]; print(a[0]["id"] if a else "")')
+  if [ -z "$WELCOME_ID" ]; then
+    body=$(curl -s -H "$h" -X POST "$HUB/v1/mgmt/agents" -H "$J" \
+      -d '{"handle":"welcome","display_name":"Cuckoo","description":"Says hello, and how this works.","starters":["How do I add an agent?","How do I make my own?","What is this?"]}')
+    fail_on_error "$body" "creating the welcome agent"
+    WELCOME_ID=$(printf '%s' "$body" | json 'print(d["agent"]["id"])')
+    echo "created $WELCOME_ID"
+  else
+    echo "reusing $WELCOME_ID"
+  fi
+  body=$(curl -s -H "$h" -X POST "$HUB/v1/mgmt/agents/$WELCOME_ID/binding" -H "$J" -d '{"mode":"socket"}')
+  fail_on_error "$body" "binding the welcome agent"
+  WELCOME_SECRET=$(printf '%s' "$body" | json 'print(d["secret"])')
+}
+
+run_welcome() {
+  local dir="$ROOT/examples/welcome" log="$STATE/welcome.log"
+  : > "$log"
+  (cd "$dir" && CUCKOO_SECRET="$WELCOME_SECRET" CUCKOO_HUB="$HUB" exec "$ROOT/examples/echo/.venv/bin/python" welcome.py >> "$log" 2>&1) &
+  pids+=("$!")
+  echo "welcome agent is running (log: $log)"
 }
 
 run_agent() {
@@ -281,6 +310,8 @@ start() {
   sign_in "$email"
   set_up_agent
   run_agent
+  set_up_welcome
+  run_welcome
   watch_codes
   if [ "${PLAY_NO_APP:-}" = 1 ]; then
     say_hdr "Servers are running (PLAY_NO_APP=1). Ctrl+C stops them."

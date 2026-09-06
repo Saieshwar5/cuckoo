@@ -32,10 +32,42 @@ func (q *Queries) ClearContactBlocked(ctx context.Context, arg ClearContactBlock
 	return result.RowsAffected(), nil
 }
 
+const countPinnedContacts = `-- name: CountPinnedContacts :one
+SELECT count(*) FROM contacts
+WHERE user_id = $1 AND pinned_at IS NOT NULL AND removed_at IS NULL
+`
+
+func (q *Queries) CountPinnedContacts(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countPinnedContacts, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countRecentReports = `-- name: CountRecentReports :one
+SELECT count(*) FROM reports
+WHERE reporter_user_id = $1 AND agent_id = $2 AND created_at > $3
+`
+
+type CountRecentReportsParams struct {
+	ReporterUserID uuid.UUID
+	AgentID        uuid.UUID
+	Since          time.Time
+}
+
+// How many times this person has reported this agent since a moment: one
+// is enough to be looked at, and a second within the day adds nothing.
+func (q *Queries) CountRecentReports(ctx context.Context, arg CountRecentReportsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRecentReports, arg.ReporterUserID, arg.AgentID, arg.Since)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createContact = `-- name: CreateContact :one
 INSERT INTO contacts (user_id, agent_id, dm_conversation_id, added_via, pair_token_id)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING user_id, agent_id, dm_conversation_id, added_via, pair_token_id, blocked_at, created_at
+RETURNING user_id, agent_id, dm_conversation_id, added_via, pair_token_id, blocked_at, created_at, muted_until, pinned_at, archived_at, removed_at
 `
 
 type CreateContactParams struct {
@@ -63,6 +95,10 @@ func (q *Queries) CreateContact(ctx context.Context, arg CreateContactParams) (C
 		&i.PairTokenID,
 		&i.BlockedAt,
 		&i.CreatedAt,
+		&i.MutedUntil,
+		&i.PinnedAt,
+		&i.ArchivedAt,
+		&i.RemovedAt,
 	)
 	return i, err
 }
@@ -112,8 +148,45 @@ func (q *Queries) CreatePairToken(ctx context.Context, arg CreatePairTokenParams
 	return i, err
 }
 
+const createReport = `-- name: CreateReport :one
+INSERT INTO reports (id, reporter_user_id, agent_id, message_id, reason, note)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, reporter_user_id, agent_id, message_id, reason, note, created_at
+`
+
+type CreateReportParams struct {
+	ID             uuid.UUID
+	ReporterUserID uuid.UUID
+	AgentID        uuid.UUID
+	MessageID      *uuid.UUID
+	Reason         string
+	Note           string
+}
+
+func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (Report, error) {
+	row := q.db.QueryRow(ctx, createReport,
+		arg.ID,
+		arg.ReporterUserID,
+		arg.AgentID,
+		arg.MessageID,
+		arg.Reason,
+		arg.Note,
+	)
+	var i Report
+	err := row.Scan(
+		&i.ID,
+		&i.ReporterUserID,
+		&i.AgentID,
+		&i.MessageID,
+		&i.Reason,
+		&i.Note,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getContact = `-- name: GetContact :one
-SELECT user_id, agent_id, dm_conversation_id, added_via, pair_token_id, blocked_at, created_at FROM contacts
+SELECT user_id, agent_id, dm_conversation_id, added_via, pair_token_id, blocked_at, created_at, muted_until, pinned_at, archived_at, removed_at FROM contacts
 WHERE user_id = $1 AND agent_id = $2
 `
 
@@ -133,6 +206,10 @@ func (q *Queries) GetContact(ctx context.Context, arg GetContactParams) (Contact
 		&i.PairTokenID,
 		&i.BlockedAt,
 		&i.CreatedAt,
+		&i.MutedUntil,
+		&i.PinnedAt,
+		&i.ArchivedAt,
+		&i.RemovedAt,
 	)
 	return i, err
 }
@@ -230,11 +307,12 @@ func (q *Queries) IsConversationBlocked(ctx context.Context, conversationID uuid
 }
 
 const listContacts = `-- name: ListContacts :many
-SELECT c.user_id, c.agent_id, c.dm_conversation_id, c.added_via, c.pair_token_id, c.blocked_at, c.created_at,
+SELECT c.user_id, c.agent_id, c.dm_conversation_id, c.added_via, c.pair_token_id, c.blocked_at, c.created_at, c.muted_until, c.pinned_at, c.archived_at, c.removed_at,
        a.handle,
        a.display_name,
        a.description,
        (a.avatar_media_id IS NOT NULL)::bool AS has_avatar,
+       a.starters,
        a.deleted_at   AS agent_deleted_at,
        u.display_name AS owner_display_name,
        b.status       AS binding_status
@@ -242,7 +320,7 @@ FROM contacts c
 JOIN agents a ON a.id = c.agent_id
 JOIN users  u ON u.id = a.owner_user_id
 LEFT JOIN agent_bindings b ON b.agent_id = a.id AND b.revoked_at IS NULL
-WHERE c.user_id = $1
+WHERE c.user_id = $1 AND c.removed_at IS NULL
 ORDER BY c.created_at DESC, c.agent_id
 `
 
@@ -254,10 +332,15 @@ type ListContactsRow struct {
 	PairTokenID      *uuid.UUID
 	BlockedAt        *time.Time
 	CreatedAt        time.Time
+	MutedUntil       *time.Time
+	PinnedAt         *time.Time
+	ArchivedAt       *time.Time
+	RemovedAt        *time.Time
 	Handle           string
 	DisplayName      string
 	Description      string
 	HasAvatar        bool
+	Starters         []byte
 	AgentDeletedAt   *time.Time
 	OwnerDisplayName string
 	BindingStatus    *string
@@ -281,10 +364,15 @@ func (q *Queries) ListContacts(ctx context.Context, userID uuid.UUID) ([]ListCon
 			&i.PairTokenID,
 			&i.BlockedAt,
 			&i.CreatedAt,
+			&i.MutedUntil,
+			&i.PinnedAt,
+			&i.ArchivedAt,
+			&i.RemovedAt,
 			&i.Handle,
 			&i.DisplayName,
 			&i.Description,
 			&i.HasAvatar,
+			&i.Starters,
 			&i.AgentDeletedAt,
 			&i.OwnerDisplayName,
 			&i.BindingStatus,
@@ -337,6 +425,59 @@ func (q *Queries) ListPairTokensByAgent(ctx context.Context, agentID uuid.UUID) 
 	return items, nil
 }
 
+const removeAllContacts = `-- name: RemoveAllContacts :exec
+UPDATE contacts
+SET removed_at = now(), pinned_at = NULL, archived_at = NULL, muted_until = NULL
+WHERE user_id = $1 AND removed_at IS NULL
+`
+
+// Everything the person had in their list leaves it. Owner rows too: their
+// agents are being retired alongside.
+func (q *Queries) RemoveAllContacts(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, removeAllContacts, userID)
+	return err
+}
+
+const removeContact = `-- name: RemoveContact :execrows
+UPDATE contacts
+SET removed_at = now(), pinned_at = NULL, archived_at = NULL, muted_until = NULL
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL AND added_via IN ('pair_token', 'hub')
+`
+
+type RemoveContactParams struct {
+	UserID  uuid.UUID
+	AgentID uuid.UUID
+}
+
+// Taking an agent out of the list clears what was decided about it there,
+// so scanning it again starts clean.
+func (q *Queries) RemoveContact(ctx context.Context, arg RemoveContactParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeContact, arg.UserID, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const restoreContact = `-- name: RestoreContact :execrows
+UPDATE contacts
+SET removed_at = NULL
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NOT NULL
+`
+
+type RestoreContactParams struct {
+	UserID  uuid.UUID
+	AgentID uuid.UUID
+}
+
+func (q *Queries) RestoreContact(ctx context.Context, arg RestoreContactParams) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreContact, arg.UserID, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokePairToken = `-- name: RevokePairToken :execrows
 UPDATE pair_tokens
 SET revoked_at = now()
@@ -356,6 +497,26 @@ func (q *Queries) RevokePairToken(ctx context.Context, arg RevokePairTokenParams
 	return result.RowsAffected(), nil
 }
 
+const setContactArchived = `-- name: SetContactArchived :execrows
+UPDATE contacts
+SET archived_at = CASE WHEN $3::bool THEN COALESCE(archived_at, now()) ELSE NULL END
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL
+`
+
+type SetContactArchivedParams struct {
+	UserID   uuid.UUID
+	AgentID  uuid.UUID
+	Archived bool
+}
+
+func (q *Queries) SetContactArchived(ctx context.Context, arg SetContactArchivedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setContactArchived, arg.UserID, arg.AgentID, arg.Archived)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setContactBlocked = `-- name: SetContactBlocked :execrows
 UPDATE contacts
 SET blocked_at = now()
@@ -369,6 +530,47 @@ type SetContactBlockedParams struct {
 
 func (q *Queries) SetContactBlocked(ctx context.Context, arg SetContactBlockedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setContactBlocked, arg.UserID, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setContactMuted = `-- name: SetContactMuted :execrows
+UPDATE contacts
+SET muted_until = $3::timestamptz
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL
+`
+
+type SetContactMutedParams struct {
+	UserID     uuid.UUID
+	AgentID    uuid.UUID
+	MutedUntil *time.Time
+}
+
+// NULL unmutes; a time in the future mutes until then.
+func (q *Queries) SetContactMuted(ctx context.Context, arg SetContactMutedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setContactMuted, arg.UserID, arg.AgentID, arg.MutedUntil)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setContactPinned = `-- name: SetContactPinned :execrows
+UPDATE contacts
+SET pinned_at = CASE WHEN $3::bool THEN COALESCE(pinned_at, now()) ELSE NULL END
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL
+`
+
+type SetContactPinnedParams struct {
+	UserID  uuid.UUID
+	AgentID uuid.UUID
+	Pinned  bool
+}
+
+func (q *Queries) SetContactPinned(ctx context.Context, arg SetContactPinnedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setContactPinned, arg.UserID, arg.AgentID, arg.Pinned)
 	if err != nil {
 		return 0, err
 	}

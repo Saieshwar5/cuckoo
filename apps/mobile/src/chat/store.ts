@@ -166,3 +166,30 @@ export function quickReplies(state: ChatState): string[] {
 export function isTyping(state: ChatState, now: number): boolean {
   return state.typingUntil !== null && state.typingUntil > now;
 }
+
+// removeMessage takes one message off the screen: the person deleted it
+// for themselves. One of ours still waiting for the hub has no id to give
+// the hub, so it is not offered for this.
+export function removeMessage(state: ChatState, id: string): ChatState {
+  if (!state.messages.some((m) => m.id === id)) return state;
+  return { ...state, messages: state.messages.filter((m) => m.id !== id) };
+}
+
+// clearMessages empties the chat: everything so far is out of sight, and
+// there is nothing older to page to.
+export function clearMessages(state: ChatState): ChatState {
+  return { ...state, messages: [], nextBefore: null };
+}
+
+// unseenSince counts what others said after a message the person was
+// looking at when they scrolled away. Ids are time-ordered, so newer means
+// greater; our own sends do not count — the person wrote them.
+export function unseenSince(messages: ChatMessage[], sinceId: string | null): number {
+  if (!sinceId) return 0;
+  let n = 0;
+  for (const m of messages) {
+    if (m.id <= sinceId) break;
+    if (m.sender.kind !== 'user') n += 1;
+  }
+  return n;
+}

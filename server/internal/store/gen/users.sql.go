@@ -64,10 +64,12 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 
 const softDeleteUser = `-- name: SoftDeleteUser :execrows
 UPDATE users
-SET deleted_at = now(), updated_at = now()
+SET deleted_at = now(), updated_at = now(), display_name = 'Deleted account', avatar_media_id = NULL
 WHERE id = $1 AND deleted_at IS NULL
 `
 
+// The account is closed and its name and face taken off: what remains in
+// other people's history reads as "Deleted account".
 func (q *Queries) SoftDeleteUser(ctx context.Context, id uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, softDeleteUser, id)
 	if err != nil {

@@ -2,6 +2,7 @@ package agents_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
@@ -51,7 +52,7 @@ func TestCreate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get returned error: %v", err)
 	}
-	if got != agent {
+	if !reflect.DeepEqual(got, agent) {
 		t.Errorf("Get = %+v, want %+v", got, agent)
 	}
 }

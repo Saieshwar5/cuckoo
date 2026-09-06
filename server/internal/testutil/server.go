@@ -57,8 +57,23 @@ type Server struct {
 }
 
 // NewServer builds the API against the given store.
-func NewServer(t *testing.T, db *store.Store) *Server {
+// ServerOption tunes the test server.
+type ServerOption func(*serverConfig)
+
+type serverConfig struct{ welcomeHandle string }
+
+// WithWelcomeHandle names the agent every new account is given, as
+// CUCKOO_WELCOME_HANDLE would.
+func WithWelcomeHandle(handle string) ServerOption {
+	return func(c *serverConfig) { c.welcomeHandle = handle }
+}
+
+func NewServer(t *testing.T, db *store.Store, opts ...ServerOption) *Server {
 	t.Helper()
+	var sc serverConfig
+	for _, o := range opts {
+		o(&sc)
+	}
 
 	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -85,7 +100,6 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 	})
 
 	mailer := mail.NewMemory()
-	signinService := signin.New(db, mailer, signin.WithLimiter(NewLimiter(t)))
 
 	agentService := agents.New(db, agents.WithPublisher(bus))
 	conversationService := conversations.New(db,
@@ -94,6 +108,9 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 		conversations.WithStreams(NewStreamStore(t)))
 	userService := users.New(db)
 	pairingService := pairing.New(db, agentService, conversationService, userService, "https://hub.test")
+
+	signinService := signin.New(db, mailer, signin.WithLimiter(NewLimiter(t)),
+		signin.WithWelcome(pairingService.Welcomer(sc.welcomeHandle)))
 	apiKeyService := apikeys.New(db)
 	// Uploads land in a directory the test framework removes with the test.
 	blobStore, err := blobs.NewDisk(t.TempDir())

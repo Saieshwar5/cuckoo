@@ -48,6 +48,8 @@ class AgentInfo:
     status: str | None = None
     # Whether it is published with a picture, served at /a/<id>/avatar.
     has_avatar: bool = False
+    # What an empty chat suggests saying first; up to four.
+    starters: tuple[str, ...] = ()
 
     @classmethod
     def from_wire(cls, data: dict[str, Any]) -> AgentInfo:
@@ -59,6 +61,7 @@ class AgentInfo:
             description=data.get("description", ""),
             status=binding.get("status"),
             has_avatar=bool(data.get("has_avatar")),
+            starters=tuple(data.get("starters") or ()),
         )
 
 
@@ -118,12 +121,17 @@ class Management:
         description: str = "",
         *,
         avatar: str | os.PathLike[str] | None = None,
+        starters: list[str] | None = None,
     ) -> AgentInfo:
         """Create an agent. The handle is its permanent address on this hub.
 
         ``avatar`` is a path to the picture it is published with — the logo a
         stranger sees on the card a QR code opens, before they have an
         account. It is uploaded first and named here.
+
+        ``starters`` are up to four short things the empty chat suggests
+        saying first — "Track my order", "Talk to a person". Tapping one
+        sends its words, so your backend sees plain text.
         """
         body: dict[str, Any] = {
             "handle": handle,
@@ -132,6 +140,8 @@ class Management:
         }
         if avatar is not None:
             body["avatar_media_id"] = self.upload_avatar(avatar)
+        if starters is not None:
+            body["starters"] = list(starters)
         data = self._call("POST", "/v1/mgmt/agents", body)
         return AgentInfo.from_wire(data["agent"])
 
@@ -151,10 +161,13 @@ class Management:
         display_name: str | None = None,
         description: str | None = None,
         avatar: str | os.PathLike[str] | None = None,
+        starters: list[str] | None = None,
     ) -> AgentInfo:
         body: dict[str, Any] = {}
         if avatar is not None:
             body["avatar_media_id"] = self.upload_avatar(avatar)
+        if starters is not None:
+            body["starters"] = list(starters)
         if display_name is not None:
             body["display_name"] = display_name
         if description is not None:

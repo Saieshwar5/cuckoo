@@ -9,6 +9,7 @@ package client
 import (
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/apikeys"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/media"
@@ -20,6 +21,7 @@ import (
 // Handler holds the services the client API needs.
 type Handler struct {
 	users         *users.Service
+	agents        *agents.Service
 	conversations *conversations.Service
 	hub           *realtime.Hub
 	pairing       *pairing.Service
@@ -28,10 +30,10 @@ type Handler struct {
 }
 
 // New builds the client API handler.
-func New(userService *users.Service, conversationService *conversations.Service, hub *realtime.Hub,
-	pairingService *pairing.Service, apiKeyService *apikeys.Service, mediaService *media.Service) *Handler {
+func New(userService *users.Service, agentService *agents.Service, conversationService *conversations.Service,
+	hub *realtime.Hub, pairingService *pairing.Service, apiKeyService *apikeys.Service, mediaService *media.Service) *Handler {
 	return &Handler{
-		users: userService, conversations: conversationService, hub: hub,
+		users: userService, agents: agentService, conversations: conversationService, hub: hub,
 		pairing: pairingService, apiKeys: apiKeyService, media: mediaService,
 	}
 }
@@ -42,6 +44,7 @@ func (h *Handler) Routes() chi.Router {
 
 	r.Get("/me", h.getMe)
 	r.Patch("/me", h.updateMe)
+	r.Delete("/me", h.deleteMe)
 
 	r.Get("/socket", h.socket)
 
@@ -50,6 +53,10 @@ func (h *Handler) Routes() chi.Router {
 		r.Get("/", h.getConversation)
 		r.Get("/messages", h.listMessages)
 		r.Post("/messages", h.sendMessage)
+		// Out of my sight: one message, or everything so far. Nobody else's
+		// view changes.
+		r.Delete("/messages/{mid}", h.deleteMessageForMe)
+		r.Post("/clear", h.clearConversation)
 	})
 
 	// Files: uploaded before the message that carries them, and read back
@@ -61,6 +68,9 @@ func (h *Handler) Routes() chi.Router {
 	r.Get("/pair/{code}", h.resolvePair)
 	r.Post("/pair/{code}/accept", h.acceptPair)
 	r.Get("/contacts", h.listContacts)
+	r.Patch("/contacts/{id}", h.updateContact)
+	r.Delete("/contacts/{id}", h.removeContact)
+	r.Post("/agents/{id}/report", h.reportAgent)
 	r.Post("/agents/{id}/block", h.blockAgent)
 	r.Delete("/agents/{id}/block", h.unblockAgent)
 

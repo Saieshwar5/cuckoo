@@ -12,6 +12,27 @@ import (
 	"github.com/google/uuid"
 )
 
+const clearConversation = `-- name: ClearConversation :execrows
+UPDATE participants p
+SET cleared_before = (SELECT m.id FROM messages m WHERE m.conversation_id = p.conversation_id ORDER BY m.id DESC LIMIT 1)
+WHERE p.conversation_id = $1 AND p.user_id = $2
+`
+
+type ClearConversationParams struct {
+	ConversationID uuid.UUID
+	UserID         *uuid.UUID
+}
+
+// Everything said so far goes out of this person's view. A uuid has no
+// max(), so the newest is found by order.
+func (q *Queries) ClearConversation(ctx context.Context, arg ClearConversationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearConversation, arg.ConversationID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createMessage = `-- name: CreateMessage :one
 INSERT INTO messages (id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, idempotency_key, status, reply_to_message_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -184,6 +205,21 @@ func (q *Queries) GetMessageByUserKey(ctx context.Context, arg GetMessageByUserK
 	return i, err
 }
 
+const hideMessage = `-- name: HideMessage :exec
+INSERT INTO message_hides (user_id, message_id) VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type HideMessageParams struct {
+	UserID    uuid.UUID
+	MessageID uuid.UUID
+}
+
+func (q *Queries) HideMessage(ctx context.Context, arg HideMessageParams) error {
+	_, err := q.db.Exec(ctx, hideMessage, arg.UserID, arg.MessageID)
+	return err
+}
+
 const listLatestMessages = `-- name: ListLatestMessages :many
 SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id
 FROM messages
@@ -224,24 +260,84 @@ func (q *Queries) ListLatestMessages(ctx context.Context, conversationIds []uuid
 	return items, nil
 }
 
+const listLatestVisibleMessages = `-- name: ListLatestVisibleMessages :many
+SELECT DISTINCT ON (m.conversation_id) m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key, m.status, m.truncated, m.reply_to_message_id
+FROM messages m
+JOIN participants p ON p.conversation_id = m.conversation_id AND p.user_id = $1::uuid
+WHERE m.conversation_id = ANY($2::uuid[])
+  AND (p.cleared_before IS NULL OR m.id > p.cleared_before)
+  AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.user_id = p.user_id AND h.message_id = m.id)
+ORDER BY m.conversation_id, m.id DESC
+`
+
+type ListLatestVisibleMessagesParams struct {
+	UserID          uuid.UUID
+	ConversationIds []uuid.UUID
+}
+
+// ListLatestMessages as one person sees it: the newest message they have
+// not cleared or hidden, so a chat-list row never previews what they put
+// out of sight.
+func (q *Queries) ListLatestVisibleMessages(ctx context.Context, arg ListLatestVisibleMessagesParams) ([]Message, error) {
+	rows, err := q.db.Query(ctx, listLatestVisibleMessages, arg.UserID, arg.ConversationIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Message{}
+	for rows.Next() {
+		var i Message
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConversationID,
+			&i.SenderKind,
+			&i.SenderUserID,
+			&i.SenderAgentID,
+			&i.Body,
+			&i.CreatedAt,
+			&i.IdempotencyKey,
+			&i.Status,
+			&i.Truncated,
+			&i.ReplyToMessageID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMessagesAfter = `-- name: ListMessagesAfter :many
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id FROM messages
-WHERE conversation_id = $1
-  AND id > $2::uuid
-ORDER BY id ASC
-LIMIT $3
+SELECT m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key, m.status, m.truncated, m.reply_to_message_id FROM messages m
+JOIN participants p ON p.conversation_id = m.conversation_id AND p.user_id = $1::uuid
+WHERE m.conversation_id = $2
+  AND (p.cleared_before IS NULL OR m.id > p.cleared_before)
+  AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.user_id = p.user_id AND h.message_id = m.id)
+  AND m.id > $3::uuid
+ORDER BY m.id ASC
+LIMIT $4
 `
 
 type ListMessagesAfterParams struct {
+	UserID         uuid.UUID
 	ConversationID uuid.UUID
 	After          uuid.UUID
 	PageSize       int32
 }
 
 // Catching up: everything newer than a message the caller already has,
-// oldest first, so a client that was away fills its gap in order.
+// oldest first, so a client that was away fills its gap in order. The
+// person's view, as in ListMessagesBefore.
 func (q *Queries) ListMessagesAfter(ctx context.Context, arg ListMessagesAfterParams) ([]Message, error) {
-	rows, err := q.db.Query(ctx, listMessagesAfter, arg.ConversationID, arg.After, arg.PageSize)
+	rows, err := q.db.Query(ctx, listMessagesAfter,
+		arg.UserID,
+		arg.ConversationID,
+		arg.After,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -273,23 +369,34 @@ func (q *Queries) ListMessagesAfter(ctx context.Context, arg ListMessagesAfterPa
 }
 
 const listMessagesBefore = `-- name: ListMessagesBefore :many
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id FROM messages
-WHERE conversation_id = $1
-  AND ($2::uuid IS NULL OR id < $2::uuid)
-ORDER BY id DESC
-LIMIT $3
+SELECT m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key, m.status, m.truncated, m.reply_to_message_id FROM messages m
+JOIN participants p ON p.conversation_id = m.conversation_id AND p.user_id = $1::uuid
+WHERE m.conversation_id = $2
+  AND (p.cleared_before IS NULL OR m.id > p.cleared_before)
+  AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.user_id = p.user_id AND h.message_id = m.id)
+  AND ($3::uuid IS NULL OR m.id < $3::uuid)
+ORDER BY m.id DESC
+LIMIT $4
 `
 
 type ListMessagesBeforeParams struct {
+	UserID         uuid.UUID
 	ConversationID uuid.UUID
 	Before         *uuid.UUID
 	PageSize       int32
 }
 
-// One page of history, newest first. The cursor is a message id: everything
-// older than it, or the newest page when it is null.
+// One page of history as a person sees it, newest first. The cursor is a
+// message id: everything older than it, or the newest page when it is null.
+// What they cleared or hid is not there; it is still there for everyone
+// else.
 func (q *Queries) ListMessagesBefore(ctx context.Context, arg ListMessagesBeforeParams) ([]Message, error) {
-	rows, err := q.db.Query(ctx, listMessagesBefore, arg.ConversationID, arg.Before, arg.PageSize)
+	rows, err := q.db.Query(ctx, listMessagesBefore,
+		arg.UserID,
+		arg.ConversationID,
+		arg.Before,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}

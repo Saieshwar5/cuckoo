@@ -26,7 +26,13 @@ type Service struct {
 	store   *store.Store
 	mailer  mail.Mailer
 	limiter ratelimit.Limiter
+	// welcome runs for every account that did not exist before, inside the
+	// transaction that creates it; what it returns runs after the commit.
+	welcome WelcomeFunc
 }
+
+// WelcomeFunc gives a new account its first contact. See pairing.Welcomer.
+type WelcomeFunc func(ctx context.Context, tx *store.Store, userID uuid.UUID) (after func(), err error)
 
 // Option configures a Service.
 type Option func(*Service)
@@ -34,6 +40,11 @@ type Option func(*Service)
 // WithLimiter bounds how often codes may be requested for one address.
 func WithLimiter(l ratelimit.Limiter) Option {
 	return func(s *Service) { s.limiter = l }
+}
+
+// WithWelcome sets what a new account is given on arrival. Nil means nothing.
+func WithWelcome(fn WelcomeFunc) Option {
+	return func(s *Service) { s.welcome = fn }
 }
 
 // New builds the service.
@@ -123,6 +134,7 @@ func (s *Service) Verify(ctx context.Context, rawEmail, code, deviceName string)
 		out   Verified
 		token string
 	)
+	var after func()
 	err = s.store.WithTx(ctx, func(tx *store.Store) error {
 		if err := tx.MarkSignInCodeUsed(ctx, row.ID); err != nil {
 			return domain.Internal(fmt.Errorf("mark code used: %w", err))
@@ -131,6 +143,11 @@ func (s *Service) Verify(ctx context.Context, rawEmail, code, deviceName string)
 		userID, isNew, err := s.accountFor(ctx, tx, email)
 		if err != nil {
 			return err
+		}
+		if isNew && s.welcome != nil {
+			if after, err = s.welcome(ctx, tx, userID); err != nil {
+				return err
+			}
 		}
 		if _, err := tx.RevokeUserSessions(ctx, userID); err != nil {
 			return domain.Internal(fmt.Errorf("revoke other sessions: %w", err))
@@ -163,6 +180,9 @@ func (s *Service) Verify(ctx context.Context, rawEmail, code, deviceName string)
 		return Verified{}, domain.Internal(fmt.Errorf("sign in: %w", err))
 	}
 	out.Token = token
+	if after != nil {
+		after()
+	}
 	return out, nil
 }
 

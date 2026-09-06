@@ -79,10 +79,12 @@ export function Bubble({ message: m, mine, first, agentName, onReply, onButton, 
             onLink={onOpen}
           />
         ) : null}
+        {m.truncated ? (
+          <Text style={[styles.truncated, { color: meta }]} testID="truncated">
+            {t('chat.truncated')}
+          </Text>
+        ) : null}
         <View style={styles.footer}>
-          {m.truncated ? (
-            <Text style={[styles.meta, styles.truncated, { color: meta }]}>{t('chat.truncated')}</Text>
-          ) : null}
           <Text style={[styles.meta, { color: meta }]}>{formatClock(m.created_at)}</Text>
           {mine && m.delivery_status ? <Ticks status={m.delivery_status} colors={colors} /> : null}
         </View>
@@ -223,7 +225,8 @@ const styles = StyleSheet.create({
   text: { ...type.body, lineHeight: 22 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 3, marginTop: 1 },
   meta: { fontSize: 11 },
-  truncated: { fontStyle: 'italic', marginRight: spacing.xs },
+  // A reply the hub had to end: said as a line of its own, not a whisper.
+  truncated: { ...type.caption, fontStyle: 'italic', marginTop: spacing.xs },
   buttons: {
     borderTopWidth: StyleSheet.hairlineWidth,
     marginTop: spacing.sm,

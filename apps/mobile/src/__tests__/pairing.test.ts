@@ -30,6 +30,9 @@ function contact(id: string, blocked = false): Contact {
     conversation_id: `cnv_${id}`,
     created_at: '2026-09-06T00:00:00Z',
     agent_deleted: false,
+    muted_until: null,
+    pinned: false,
+    archived: false,
   };
 }
 

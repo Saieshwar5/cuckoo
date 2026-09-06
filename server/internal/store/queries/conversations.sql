@@ -30,10 +30,19 @@ SELECT EXISTS (
 -- been said yet. Both are UUIDv7 identifiers, so comparing them compares
 -- creation times, and the newest-message lookup is one probe of the history
 -- index. No denormalised last_message_at column exists to drift.
+--
+-- A chat with an agent the person removed from their list is not listed;
+-- it is still theirs to open by id, so the history is not lost.
 SELECT c.*
 FROM conversations c
 JOIN participants p ON p.conversation_id = c.id
 WHERE p.user_id = sqlc.arg('user_id')::uuid
+  AND NOT EXISTS (
+      SELECT 1
+      FROM participants pa
+      JOIN contacts ct ON ct.agent_id = pa.agent_id AND ct.user_id = p.user_id
+      WHERE pa.conversation_id = c.id AND ct.removed_at IS NOT NULL
+  )
 ORDER BY COALESCE(
     (SELECT m.id FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1),
     c.id
@@ -60,6 +69,8 @@ SELECT p.conversation_id, p.kind, p.user_id, p.agent_id, p.joined_at,
        -- Whether the agent has a published picture, so the app knows to
        -- ask for it rather than guessing and getting a 404.
        (a.avatar_media_id IS NOT NULL)::bool AS agent_has_avatar,
+       -- What the agent suggests saying first, for an empty chat.
+       a.starters     AS agent_starters,
        -- The dot on the avatar: the agent's live binding's health, or
        -- nothing when no backend is connected.
        b.status       AS agent_status

@@ -49,6 +49,7 @@ SELECT c.*,
        a.display_name,
        a.description,
        (a.avatar_media_id IS NOT NULL)::bool AS has_avatar,
+       a.starters,
        a.deleted_at   AS agent_deleted_at,
        u.display_name AS owner_display_name,
        b.status       AS binding_status
@@ -56,8 +57,40 @@ FROM contacts c
 JOIN agents a ON a.id = c.agent_id
 JOIN users  u ON u.id = a.owner_user_id
 LEFT JOIN agent_bindings b ON b.agent_id = a.id AND b.revoked_at IS NULL
-WHERE c.user_id = $1
+WHERE c.user_id = $1 AND c.removed_at IS NULL
 ORDER BY c.created_at DESC, c.agent_id;
+
+-- name: SetContactMuted :execrows
+-- NULL unmutes; a time in the future mutes until then.
+UPDATE contacts
+SET muted_until = sqlc.narg('muted_until')::timestamptz
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL;
+
+-- name: SetContactPinned :execrows
+UPDATE contacts
+SET pinned_at = CASE WHEN sqlc.arg('pinned')::bool THEN COALESCE(pinned_at, now()) ELSE NULL END
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL;
+
+-- name: CountPinnedContacts :one
+SELECT count(*) FROM contacts
+WHERE user_id = $1 AND pinned_at IS NOT NULL AND removed_at IS NULL;
+
+-- name: SetContactArchived :execrows
+UPDATE contacts
+SET archived_at = CASE WHEN sqlc.arg('archived')::bool THEN COALESCE(archived_at, now()) ELSE NULL END
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL;
+
+-- name: RemoveContact :execrows
+-- Taking an agent out of the list clears what was decided about it there,
+-- so scanning it again starts clean.
+UPDATE contacts
+SET removed_at = now(), pinned_at = NULL, archived_at = NULL, muted_until = NULL
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL AND added_via IN ('pair_token', 'hub');
+
+-- name: RestoreContact :execrows
+UPDATE contacts
+SET removed_at = NULL
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NOT NULL;
 
 -- name: SetContactBlocked :execrows
 UPDATE contacts
@@ -83,3 +116,21 @@ SELECT EXISTS (
 -- name: GetPairToken :one
 SELECT * FROM pair_tokens
 WHERE id = $1 AND agent_id = $2;
+
+-- name: CreateReport :one
+INSERT INTO reports (id, reporter_user_id, agent_id, message_id, reason, note)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: CountRecentReports :one
+-- How many times this person has reported this agent since a moment: one
+-- is enough to be looked at, and a second within the day adds nothing.
+SELECT count(*) FROM reports
+WHERE reporter_user_id = $1 AND agent_id = $2 AND created_at > sqlc.arg('since');
+
+-- name: RemoveAllContacts :exec
+-- Everything the person had in their list leaves it. Owner rows too: their
+-- agents are being retired alongside.
+UPDATE contacts
+SET removed_at = now(), pinned_at = NULL, archived_at = NULL, muted_until = NULL
+WHERE user_id = $1 AND removed_at IS NULL;

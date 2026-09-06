@@ -11,6 +11,7 @@
 package agents
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,8 +49,11 @@ type Agent struct {
 	Description string
 	// The picture it is published with, or nil for the initials disc.
 	AvatarMediaID *uuid.UUID
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	// A few things it suggests saying first, shown as chips in an empty
+	// chat. Empty for most agents; a company's agent should have them.
+	Starters  []string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // Binding connects an agent to a backend. The secret is never part of this
@@ -72,9 +76,20 @@ func agentFromRow(r gen.Agent) Agent {
 		DisplayName:   r.DisplayName,
 		Description:   r.Description,
 		AvatarMediaID: r.AvatarMediaID,
+		Starters:      startersFromRow(r.Starters),
 		CreatedAt:     r.CreatedAt,
 		UpdatedAt:     r.UpdatedAt,
 	}
+}
+
+// startersFromRow decodes the stored list. A row that will not decode is
+// treated as having none rather than failing every read of the agent.
+func startersFromRow(raw []byte) []string {
+	var out []string
+	if len(raw) == 0 || json.Unmarshal(raw, &out) != nil || out == nil {
+		return []string{}
+	}
+	return out
 }
 
 func bindingFromRow(r gen.AgentBinding) Binding {
@@ -97,6 +112,8 @@ type CreateInput struct {
 	// A picture already uploaded by the owner. A company setting its logo
 	// in the same call that creates the agent.
 	AvatarMediaID *uuid.UUID
+	// Up to four things to suggest saying first.
+	Starters []string
 }
 
 // UpdateInput is a partial update; nil leaves a field alone. The handle is
@@ -105,6 +122,8 @@ type UpdateInput struct {
 	DisplayName   *string
 	Description   *string
 	AvatarMediaID *uuid.UUID
+	// Starters replaces the whole list when set; nil leaves it.
+	Starters *[]string
 }
 
 // SetBindingInput describes the backend that will answer for an agent.

@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/testutil"
 )
@@ -138,6 +140,173 @@ func TestPairOverHTTP(t *testing.T) {
 }
 
 // Blocking closes the chat both ways over HTTP and the backend is told.
+// contactSettingsJSON is the part of a contact row this test reads.
+type contactSettingsJSON struct {
+	Agent struct {
+		ID string `json:"id"`
+	} `json:"agent"`
+	ConversationID string  `json:"conversation_id"`
+	MutedUntil     *string `json:"muted_until"`
+	Pinned         bool    `json:"pinned"`
+	Archived       bool    `json:"archived"`
+}
+
+// Over HTTP: what a person decides about an agent in their list — mute,
+// pin, archive, remove — is theirs alone, survives in the list, is capped
+// where a cap makes sense, and is wiped when the agent is removed and comes
+// back.
+func TestContactSettingsOverHTTP(t *testing.T) {
+	f := setupChat(t)
+	other := f.srv.AsUser(t, f.other)
+	owner := f.srv.AsUser(t, f.owner)
+
+	// add hands f.other an agent of f.owner's by code and returns its id.
+	// 201 the first time; 200 when the contact already existed, which is
+	// what coming back after a removal looks like.
+	add := func(agent agents.Agent, status int) string {
+		agentID := domain.FormatID(domain.PrefixAgent, agent.ID)
+		var minted struct {
+			Code string `json:"code"`
+		}
+		owner.Post("/v1/mgmt/agents/"+agentID+"/pair-tokens", map[string]any{}).ExpectStatus(http.StatusCreated).Decode(&minted)
+		other.Post("/v1/client/pair/"+minted.Code+"/accept", nil).ExpectStatus(status)
+		return agentID
+	}
+	contact := func(agentID string) contactSettingsJSON {
+		var list struct {
+			Contacts []contactSettingsJSON `json:"contacts"`
+		}
+		other.Get("/v1/client/contacts").ExpectStatus(http.StatusOK).Decode(&list)
+		for _, c := range list.Contacts {
+			if c.Agent.ID == agentID {
+				return c
+			}
+		}
+		t.Fatalf("%s is not in the list", agentID)
+		return contactSettingsJSON{}
+	}
+	listed := func(conversationID string) bool {
+		var list struct {
+			Conversations []conversationJSON `json:"conversations"`
+		}
+		other.Get("/v1/client/conversations").ExpectStatus(http.StatusOK).Decode(&list)
+		for _, c := range list.Conversations {
+			if c.ID == conversationID {
+				return true
+			}
+		}
+		return false
+	}
+	patch := func(agentID string, body map[string]any) *testutil.Response {
+		return other.Patch("/v1/client/contacts/"+agentID, body)
+	}
+
+	agentID := add(f.agent, http.StatusCreated)
+	if c := contact(agentID); c.MutedUntil != nil || c.Pinned || c.Archived {
+		t.Fatalf("fresh contact = %+v, want nothing decided", c)
+	}
+
+	t.Run("mute", func(t *testing.T) {
+		until := time.Now().Add(8 * time.Hour).UTC().Format(time.RFC3339)
+		patch(agentID, map[string]any{"muted_until": until}).ExpectStatus(http.StatusNoContent)
+		if c := contact(agentID); c.MutedUntil == nil {
+			t.Errorf("muted_until not recorded")
+		}
+		patch(agentID, map[string]any{"muted_until": nil}).ExpectStatus(http.StatusNoContent)
+		if c := contact(agentID); c.MutedUntil != nil {
+			t.Errorf("null did not unmute: %v", *c.MutedUntil)
+		}
+		past := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
+		patch(agentID, map[string]any{"muted_until": past}).ExpectError(http.StatusUnprocessableEntity, "invalid_muted_until")
+		patch(agentID, map[string]any{"muted_until": "soon"}).ExpectError(http.StatusUnprocessableEntity, "invalid_muted_until")
+	})
+
+	t.Run("pin, three at most", func(t *testing.T) {
+		others := []string{
+			add(testutil.CreateAgent(t, f.db, f.owner), http.StatusCreated),
+			add(testutil.CreateAgent(t, f.db, f.owner), http.StatusCreated),
+			add(testutil.CreateAgent(t, f.db, f.owner), http.StatusCreated),
+		}
+		for _, id := range others {
+			patch(id, map[string]any{"pinned": true}).ExpectStatus(http.StatusNoContent)
+		}
+		patch(agentID, map[string]any{"pinned": true}).ExpectError(http.StatusConflict, "too_many_pins")
+		// Pinning a pinned chat again is not a fourth pin.
+		patch(others[0], map[string]any{"pinned": true}).ExpectStatus(http.StatusNoContent)
+		patch(others[0], map[string]any{"pinned": false}).ExpectStatus(http.StatusNoContent)
+		patch(agentID, map[string]any{"pinned": true}).ExpectStatus(http.StatusNoContent)
+		if !contact(agentID).Pinned || contact(others[0]).Pinned {
+			t.Errorf("pins did not move")
+		}
+	})
+
+	t.Run("archive", func(t *testing.T) {
+		patch(agentID, map[string]any{"archived": true}).ExpectStatus(http.StatusNoContent)
+		if !contact(agentID).Archived {
+			t.Errorf("not archived")
+		}
+	})
+
+	t.Run("remove, and come back clean", func(t *testing.T) {
+		conv := contact(agentID).ConversationID
+		other.Delete("/v1/client/contacts/" + agentID).ExpectStatus(http.StatusNoContent)
+		var list struct {
+			Contacts []contactSettingsJSON `json:"contacts"`
+		}
+		other.Get("/v1/client/contacts").ExpectStatus(http.StatusOK).Decode(&list)
+		for _, c := range list.Contacts {
+			if c.Agent.ID == agentID {
+				t.Fatalf("removed agent still listed")
+			}
+		}
+		if listed(conv) {
+			t.Errorf("removed agent's chat still in the list")
+		}
+		// The history is still theirs.
+		other.Get("/v1/client/conversations/" + conv + "/messages").ExpectStatus(http.StatusOK)
+		// Nothing can be decided about an agent that is not in the list.
+		patch(agentID, map[string]any{"pinned": true}).ExpectError(http.StatusNotFound, "not_a_contact")
+		other.Delete("/v1/client/contacts/"+agentID).ExpectError(http.StatusNotFound, "not_a_contact")
+
+		// The card a fresh code opens offers Add again, not "already added".
+		var minted struct {
+			Code string `json:"code"`
+		}
+		owner.Post("/v1/mgmt/agents/"+agentID+"/pair-tokens", map[string]any{}).ExpectStatus(http.StatusCreated).Decode(&minted)
+		var card struct {
+			AlreadyAdded bool `json:"already_added"`
+		}
+		other.Get("/v1/client/pair/" + minted.Code).ExpectStatus(http.StatusOK).Decode(&card)
+		if card.AlreadyAdded {
+			t.Errorf("a removed agent's card says already added")
+		}
+
+		// Scanning again restores it, with nothing decided.
+		add(f.agent, http.StatusOK)
+		other.Get("/v1/client/pair/" + minted.Code).ExpectStatus(http.StatusOK).Decode(&card)
+		if !card.AlreadyAdded {
+			t.Errorf("after coming back the card should say already added")
+		}
+		c := contact(agentID)
+		if c.Pinned || c.Archived || c.MutedUntil != nil || c.ConversationID != conv {
+			t.Errorf("restored contact = %+v, want the same chat and nothing decided", c)
+		}
+		if !listed(conv) {
+			t.Errorf("restored agent's chat not back in the list")
+		}
+	})
+
+	t.Run("an owner deletes, not removes", func(t *testing.T) {
+		mine := domain.FormatID(domain.PrefixAgent, f.agent.ID)
+		owner.Delete("/v1/client/contacts/"+mine).ExpectError(http.StatusConflict, "own_agent")
+		// But may pin and mute their own.
+		owner.Patch("/v1/client/contacts/"+mine, map[string]any{"pinned": true}).ExpectStatus(http.StatusNoContent)
+	})
+
+	stranger := domain.FormatID(domain.PrefixAgent, testutil.CreateAgent(t, f.db, f.owner).ID)
+	patch(stranger, map[string]any{"archived": true}).ExpectError(http.StatusNotFound, "not_a_contact")
+}
+
 func TestBlockOverHTTP(t *testing.T) {
 	f := setupChat(t)
 	_, secret := testutil.BindAgent(t, f.db, f.agent)

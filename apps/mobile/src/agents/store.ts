@@ -1,4 +1,4 @@
-import type { Agent, AgentLiveStatus, Contact, Frame } from '../api/types';
+import type { Agent, AgentLiveStatus, Contact, ContactSettings, Frame } from '../api/types';
 
 // The agents a person owns and the ones they added, and how live
 // announcements change them. Pure, so it is tested without a screen.
@@ -25,6 +25,28 @@ export function setBlocked(state: AgentsState, agentId: string, blocked: boolean
     ...state,
     contacts: state.contacts.map((c) => (c.agent.id === agentId ? { ...c, blocked } : c)),
   };
+}
+
+// setSettings folds a change to what the person decided about an agent
+// into its row, ahead of the hub confirming it.
+export function setSettings(state: AgentsState, agentId: string, settings: ContactSettings): AgentsState {
+  return {
+    ...state,
+    contacts: state.contacts.map((c) => (c.agent.id === agentId ? { ...c, ...settings } : c)),
+  };
+}
+
+// dropContact takes an added agent out of the list. The agent object
+// itself, if owned, is untouched: only an added one can be removed.
+export function dropContact(state: AgentsState, agentId: string): AgentsState {
+  if (!state.contacts.some((c) => c.agent.id === agentId)) return state;
+  return { ...state, contacts: state.contacts.filter((c) => c.agent.id !== agentId) };
+}
+
+// isMuted says whether a contact is muted at a moment: muted_until is in
+// the future. A mute that ran out is simply over; nothing has to clear it.
+export function isMuted(contact: Pick<Contact, 'muted_until'>, now: number = Date.now()): boolean {
+  return !!contact.muted_until && Date.parse(contact.muted_until) > now;
 }
 
 // upsertContact puts a freshly added agent at the top of the list.

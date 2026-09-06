@@ -50,5 +50,6 @@ export function useChat(conversationId: string) {
     send: controller?.send ?? noop,
     retry: controller?.retry ?? noop,
     loadOlder: controller?.loadOlder ?? noop,
+    deleteForMe: controller?.deleteForMe ?? noop,
   };
 }

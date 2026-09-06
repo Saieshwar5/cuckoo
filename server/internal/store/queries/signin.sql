@@ -59,3 +59,7 @@ WHERE id = $1 AND revoked_at IS NULL;
 UPDATE sessions
 SET revoked_at = now()
 WHERE user_id = $1 AND revoked_at IS NULL;
+
+-- name: DeleteIdentities :exec
+-- Cut the ways in. The address is free to open a fresh account afterwards.
+DELETE FROM user_identities WHERE user_id = $1;

@@ -223,6 +223,11 @@ func (s *Service) card(ctx context.Context, callerID, agentID uuid.UUID) (Card, 
 		return card, nil
 	}
 	contact, err := s.store.GetContact(ctx, gen.GetContactParams{UserID: callerID, AgentID: agentID})
+	// A contact the person removed reads as not added: the card offers Add
+	// again, and accepting restores it.
+	if err == nil && contact.RemovedAt != nil {
+		return card, nil
+	}
 	if err == nil {
 		card.AlreadyAdded = true
 		id := contact.DmConversationID
@@ -254,6 +259,14 @@ func (s *Service) Accept(ctx context.Context, callerID uuid.UUID, plaintext stri
 		existing, err := tx.GetContact(ctx, gen.GetContactParams{UserID: callerID, AgentID: tok.AgentID})
 		if err == nil {
 			convID = existing.DmConversationID
+			// Someone who removed the agent and scans it again gets it
+			// back, clean. The agent was never told they left, so it is
+			// not told they returned.
+			if existing.RemovedAt != nil {
+				if _, err := tx.RestoreContact(ctx, gen.RestoreContactParams{UserID: callerID, AgentID: tok.AgentID}); err != nil {
+					return domain.Internal(fmt.Errorf("restore contact: %w", err))
+				}
+			}
 			if existing.BlockedAt != nil {
 				if _, err := tx.ClearContactBlocked(ctx, gen.ClearContactBlockedParams{UserID: callerID, AgentID: tok.AgentID}); err != nil {
 					return domain.Internal(fmt.Errorf("unblock: %w", err))

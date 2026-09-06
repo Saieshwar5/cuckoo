@@ -29,6 +29,8 @@ export interface Participant {
   status?: AgentStatus;
   // An agent published with a picture, at /a/{id}/avatar.
   has_avatar?: boolean;
+  // What an agent suggests saying first, shown as chips in an empty chat.
+  starters?: string[];
 }
 
 // A button is a choice or a link, never both. A choice has an id, which
@@ -149,6 +151,7 @@ export interface AgentCard {
   display_name: string;
   description: string;
   has_avatar?: boolean;
+  starters?: string[];
   owner: { display_name: string };
   status?: AgentStatus;
   verified: boolean;
@@ -176,6 +179,23 @@ export interface Contact {
   conversation_id: string;
   created_at: string;
   agent_deleted: boolean;
+  // What this person decided about the agent. muted_until in the future
+  // means nothing about it may disturb them; far in the future means
+  // always.
+  muted_until: string | null;
+  pinned: boolean;
+  archived: boolean;
+}
+
+// Why an agent is being reported. Fixed, so the pile can be sorted.
+export type ReportReason = 'spam' | 'impersonation' | 'abuse' | 'other';
+
+// ContactSettings is a partial change to those decisions. An omitted
+// field stays; muted_until null unmutes.
+export interface ContactSettings {
+  muted_until?: string | null;
+  pinned?: boolean;
+  archived?: boolean;
 }
 
 export interface PairToken {

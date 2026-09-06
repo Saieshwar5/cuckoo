@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -125,4 +126,47 @@ func isLoopback(host string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+const (
+	// startersMax is how many suggestions an empty chat shows. Four chips
+	// fit a phone's width in two rows; more is a menu, which is a different
+	// feature.
+	startersMax   = 4
+	starterMaxLen = 40
+)
+
+// validateStarters trims each suggestion and refuses too many, empty ones,
+// long ones, line breaks, and repeats. Nil and empty both mean none.
+func validateStarters(raw []string) ([]string, error) {
+	invalid := func(msg string) error { return domain.InvalidField("starters", "invalid_starters", msg) }
+	if len(raw) > startersMax {
+		return nil, invalid(fmt.Sprintf("At most %d starters.", startersMax))
+	}
+	out := make([]string, 0, len(raw))
+	seen := map[string]bool{}
+	for _, r := range raw {
+		label := strings.TrimSpace(r)
+		if !utf8.ValidString(label) || strings.ContainsAny(label, "\n\r\t\x00") {
+			return nil, invalid("Starters cannot contain line breaks or control characters.")
+		}
+		if n := utf8.RuneCountInString(label); n < 1 || n > starterMaxLen {
+			return nil, invalid(fmt.Sprintf("Each starter must be 1 to %d characters.", starterMaxLen))
+		}
+		if seen[label] {
+			return nil, invalid(fmt.Sprintf("Starter %q appears twice.", label))
+		}
+		seen[label] = true
+		out = append(out, label)
+	}
+	return out, nil
+}
+
+// startersJSON encodes a validated list for the jsonb column.
+func startersJSON(list []string) []byte {
+	if list == nil {
+		list = []string{}
+	}
+	raw, _ := json.Marshal(list)
+	return raw
 }

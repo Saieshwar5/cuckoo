@@ -12,7 +12,6 @@ import { IconButton } from '@/components/IconButton';
 import { Screen } from '@/components/Screen';
 import { t } from '@/i18n';
 import { agentAvatar } from '@/media/avatar';
-import { useSession } from '@/session/SessionProvider';
 import { radius, spacing, type, useStyles, useTheme, type Palette, type Theme } from '@/theme';
 
 interface Row {
@@ -29,7 +28,6 @@ interface Row {
 // state, live. Tap one for its profile; the button makes a new one.
 // Signing out lives here for now.
 export default function AgentsScreen() {
-  const { signOut } = useSession();
   const { agents, contacts, loading, controller } = useAgents();
   const { colors } = useTheme();
   const styles = useStyles(makeStyles);
@@ -46,7 +44,7 @@ export default function AgentsScreen() {
     hasAvatar: !!a.has_avatar,
   }));
   const added: Row[] = contacts
-    .filter((c) => c.added_via === 'pair_token' && !c.agent_deleted)
+    .filter((c) => c.added_via !== 'owner' && !c.agent_deleted)
     .map((c) => ({
       id: c.agent.id,
       name: c.agent.display_name,
@@ -74,12 +72,11 @@ export default function AgentsScreen() {
               testID="open-profile"
             />
             <IconButton
-              icon="key-outline"
-              label={t('keys.title')}
-              onPress={() => router.push('/api-keys')}
-              testID="open-api-keys"
+              icon="settings-outline"
+              label={t('settings.title')}
+              onPress={() => router.push('/settings')}
+              testID="open-settings"
             />
-            <IconButton icon="log-out-outline" label={t('settings.signout')} onPress={() => void signOut()} />
           </>
         }
       />
@@ -120,6 +117,7 @@ export default function AgentsScreen() {
               title={t('agents.empty.title')}
               subtitle={t('agents.empty.subtitle')}
               action={{ title: t('agents.empty.action'), onPress: create }}
+              secondary={{ title: t('agents.empty.scan'), onPress: () => router.push('/scan') }}
             />
           )
         }

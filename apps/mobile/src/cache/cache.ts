@@ -30,6 +30,8 @@ export const keys = {
   messages: (userId: string, conversationId: string) => `u:${userId}:messages:${conversationId}`,
   agents: (userId: string) => `u:${userId}:agents`,
   outbox: (userId: string) => `u:${userId}:outbox`,
+  // Half-written words in one chat, kept until sent or erased.
+  draft: (userId: string, conversationId: string) => `u:${userId}:draft:${conversationId}`,
 };
 
 // How many messages of one chat are kept. Everything ever loaded, up to a

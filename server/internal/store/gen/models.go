@@ -21,6 +21,7 @@ type Agent struct {
 	UpdatedAt     time.Time
 	DeletedAt     *time.Time
 	AvatarMediaID *uuid.UUID
+	Starters      []byte
 }
 
 type AgentBinding struct {
@@ -54,6 +55,10 @@ type Contact struct {
 	PairTokenID      *uuid.UUID
 	BlockedAt        *time.Time
 	CreatedAt        time.Time
+	MutedUntil       *time.Time
+	PinnedAt         *time.Time
+	ArchivedAt       *time.Time
+	RemovedAt        *time.Time
 }
 
 type Conversation struct {
@@ -109,6 +114,12 @@ type MessageDelivery struct {
 	Payload        []byte
 }
 
+type MessageHide struct {
+	UserID    uuid.UUID
+	MessageID uuid.UUID
+	CreatedAt time.Time
+}
+
 type PairToken struct {
 	ID              uuid.UUID
 	TokenHash       []byte
@@ -129,6 +140,17 @@ type Participant struct {
 	UserID         *uuid.UUID
 	AgentID        *uuid.UUID
 	JoinedAt       time.Time
+	ClearedBefore  *uuid.UUID
+}
+
+type Report struct {
+	ID             uuid.UUID
+	ReporterUserID uuid.UUID
+	AgentID        uuid.UUID
+	MessageID      *uuid.UUID
+	Reason         string
+	Note           string
+	CreatedAt      time.Time
 }
 
 type Session struct {

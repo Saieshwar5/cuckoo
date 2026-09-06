@@ -17,6 +17,11 @@ type SessionAuthenticator struct {
 
 // NewSession builds the session authenticator.
 func NewSession(s *signin.Service) *SessionAuthenticator {
+	// A nil service here is a wiring mistake in main that would otherwise
+	// surface as a panic on the first request rather than at start-up.
+	if s == nil {
+		panic("auth: NewSession needs a sign-in service")
+	}
 	return &SessionAuthenticator{signin: s}
 }
 

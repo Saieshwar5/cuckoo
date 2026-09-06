@@ -93,6 +93,7 @@ type Contact struct {
 	DisplayName    string
 	Description    string
 	HasAvatar      bool
+	Starters       []string
 	OwnerName      string
 	Status         *agents.Status
 	AddedVia       string
@@ -100,7 +101,17 @@ type Contact struct {
 	ConversationID uuid.UUID
 	CreatedAt      time.Time
 	AgentDeleted   bool
+	// The person's own settings for this agent. MutedUntil in the future
+	// means nothing about it may disturb them; far in the future means
+	// always.
+	MutedUntil *time.Time
+	Pinned     bool
+	Archived   bool
 }
+
+// pinsMax is how many chats may sit above the rest. Three is what a thumb
+// reaches without scrolling; more pins and nothing is pinned.
+const pinsMax = 3
 
 func contactFromRow(r gen.ListContactsRow) Contact {
 	c := Contact{
@@ -109,16 +120,32 @@ func contactFromRow(r gen.ListContactsRow) Contact {
 		DisplayName:    r.DisplayName,
 		Description:    r.Description,
 		HasAvatar:      r.HasAvatar,
+		Starters:       startersOf(r.Starters),
 		OwnerName:      r.OwnerDisplayName,
 		AddedVia:       r.AddedVia,
 		Blocked:        r.BlockedAt != nil,
 		ConversationID: r.DmConversationID,
 		CreatedAt:      r.CreatedAt,
 		AgentDeleted:   r.AgentDeletedAt != nil,
+		MutedUntil:     r.MutedUntil,
+		Pinned:         r.PinnedAt != nil,
+		Archived:       r.ArchivedAt != nil,
 	}
 	if r.BindingStatus != nil {
 		s := agents.Status(*r.BindingStatus)
 		c.Status = &s
 	}
 	return c
+}
+
+// startersOf decodes an agent's suggestions; none when the row has none.
+func startersOf(raw []byte) []string {
+	out := []string{}
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &out)
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out
 }

@@ -27,6 +27,8 @@ type participantResponse struct {
 	Status string `json:"status,omitempty"`
 	// HasAvatar says this agent has a published picture, at /a/{id}/avatar.
 	HasAvatar bool `json:"has_avatar,omitempty"`
+	// Starters are what the agent suggests saying first, for an empty chat.
+	Starters []string `json:"starters,omitempty"`
 }
 
 // conversationResponse is a row of the chat list. LastMessage is null until
@@ -62,6 +64,7 @@ func newConversationResponse(c conversations.Conversation) conversationResponse 
 			Handle:      p.Handle,
 			Status:      p.Status,
 			HasAvatar:   p.HasAvatar,
+			Starters:    p.Starters,
 		})
 	}
 	if c.LastMessage != nil {
