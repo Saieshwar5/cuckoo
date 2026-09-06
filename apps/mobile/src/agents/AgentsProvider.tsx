@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from 'react';
 
-import type { Agent } from '../api/types';
+import type { Agent, Contact } from '../api/types';
 import { useRealtime } from '../realtime/RealtimeProvider';
 import { useSession } from '../session/SessionProvider';
 import { AgentsController, type AgentsSnapshot } from './controller';
@@ -27,7 +27,7 @@ export function AgentsProvider({ children }: { children: React.ReactNode }) {
   return <AgentsContext.Provider value={controller}>{children}</AgentsContext.Provider>;
 }
 
-const idle: AgentsSnapshot = { agents: [], loading: true, error: null };
+const idle: AgentsSnapshot = { agents: [], contacts: [], loading: true, error: null };
 const never = () => () => {};
 const idleSnapshot = () => idle;
 
@@ -51,4 +51,11 @@ export function useAgents() {
 export function useAgent(id: string): Agent | null {
   const { agents } = useAgents();
   return agents.find((a) => a.id === id) ?? null;
+}
+
+// useContact is the person's link to one agent, owned or added: null until
+// the list has loaded, or if they do not have it.
+export function useContact(agentId: string): Contact | null {
+  const { contacts } = useAgents();
+  return contacts.find((c) => c.agent.id === agentId) ?? null;
 }

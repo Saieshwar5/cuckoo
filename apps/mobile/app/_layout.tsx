@@ -51,6 +51,8 @@ function Routes() {
           <Stack.Screen name="profile-setup" />
           <Stack.Screen name="chat/[id]" />
           <Stack.Screen name="agent" />
+          <Stack.Screen name="scan" />
+          <Stack.Screen name="p/[code]" />
         </Stack.Protected>
       </Stack>
     </>
