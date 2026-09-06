@@ -114,6 +114,24 @@ curl -s -H "$H" -X POST localhost:8080/v1/client/conversations/cnv_.../messages 
   -d '{"text":"is this right?","attachments":["med_..."]}'
 ```
 
+A voice note carries two things the bytes cannot tell anyone: how long it
+runs, and its shape. Both are measured by whatever did the recording — a
+phone and a browser both hand them out for nothing while the microphone is
+open — and travel with the upload, so a waveform is drawn without decoding
+a single frame of audio:
+
+```bash
+curl -s -H "$H" -X POST --data-binary @note.m4a \
+  'localhost:8080/v1/client/media?name=note.m4a&kind=audio&duration_ms=8200&waveform=2,40,90,15'
+```
+
+They are what the sender said, not what the hub checked, which is safe
+because of what they are for: a wrong number draws a wrong label under a
+waveform, and decides nothing about who may read anything. `kind=audio` is
+the one claim that changes how a file is treated, and it can only ever turn
+a video into a recording: WebM, Ogg and MP4 hold either, and telling which
+means decoding a stranger's media.
+
 The hub decides what a file is from its bytes, never from its name or from
 what the caller claimed. Limits are the protocol's, so an agent behaves the
 same on any hub: 16 MB for a picture or a recording, 64 MB for a video or a

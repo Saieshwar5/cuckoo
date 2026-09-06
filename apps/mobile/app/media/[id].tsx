@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import React from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,13 +21,29 @@ export default function MediaScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { api, token } = useSession();
-  const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
+  const { id, name, kind } = useLocalSearchParams<{ id: string; name?: string; kind?: string }>();
   const source = useMediaSource(id);
   const fileName = name ?? '';
+  const isVideo = kind === 'video';
+  // A video opened full-screen plays at once, the way tapping one anywhere
+  // else does.
+  const player = useVideoPlayer(isVideo ? (source ?? null) : null, (p) => {
+    p.play();
+  });
 
   return (
     <View style={styles.screen}>
-      {source ? (
+      {!source ? (
+        <ActivityIndicator color={dark.text} />
+      ) : isVideo ? (
+        <VideoView
+          player={player}
+          style={styles.image}
+          contentFit="contain"
+          nativeControls
+          testID="media-video"
+        />
+      ) : (
         <Image
           source={source}
           style={styles.image}
@@ -35,8 +52,6 @@ export default function MediaScreen() {
           accessibilityIgnoresInvertColors
           testID="media-image"
         />
-      ) : (
-        <ActivityIndicator color={dark.text} />
       )}
 
       <View style={[styles.bar, { paddingTop: insets.top + spacing.sm }]}>

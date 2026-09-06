@@ -19,13 +19,15 @@ type mediaJSON struct {
 }
 
 type attachmentJSON struct {
-	MediaID  string `json:"media_id"`
-	Kind     string `json:"kind"`
-	MimeType string `json:"mime_type"`
-	ByteSize int64  `json:"byte_size"`
-	FileName string `json:"file_name"`
-	Width    int32  `json:"width"`
-	Height   int32  `json:"height"`
+	MediaID    string  `json:"media_id"`
+	Kind       string  `json:"kind"`
+	MimeType   string  `json:"mime_type"`
+	ByteSize   int64   `json:"byte_size"`
+	FileName   string  `json:"file_name"`
+	Width      int32   `json:"width"`
+	Height     int32   `json:"height"`
+	DurationMS int32   `json:"duration_ms"`
+	Waveform   []int32 `json:"waveform"`
 }
 
 type attachedMessageJSON struct {
@@ -152,4 +154,50 @@ func TestStreamsCarryNoFiles(t *testing.T) {
 	agent.Post("/v1/agent/conversations/"+f.dmID+"/messages", map[string]any{
 		"stream": true, "attachments": []string{uploaded.Media.ID},
 	}).ExpectError(http.StatusUnprocessableEntity, "stream_with_attachments")
+}
+
+// A backend hears a voice note as a file with a length and a shape, and
+// can answer with one of its own.
+func TestAgentHearsAndSendsAVoiceNote(t *testing.T) {
+	f := setupChat(t)
+	me := f.srv.AsUser(t, f.owner)
+	recording := "\x00\x00\x00\x20ftypM4A \x00\x00\x00\x00M4A mp42isom" + strings.Repeat("\x00", 600)
+
+	var uploaded struct {
+		Media mediaJSON `json:"media"`
+	}
+	me.UploadRaw("/v1/client/media?name=question.m4a&duration_ms=4300&waveform=5,60,20&kind=audio",
+		[]byte(recording)).ExpectStatus(http.StatusCreated).Decode(&uploaded)
+	me.Post("/v1/client/conversations/"+f.dmID+"/messages", map[string]any{
+		"attachments": []string{uploaded.Media.ID},
+	}).ExpectStatus(http.StatusCreated)
+
+	agent := f.srv.AsAgent(t, f.secret)
+	var page struct {
+		Messages []attachedMessageJSON `json:"messages"`
+	}
+	agent.Get("/v1/agent/conversations/" + f.dmID + "/messages").ExpectStatus(http.StatusOK).Decode(&page)
+	if len(page.Messages) != 1 || len(page.Messages[0].Body.Attachments) != 1 {
+		t.Fatalf("agent sees %+v", page.Messages)
+	}
+	heard := page.Messages[0].Body.Attachments[0]
+	if heard.Kind != "audio" || heard.DurationMS != 4300 {
+		t.Errorf("agent heard %+v", heard)
+	}
+	if len(heard.Waveform) != 3 {
+		t.Errorf("waveform = %v", heard.Waveform)
+	}
+
+	// Answering in kind.
+	var spoken struct {
+		Media mediaJSON `json:"media"`
+	}
+	agent.UploadRaw("/v1/agent/media?name=answer.m4a&duration_ms=2100&kind=audio", []byte(recording)).
+		ExpectStatus(http.StatusCreated).Decode(&spoken)
+	if spoken.Media.Kind != "audio" {
+		t.Errorf("the agent's recording is %s", spoken.Media.Kind)
+	}
+	agent.Post("/v1/agent/conversations/"+f.dmID+"/messages", map[string]any{
+		"attachments": []string{spoken.Media.ID},
+	}).ExpectStatus(http.StatusCreated)
 }

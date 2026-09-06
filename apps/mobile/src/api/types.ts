@@ -48,6 +48,10 @@ export interface Attachment {
   width?: number;
   height?: number;
   has_thumbnail?: boolean;
+  // A recording or a video: how long it runs, and its loudness over time
+  // from 0 to 100, both from whoever recorded it.
+  duration_ms?: number;
+  waveform?: number[];
   local_uri?: string;
 }
 
@@ -61,6 +65,8 @@ export interface Media {
   width?: number;
   height?: number;
   has_thumbnail: boolean;
+  duration_ms?: number;
+  waveform?: number[];
   created_at: string;
 }
 

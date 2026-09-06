@@ -1,7 +1,7 @@
 -- name: CreateMedia :one
 INSERT INTO media (id, owner_kind, owner_id, kind, mime_type, byte_size, file_name,
-                   width, height, storage_key, thumb_key)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                   width, height, storage_key, thumb_key, duration_ms, waveform)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING *;
 
 -- name: GetMedia :one

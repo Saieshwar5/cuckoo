@@ -100,6 +100,28 @@ Our own send appears before it has left: the bubble draws the file from this
 device while it uploads. A failed send keeps what it already uploaded, so a
 retry finishes the message rather than sending the photo twice.
 
+## Voice notes
+
+The send button is a microphone when nothing is typed. Tap it and the
+composer becomes a recording bar — a red dot, a timer, live bars — with a
+send and a bin. Ten minutes is the limit, and a note that reaches it ends
+itself rather than being refused when the words are already spoken.
+
+The waveform is measured while recording (`src/media/record.ts`), ten times
+a second, and thinned to 56 bars that travel with the file. Nothing decodes
+audio to draw a bubble: a chat full of voice notes scrolls like a chat full
+of words. How long a note is comes from the number of samples taken, not
+from the recorder's clock, because not every platform reports one.
+
+Playback is `src/components/chat/VoiceNote.tsx`: play, the bars filling as
+it goes, a tap anywhere on them to seek, and 1x / 1.5x / 2x — the only
+speeds anyone wants on speech.
+
+Holding the microphone to talk and letting go to send is deliberately not
+here. Telling a hold from a tap means timing the release against the
+recorder's clock, which only moves when the microphone is next polled, so
+the same gesture read as a hold one time and a tap the next.
+
 ## Agents
 
 The Agents tab lists the agents you own, live: `AgentsProvider` keeps

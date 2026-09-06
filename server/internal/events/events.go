@@ -79,14 +79,16 @@ type Body struct {
 // media endpoint by media_id; everything needed to draw it before they
 // arrive is here.
 type Attachment struct {
-	MediaID      string `json:"media_id"`
-	Kind         string `json:"kind"`
-	MimeType     string `json:"mime_type"`
-	ByteSize     int64  `json:"byte_size"`
-	FileName     string `json:"file_name"`
-	Width        int32  `json:"width,omitempty"`
-	Height       int32  `json:"height,omitempty"`
-	HasThumbnail bool   `json:"has_thumbnail,omitempty"`
+	MediaID      string  `json:"media_id"`
+	Kind         string  `json:"kind"`
+	MimeType     string  `json:"mime_type"`
+	ByteSize     int64   `json:"byte_size"`
+	FileName     string  `json:"file_name"`
+	Width        int32   `json:"width,omitempty"`
+	Height       int32   `json:"height,omitempty"`
+	HasThumbnail bool    `json:"has_thumbnail,omitempty"`
+	DurationMS   int32   `json:"duration_ms,omitempty"`
+	Waveform     []int32 `json:"waveform,omitempty"`
 }
 
 // Button is a choice offered to a person.
@@ -152,6 +154,8 @@ func AttachmentsOf(atts []conversations.Attachment) []Attachment {
 			Width:        a.Width,
 			Height:       a.Height,
 			HasThumbnail: a.HasThumbnail,
+			DurationMS:   a.DurationMS,
+			Waveform:     a.Waveform,
 		})
 	}
 	return out

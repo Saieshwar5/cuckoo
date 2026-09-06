@@ -3,6 +3,8 @@ import type { Media, Message, Page } from '@/api/types';
 import { ChatController } from '@/chat/controller';
 import { formatBytes } from '@/media/format';
 import { kindOf, type PickedFile } from '@/media/pick';
+import { shrink } from '@/media/waveform';
+import { formatDuration } from '@/util/time';
 
 import { FakeRealtime, flush } from './fakes';
 
@@ -142,5 +144,72 @@ describe('sending files', () => {
     // The photo was already on the hub; the retry only sent the message.
     expect(uploads).toBe(1);
     expect(controller.getSnapshot().messages[0]?.body.attachments?.[0]?.media_id).toBe('med_1');
+  });
+});
+
+describe('waveform', () => {
+  it('reduces however many samples were taken to the bars a bubble draws', () => {
+    // A minute of speech sampled ten times a second, thinned to 56 bars.
+    const long = Array.from({ length: 600 }, (_, i) => (i < 300 ? 0.2 : 0.8));
+    const bars = shrink(long, 56);
+    expect(bars).toHaveLength(56);
+    expect(bars[0]).toBe(20);
+    expect(bars[55]).toBe(80);
+    // Every bar is a whole number a bubble can draw against a fixed height.
+    expect(bars.every((b) => Number.isInteger(b) && b >= 0 && b <= 100)).toBe(true);
+  });
+
+  it('keeps a short note usable: one bar per sample, and nothing from nothing', () => {
+    expect(shrink([1], 4)).toEqual([100, 100, 100, 100]);
+    expect(shrink([], 8)).toEqual([]);
+  });
+});
+
+describe('formatDuration', () => {
+  it('reads the way a voice note is labelled', () => {
+    expect(formatDuration(0)).toBe('0:00');
+    expect(formatDuration(8.2)).toBe('0:08');
+    expect(formatDuration(75)).toBe('1:15');
+    expect(formatDuration(-1)).toBe('0:00');
+  });
+});
+
+describe('sending a voice note', () => {
+  it('tells the hub how long it is and what it looked like', async () => {
+    const uploads: unknown[] = [];
+    const api = {
+      listMessages: async () => emptyPage,
+      uploadMedia: async (file: unknown) => {
+        uploads.push(file);
+        return { ...uploaded('med_9'), kind: 'audio' as const };
+      },
+      sendMessage: async () => sentMessage(['med_9']),
+    } as unknown as Api;
+
+    const controller = new ChatController(api, new FakeRealtime(), 'cnv_1', 'usr_1');
+    controller.start();
+    await flush();
+
+    const note: PickedFile = {
+      uri: 'file:///tmp/voice.m4a',
+      name: 'voice.m4a',
+      mimeType: 'audio/mp4',
+      kind: 'audio',
+      byteSize: 0,
+      durationMs: 8200,
+      waveform: [3, 40, 88],
+    };
+    await controller.send({ text: '', files: [note] });
+
+    expect(uploads).toEqual([
+      {
+        uri: 'file:///tmp/voice.m4a',
+        name: 'voice.m4a',
+        mimeType: 'audio/mp4',
+        durationMs: 8200,
+        waveform: [3, 40, 88],
+        audio: true,
+      },
+    ]);
   });
 });

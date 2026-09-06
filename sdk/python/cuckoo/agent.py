@@ -302,21 +302,41 @@ class Agent:
 
     # -- files ------------------------------------------------------------
 
-    async def upload(self, path: str | os.PathLike[str]) -> Attachment:
+    async def upload(
+        self,
+        path: str | os.PathLike[str],
+        *,
+        duration_ms: int = 0,
+        waveform: list[int] | None = None,
+        audio: bool = False,
+    ) -> Attachment:
         """Put a file on the hub, ready to be sent.
 
         Sending is a separate step, so a slow upload does not hold a message
         open. An upload nobody sends is removed after a day.
+
+        For a recording, ``duration_ms`` and ``waveform`` (0 to 100, a few
+        dozen values) are what the app draws the bubble from without
+        decoding any audio. ``audio=True`` says a WebM, Ogg or MP4 file is a
+        recording rather than a video, which nothing can tell from the bytes.
         """
         if self._http is None:
             raise RuntimeError("upload is only available while the agent is running")
         file = Path(path)
         content_type = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
+        params: dict[str, str] = {}
+        if duration_ms:
+            params["duration_ms"] = str(int(duration_ms))
+        if waveform:
+            params["waveform"] = ",".join(str(int(n)) for n in waveform)
+        if audio or content_type.startswith("audio/"):
+            params["kind"] = "audio"
         # Read off the event loop: a file on a disk blocks, and a backend
         # answering other conversations should not stop while this one reads.
         data = await asyncio.to_thread(file.read_bytes)
         response = await self._http.post(
             "/v1/agent/media",
+            params=params or None,
             files={"file": (file.name, data, content_type)},
             timeout=None,
         )

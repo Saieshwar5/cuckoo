@@ -5,11 +5,14 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'rea
 
 import type { Attachment } from '@/api/types';
 import { t } from '@/i18n';
+import { formatDuration } from '@/util/time';
 import { formatBytes } from '@/media/format';
 import { openAttachment } from '@/media/save';
 import { useMediaSource } from '@/media/source';
 import { useSession } from '@/session/SessionProvider';
 import { radius, spacing, type, useTheme, type Palette } from '@/theme';
+
+import { VoiceNote } from './VoiceNote';
 
 // What a message carries, drawn inside its bubble.
 //
@@ -34,13 +37,20 @@ export function Attachments({ attachments, mine, sending }: Props) {
   const { colors } = useTheme();
   return (
     <View style={styles.list}>
-      {attachments.map((a, i) =>
-        a.kind === 'image' ? (
-          <Photo key={a.media_id || i} attachment={a} sending={sending} colors={colors} />
-        ) : (
-          <FileCard key={a.media_id || i} attachment={a} mine={mine} colors={colors} />
-        ),
-      )}
+      {attachments.map((a, i) => {
+        switch (a.kind) {
+          case 'image':
+            return <Photo key={a.media_id || i} attachment={a} sending={sending} colors={colors} />;
+          case 'audio':
+            return (
+              <VoiceNote key={a.media_id || i} attachment={a} mine={mine} sending={sending} colors={colors} />
+            );
+          case 'video':
+            return <VideoCard key={a.media_id || i} attachment={a} sending={sending} colors={colors} />;
+          default:
+            return <FileCard key={a.media_id || i} attachment={a} mine={mine} colors={colors} />;
+        }
+      })}
     </View>
   );
 }
@@ -94,6 +104,43 @@ function Photo({
   );
 }
 
+// A video is a black card with a triangle on it and its length in the
+// corner. There is no still frame from inside it: pulling one out means
+// decoding video, which the hub will not do to a stranger's file.
+function VideoCard({
+  attachment,
+  sending,
+  colors,
+}: {
+  attachment: Attachment;
+  sending: boolean;
+  colors: Palette;
+}) {
+  const router = useRouter();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={attachment.file_name}
+      disabled={sending}
+      onPress={() =>
+        router.push({
+          pathname: '/media/[id]',
+          params: { id: attachment.media_id, name: attachment.file_name, kind: 'video' },
+        })
+      }
+      testID={`video-${attachment.media_id}`}
+      style={styles.video}
+    >
+      <View style={[styles.playDisc, { backgroundColor: colors.surfaceStrong }]}>
+        <Ionicons name="play" size={22} color={colors.text} style={styles.nudge} />
+      </View>
+      {attachment.duration_ms ? (
+        <Text style={styles.length}>{formatDuration(attachment.duration_ms / 1000)}</Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
 function FileCard({ attachment, mine, colors }: { attachment: Attachment; mine: boolean; colors: Palette }) {
   const { api, token } = useSession();
   const ink = mine ? colors.bubbleTextMine : colors.bubbleTextTheirs;
@@ -136,6 +183,36 @@ function iconFor(kind: Attachment['kind']): keyof typeof Ionicons.glyphMap {
 const styles = StyleSheet.create({
   list: { gap: 3, marginBottom: spacing.xs },
   photo: { borderRadius: radius.sm, overflow: 'hidden' },
+  video: {
+    width: PHOTO_WIDTH,
+    height: Math.round((PHOTO_WIDTH * 9) / 16),
+    // Black in either theme: a video plate is what a film is watched
+    // against, not part of the bubble it sits in.
+    backgroundColor: '#0B0B0B',
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playDisc: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nudge: { marginLeft: 3 },
+  length: {
+    ...type.caption,
+    color: '#F2F2F2',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    position: 'absolute',
+    right: spacing.sm,
+    bottom: spacing.sm,
+    borderRadius: radius.sm,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
   image: { width: '100%', height: '100%' },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   veil: {

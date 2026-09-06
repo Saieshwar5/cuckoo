@@ -33,6 +33,10 @@ export interface PickedFile {
   byteSize: number;
   width?: number;
   height?: number;
+  // For a recording: how long it runs and what it looked like, measured
+  // while it was being made. See src/media/record.ts.
+  durationMs?: number;
+  waveform?: number[];
 }
 
 export function kindOf(mimeType: string): MediaKind {

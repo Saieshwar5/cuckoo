@@ -24,6 +24,8 @@ type mediaResponse struct {
 	Width        int32     `json:"width,omitempty"`
 	Height       int32     `json:"height,omitempty"`
 	HasThumbnail bool      `json:"has_thumbnail"`
+	DurationMS   int32     `json:"duration_ms,omitempty"`
+	Waveform     []int32   `json:"waveform,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -41,6 +43,8 @@ func newMediaResponse(f media.File) mediaResponse {
 		Width:        f.Width,
 		Height:       f.Height,
 		HasThumbnail: f.HasThumbnail,
+		DurationMS:   f.DurationMS,
+		Waveform:     f.Waveform,
 		CreatedAt:    f.CreatedAt,
 	}
 }
@@ -73,7 +77,12 @@ func (h *Handler) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, err)
 		return
 	}
-	file, err := h.media.Upload(r.Context(), media.Owner{Kind: media.OwnerAgent, ID: agentID}, name, body)
+	meta, err := media.MetaFromQuery(r.URL.Query())
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	file, err := h.media.Upload(r.Context(), media.Owner{Kind: media.OwnerAgent, ID: agentID}, name, meta, body)
 	if err != nil {
 		httpx.Error(w, r, err)
 		return

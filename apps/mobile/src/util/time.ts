@@ -48,3 +48,10 @@ export function formatDay(
   if (sameDay(iso, yesterday.toISOString())) return labels.yesterday;
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 }
+
+// formatDuration is how long a recording or a video runs, as it is
+// labelled on one: minutes and seconds, counting from zero.
+export function formatDuration(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}

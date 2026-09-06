@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"image/png"
 	"io"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -71,7 +72,7 @@ func TestUploadClassifiesByContentNotName(t *testing.T) {
 	ctx := context.Background()
 	svc, _, owner := newService(t)
 
-	picture, err := svc.Upload(ctx, owner, "notes.txt", bytes.NewReader(pngBytes(t, 40, 30)))
+	picture, err := svc.Upload(ctx, owner, "notes.txt", media.Meta{}, bytes.NewReader(pngBytes(t, 40, 30)))
 	if err != nil {
 		t.Fatalf("upload picture: %v", err)
 	}
@@ -82,7 +83,7 @@ func TestUploadClassifiesByContentNotName(t *testing.T) {
 		t.Errorf("file name = %q, want the name kept as given", picture.FileName)
 	}
 
-	document, err := svc.Upload(ctx, owner, "photo.jpg", strings.NewReader("dear sir, please find attached"))
+	document, err := svc.Upload(ctx, owner, "photo.jpg", media.Meta{}, strings.NewReader("dear sir, please find attached"))
 	if err != nil {
 		t.Fatalf("upload document: %v", err)
 	}
@@ -98,7 +99,7 @@ func TestUploadMeasuresAndShrinksPictures(t *testing.T) {
 	svc, _, owner := newService(t)
 
 	original := pngBytes(t, 1200, 800)
-	file, err := svc.Upload(ctx, owner, "holiday.png", bytes.NewReader(original))
+	file, err := svc.Upload(ctx, owner, "holiday.png", media.Meta{}, bytes.NewReader(original))
 	if err != nil {
 		t.Fatalf("Upload: %v", err)
 	}
@@ -146,7 +147,7 @@ func TestSmallPicturesKeepTheirSize(t *testing.T) {
 	ctx := context.Background()
 	svc, _, owner := newService(t)
 
-	file, err := svc.Upload(ctx, owner, "tiny.png", bytes.NewReader(pngBytes(t, 64, 64)))
+	file, err := svc.Upload(ctx, owner, "tiny.png", media.Meta{}, bytes.NewReader(pngBytes(t, 64, 64)))
 	if err != nil {
 		t.Fatalf("Upload: %v", err)
 	}
@@ -167,7 +168,7 @@ func TestUploadRefusesEmptyAndOversized(t *testing.T) {
 	ctx := context.Background()
 	svc, _, owner := newService(t)
 
-	if _, err := svc.Upload(ctx, owner, "nothing.txt", strings.NewReader("")); code(t, err) != "empty_file" {
+	if _, err := svc.Upload(ctx, owner, "nothing.txt", media.Meta{}, strings.NewReader("")); code(t, err) != "empty_file" {
 		t.Errorf("empty upload = %v, want empty_file", err)
 	}
 
@@ -175,7 +176,7 @@ func TestUploadRefusesEmptyAndOversized(t *testing.T) {
 	// reader is generated, so the test does not hold the whole thing.
 	header := pngBytes(t, 8, 8)
 	oversized := io.MultiReader(bytes.NewReader(header), io.LimitReader(zeros{}, media.MaxImageBytes))
-	if _, err := svc.Upload(ctx, owner, "huge.png", oversized); code(t, err) != "file_too_large" {
+	if _, err := svc.Upload(ctx, owner, "huge.png", media.Meta{}, oversized); code(t, err) != "file_too_large" {
 		t.Errorf("oversized upload = %v, want file_too_large", err)
 	}
 }
@@ -187,7 +188,7 @@ func TestUploadsArePrivateUntilTheyAreSent(t *testing.T) {
 	svc, db, owner := newService(t)
 	stranger := testutil.CreateUser(t, db)
 
-	file, err := svc.Upload(ctx, owner, "receipt.pdf", strings.NewReader("%PDF-1.7 a receipt"))
+	file, err := svc.Upload(ctx, owner, "receipt.pdf", media.Meta{}, strings.NewReader("%PDF-1.7 a receipt"))
 	if err != nil {
 		t.Fatalf("Upload: %v", err)
 	}
@@ -205,7 +206,7 @@ func TestThereIsNoThumbnailOfADocument(t *testing.T) {
 	ctx := context.Background()
 	svc, _, owner := newService(t)
 
-	file, err := svc.Upload(ctx, owner, "report.pdf", strings.NewReader("%PDF-1.7 the report"))
+	file, err := svc.Upload(ctx, owner, "report.pdf", media.Meta{}, strings.NewReader("%PDF-1.7 the report"))
 	if err != nil {
 		t.Fatalf("Upload: %v", err)
 	}
@@ -223,7 +224,7 @@ func TestSweepRemovesUploadsNobodySent(t *testing.T) {
 	ctx := context.Background()
 	svc, _, owner := newService(t)
 
-	file, err := svc.Upload(ctx, owner, "abandoned.png", bytes.NewReader(pngBytes(t, 20, 20)))
+	file, err := svc.Upload(ctx, owner, "abandoned.png", media.Meta{}, bytes.NewReader(pngBytes(t, 20, 20)))
 	if err != nil {
 		t.Fatalf("Upload: %v", err)
 	}
@@ -248,4 +249,100 @@ func (zeros) Read(p []byte) (int, error) {
 		p[i] = 0
 	}
 	return len(p), nil
+}
+
+// A voice note: bytes the hub will not decode, and two numbers it takes
+// from the device that recorded them.
+func TestVoiceNoteCarriesItsLengthAndShape(t *testing.T) {
+	ctx := context.Background()
+	svc, _, owner := newService(t)
+
+	meta := media.Meta{DurationMS: 8200, Waveform: []int32{3, 40, 88, 12}, Audio: true}
+	file, err := svc.Upload(ctx, owner, "note.m4a", meta, strings.NewReader(m4aBytes()))
+	if err != nil {
+		t.Fatalf("Upload: %v", err)
+	}
+	if file.Kind != media.KindAudio {
+		t.Errorf("kind = %s, want audio", file.Kind)
+	}
+	if file.DurationMS != 8200 {
+		t.Errorf("duration = %d, want 8200", file.DurationMS)
+	}
+	if len(file.Waveform) != 4 || file.Waveform[2] != 88 {
+		t.Errorf("waveform = %v", file.Waveform)
+	}
+}
+
+// A container that holds either may be declared a recording — a browser
+// records speech into WebM, which is a video container. Nothing else can
+// be declared: a claim only ever turns a video into audio.
+func TestOnlyAmbiguousContainersMayBeCalledAudio(t *testing.T) {
+	ctx := context.Background()
+	svc, _, owner := newService(t)
+
+	webm, err := svc.Upload(ctx, owner, "note.webm", media.Meta{Audio: true, DurationMS: 3000},
+		strings.NewReader(webmBytes()))
+	if err != nil {
+		t.Fatalf("upload webm: %v", err)
+	}
+	if webm.Kind != media.KindAudio {
+		t.Errorf("kind = %s, want audio: a browser's voice note is WebM", webm.Kind)
+	}
+
+	// A picture called a recording is still a picture, and keeps neither
+	// the duration nor the waveform, which mean nothing on it.
+	picture, err := svc.Upload(ctx, owner, "photo.png",
+		media.Meta{Audio: true, DurationMS: 5000, Waveform: []int32{9, 9}},
+		bytes.NewReader(pngBytes(t, 12, 12)))
+	if err != nil {
+		t.Fatalf("upload picture: %v", err)
+	}
+	if picture.Kind != media.KindImage {
+		t.Errorf("kind = %s, want image", picture.Kind)
+	}
+	if picture.DurationMS != 0 || picture.Waveform != nil {
+		t.Errorf("a picture kept %d ms and %v", picture.DurationMS, picture.Waveform)
+	}
+}
+
+func TestMetaFromQuery(t *testing.T) {
+	meta, err := media.MetaFromQuery(url.Values{
+		"duration_ms": {"8200"},
+		"waveform":    {"0,50, 100"},
+		"kind":        {"audio"},
+	})
+	if err != nil {
+		t.Fatalf("MetaFromQuery: %v", err)
+	}
+	if meta.DurationMS != 8200 || !meta.Audio {
+		t.Errorf("meta = %+v", meta)
+	}
+	if len(meta.Waveform) != 3 || meta.Waveform[2] != 100 {
+		t.Errorf("waveform = %v", meta.Waveform)
+	}
+
+	for name, q := range map[string]url.Values{
+		"not a number":               {"duration_ms": {"a while"}},
+		"negative":                   {"duration_ms": {"-1"}},
+		"longer than ten minutes":    {"duration_ms": {"600001"}},
+		"a bar out of range":         {"waveform": {"0,101"}},
+		"a bar that is not a number": {"waveform": {"0,loud"}},
+		"too many bars":              {"waveform": {strings.Repeat("1,", 64) + "1"}},
+	} {
+		if _, err := media.MetaFromQuery(q); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}
+
+// m4aBytes is the header of a recording from a phone, which is what the
+// sniffer looks at.
+func m4aBytes() string {
+	return "\x00\x00\x00\x20ftypM4A \x00\x00\x00\x00M4A mp42isom" + strings.Repeat("\x00", 512)
+}
+
+// webmBytes is the header of a recording from a browser: a WebM container,
+// which holds sound and pictures alike.
+func webmBytes() string {
+	return "\x1a\x45\xdf\xa3\x01\x00\x00\x00\x00\x00\x00\x1f" + strings.Repeat("\x00", 512)
 }

@@ -5,8 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { ChatMessage } from '@/chat/store';
 import { t } from '@/i18n';
+import { formatDuration } from '@/util/time';
 import { formatBytes } from '@/media/format';
 import { MAX_FILES, pickDocuments, pickPhotos, takePhoto, type PickedFile } from '@/media/pick';
+import { useRecorder } from '@/media/record';
 import { inputReset, radius, sizes, spacing, type, useTheme } from '@/theme';
 
 import { ActionSheet } from '../ActionSheet';
@@ -28,6 +30,7 @@ export function Composer({ replyTo, agentName, onCancelReply, onSend }: Props) {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<PickedFile[]>([]);
   const [picking, setPicking] = useState(false);
+  const recorder = useRecorder();
   // A photo with nothing written under it is a message; an empty one is not.
   const ready = text.trim().length > 0 || files.length > 0;
 
@@ -41,6 +44,20 @@ export function Composer({ replyTo, agentName, onCancelReply, onSend }: Props) {
   const add = async (pick: () => Promise<PickedFile[]>) => {
     const picked = await pick();
     if (picked.length) setFiles((current) => [...current, ...picked].slice(0, MAX_FILES));
+  };
+
+  // The microphone starts a recording, and the bar it becomes is what ends
+  // one: send it, or throw it away.
+  //
+  // Holding to speak and letting go to send — the walkie-talkie — is what a
+  // phone wants, and it is deliberately not here. Telling a hold from a tap
+  // means timing the release against the recorder's clock, which only moves
+  // when the microphone is next polled, so the same gesture reads as a hold
+  // one time and a tap the next. One gesture that always works beats two
+  // that sometimes do.
+  const sendRecording = async () => {
+    const note = await recorder.stop();
+    if (note) onSend('', [note]);
   };
 
   return (
@@ -96,51 +113,102 @@ export function Composer({ replyTo, agentName, onCancelReply, onSend }: Props) {
           ))}
         </ScrollView>
       ) : null}
-      <View style={styles.row}>
-        <IconButton
-          icon="add-circle-outline"
-          label={t('chat.attach')}
-          size={26}
-          testID="attach"
-          onPress={() => setPicking(true)}
-        />
-        <View style={[styles.pill, { backgroundColor: colors.surface }]}>
-          <TextInput
-            accessibilityLabel={t('chat.placeholder')}
-            testID="composer"
-            value={text}
-            onChangeText={setText}
-            placeholder={t('chat.placeholder')}
-            placeholderTextColor={colors.textSecondary}
-            selectionColor={colors.accent}
-            multiline
-            onKeyPress={(e) => {
-              if (Platform.OS !== 'web') return;
-              const key = e.nativeEvent as unknown as { key: string; shiftKey?: boolean };
-              if (key.key === 'Enter' && !key.shiftKey) {
-                (e as unknown as { preventDefault?: () => void }).preventDefault?.();
-                submit();
-              }
-            }}
-            style={[styles.input, inputReset, { color: colors.text }]}
+      {recorder.recording ? (
+        <View style={styles.row} testID="recording">
+          <IconButton
+            icon="trash-outline"
+            label={t('chat.voice.cancel')}
+            size={24}
+            testID="recording-cancel"
+            onPress={() => void recorder.cancel()}
           />
+          <View style={[styles.pill, styles.recording, { backgroundColor: colors.surface }]}>
+            <View style={[styles.dot, { backgroundColor: colors.danger }]} />
+            <Text style={[styles.elapsed, { color: colors.text }]}>
+              {formatDuration(recorder.elapsedMs / 1000)}
+            </Text>
+            <View style={styles.live}>
+              {recorder.samples.slice(-28).map((value, i) => (
+                <View
+                  key={i}
+                  style={[styles.liveBar, { height: 3 + 19 * value, backgroundColor: colors.textSecondary }]}
+                />
+              ))}
+            </View>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.send')}
+            onPress={() => void sendRecording()}
+            testID="recording-send"
+            style={[styles.send, { backgroundColor: colors.accent }]}
+          >
+            <Ionicons name="send" size={20} color={colors.onAccent} />
+          </Pressable>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.send')}
-          accessibilityState={{ disabled: !ready }}
-          disabled={!ready}
-          onPress={submit}
-          testID="send"
-          style={({ pressed }) => [
-            styles.send,
-            { backgroundColor: ready ? colors.accent : colors.surfaceStrong },
-            pressed && ready && styles.pressed,
-          ]}
-        >
-          <Ionicons name="send" size={20} color={ready ? colors.onAccent : colors.textSecondary} />
-        </Pressable>
-      </View>
+      ) : (
+        <View style={styles.row}>
+          <IconButton
+            icon="add-circle-outline"
+            label={t('chat.attach')}
+            size={26}
+            testID="attach"
+            onPress={() => setPicking(true)}
+          />
+          <View style={[styles.pill, { backgroundColor: colors.surface }]}>
+            <TextInput
+              accessibilityLabel={t('chat.placeholder')}
+              testID="composer"
+              value={text}
+              onChangeText={setText}
+              placeholder={t('chat.placeholder')}
+              placeholderTextColor={colors.textSecondary}
+              selectionColor={colors.accent}
+              multiline
+              onKeyPress={(e) => {
+                if (Platform.OS !== 'web') return;
+                const key = e.nativeEvent as unknown as { key: string; shiftKey?: boolean };
+                if (key.key === 'Enter' && !key.shiftKey) {
+                  (e as unknown as { preventDefault?: () => void }).preventDefault?.();
+                  submit();
+                }
+              }}
+              style={[styles.input, inputReset, { color: colors.text }]}
+            />
+          </View>
+          {ready ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('chat.send')}
+              onPress={submit}
+              testID="send"
+              style={({ pressed }) => [
+                styles.send,
+                { backgroundColor: colors.accent },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons name="send" size={20} color={colors.onAccent} />
+            </Pressable>
+          ) : (
+            // Nothing written: the button is a microphone, because the thing
+            // most often sent with no words is a voice note.
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('chat.voice.record')}
+              onPress={() => void recorder.start()}
+              testID="record"
+              style={({ pressed }) => [
+                styles.send,
+                { backgroundColor: colors.surfaceStrong },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons name="mic" size={20} color={colors.text} />
+            </Pressable>
+          )}
+        </View>
+      )}
       <ActionSheet
         visible={picking}
         onClose={() => setPicking(false)}
@@ -200,6 +268,11 @@ const styles = StyleSheet.create({
   chipBody: { flexShrink: 1, gap: 1 },
   chipName: { ...type.caption, fontWeight: '600' },
   chipSize: type.caption,
+  recording: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dot: { width: 9, height: 9, borderRadius: radius.pill },
+  elapsed: { ...type.secondary, fontVariant: ['tabular-nums'] },
+  live: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2 },
+  liveBar: { width: 3, borderRadius: 1.5 },
   pill: {
     flex: 1,
     minHeight: sizes.control,

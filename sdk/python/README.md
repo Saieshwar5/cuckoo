@@ -29,6 +29,22 @@ async def handle(msg, conv):
             await conv.send("Got your photo.", attachments=[path])
 ```
 
+A voice note arrives with what it needs to be drawn and heard:
+
+```python
+if file.is_audio:
+    print(file.seconds, file.waveform)   # 8.2, (3, 40, 88, ...)
+    speech = await file.download()
+```
+
+and goes back the same way, since nothing downstream can work either out
+from the bytes:
+
+```python
+note = await agent.upload("reply.m4a", duration_ms=4100, waveform=bars, audio=True)
+await conv.send(attachments=[note])
+```
+
 `conv.send` uploads anything in `attachments` that is a path, then sends one
 message naming what was uploaded — so a message carrying files needs no text,
 and the text, when there is any, is their caption.

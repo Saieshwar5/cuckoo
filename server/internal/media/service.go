@@ -73,7 +73,7 @@ func New(st Store, b blobs.Store, opts ...Option) *Service {
 // What the file is, is read from the bytes. The name is carried along for
 // people to read and for the download to be saved under, and is never used
 // to decide anything.
-func (s *Service) Upload(ctx context.Context, owner Owner, name string, r io.Reader) (File, error) {
+func (s *Service) Upload(ctx context.Context, owner Owner, name string, meta Meta, r io.Reader) (File, error) {
 	if err := s.allow(ctx, owner); err != nil {
 		return File{}, err
 	}
@@ -92,7 +92,8 @@ func (s *Service) Upload(ctx context.Context, owner Owner, name string, r io.Rea
 	header = header[:n]
 
 	mimeType := sniff(header)
-	kind := kindOf(mimeType)
+	kind := resolveKind(mimeType, meta)
+	meta = meta.forKind(kind)
 	id := domain.NewID()
 	key := storageKey(id, VariantOriginal)
 	body := io.MultiReader(bytes.NewReader(header), r)
@@ -128,6 +129,8 @@ func (s *Service) Upload(ctx context.Context, owner Owner, name string, r io.Rea
 		Height:     height,
 		StorageKey: key,
 		ThumbKey:   thumbKey,
+		DurationMs: meta.DurationMS,
+		Waveform:   meta.Waveform,
 	})
 	if err != nil {
 		// The row is the record; bytes with no row are unreachable litter.

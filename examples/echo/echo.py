@@ -33,23 +33,34 @@ async def handle(msg, conv):
     # them. Here everything is downloaded and sent straight back, which is
     # the smallest honest proof that both directions work.
     with tempfile.TemporaryDirectory() as tmp:
-        paths = []
+        sent = []
         for att in msg.attachments:
             path = await att.save(Path(tmp))
             log.info(
-                "got %s (%s, %d bytes) -> %s",
+                "got %s (%s, %d bytes, %.1fs) -> %s",
                 att.file_name,
                 att.kind,
                 att.byte_size,
+                att.seconds,
                 path,
             )
-            paths.append(path)
+            # A voice note goes back as a voice note: its length and its
+            # waveform travel with it, because nothing downstream can work
+            # them out from the bytes.
+            sent.append(
+                await agent.upload(
+                    path,
+                    duration_ms=att.duration_ms,
+                    waveform=list(att.waveform),
+                    audio=att.is_audio,
+                )
+            )
         again = (
             "Here it is again."
-            if len(paths) == 1
-            else f"Here are your {len(paths)} files again."
+            if len(sent) == 1
+            else f"Here are your {len(sent)} files again."
         )
-        await conv.send(again, attachments=paths)
+        await conv.send(again, attachments=sent)
 
 
 if __name__ == "__main__":
