@@ -9,6 +9,7 @@ package client
 import (
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Saieshwar5/cuckoo/server/internal/apikeys"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
@@ -21,12 +22,16 @@ type Handler struct {
 	conversations *conversations.Service
 	hub           *realtime.Hub
 	pairing       *pairing.Service
+	apiKeys       *apikeys.Service
 }
 
 // New builds the client API handler.
 func New(userService *users.Service, conversationService *conversations.Service, hub *realtime.Hub,
-	pairingService *pairing.Service) *Handler {
-	return &Handler{users: userService, conversations: conversationService, hub: hub, pairing: pairingService}
+	pairingService *pairing.Service, apiKeyService *apikeys.Service) *Handler {
+	return &Handler{
+		users: userService, conversations: conversationService, hub: hub,
+		pairing: pairingService, apiKeys: apiKeyService,
+	}
 }
 
 // Routes returns the client API routes, to be mounted behind authentication.
@@ -51,6 +56,13 @@ func (h *Handler) Routes() chi.Router {
 	r.Get("/contacts", h.listContacts)
 	r.Post("/agents/{id}/block", h.blockAgent)
 	r.Delete("/agents/{id}/block", h.unblockAgent)
+
+	// API keys: the credential a person's own systems call the management
+	// API with. Issued here, behind a person's own credential, so a key can
+	// never mint another.
+	r.Post("/api-keys", h.createAPIKey)
+	r.Get("/api-keys", h.listAPIKeys)
+	r.Delete("/api-keys/{id}", h.revokeAPIKey)
 
 	return r
 }

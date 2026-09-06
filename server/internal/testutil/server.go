@@ -18,6 +18,7 @@ import (
 
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/api"
+	"github.com/Saieshwar5/cuckoo/server/internal/apikeys"
 	"github.com/Saieshwar5/cuckoo/server/internal/auth"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
@@ -88,16 +89,20 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 		conversations.WithStreams(NewStreamStore(t)))
 	userService := users.New(db)
 	pairingService := pairing.New(db, agentService, conversationService, userService, "https://hub.test")
+	apiKeyService := apikeys.New(db)
+	userAuth := auth.NewDevOrSession(auth.NewDev(), auth.NewSession(signinService))
 	handler := api.NewRouter(api.Deps{
 		Logger:        quiet,
-		UserAuth:      auth.NewDevOrSession(auth.NewDev(), auth.NewSession(signinService)),
+		UserAuth:      userAuth,
 		AgentAuth:     auth.NewBinding(agentService),
+		MgmtAuth:      auth.NewKeyOrUser(apiKeyService, userAuth),
 		Users:         userService,
 		SignIn:        signinService,
 		Agents:        agentService,
 		Conversations: conversationService,
 		Delivery:      delivery.New(db, conversationService),
 		Pairing:       pairingService,
+		APIKeys:       apiKeyService,
 		Hub:           hub,
 		Bus:           bus,
 		CORSOrigins:   []string{"*"},
@@ -108,6 +113,13 @@ func NewServer(t *testing.T, db *store.Store) *Server {
 	t.Cleanup(srv.Close)
 
 	return &Server{Server: srv, Store: db, Conversations: conversationService, Pairing: pairingService, Mail: mailer}
+}
+
+// AsKey returns a client authenticated with an API key, as a company's own
+// server is.
+func (s *Server) AsKey(t *testing.T, key string) *Client {
+	t.Helper()
+	return s.AsSession(t, key)
 }
 
 // AsSession returns a client authenticated with a session token, as the app

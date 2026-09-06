@@ -62,7 +62,15 @@ export default function AgentsScreen() {
       <Header
         title={t('agents.title')}
         actions={
-          <IconButton icon="log-out-outline" label={t('settings.signout')} onPress={() => void signOut()} />
+          <>
+            <IconButton
+              icon="key-outline"
+              label={t('keys.title')}
+              onPress={() => router.push('/api-keys')}
+              testID="open-api-keys"
+            />
+            <IconButton icon="log-out-outline" label={t('settings.signout')} onPress={() => void signOut()} />
+          </>
         }
       />
       <SectionList

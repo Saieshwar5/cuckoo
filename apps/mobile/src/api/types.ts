@@ -139,6 +139,21 @@ export interface PairToken {
   revoked_at: string | null;
 }
 
+// An API key: the credential a person's own systems call the management
+// API with. The key itself appears only in the response that made it.
+export interface ApiKey {
+  id: string;
+  name: string;
+  last_used_at: string | null;
+  created_at: string;
+  revoked_at: string | null;
+}
+
+export interface MintedApiKey {
+  api_key: ApiKey;
+  key: string;
+}
+
 // A freshly minted token: the only time the code and the picture exist.
 export interface MintedToken {
   token: PairToken;

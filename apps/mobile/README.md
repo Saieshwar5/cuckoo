@@ -92,6 +92,13 @@ webhook, generate the secret (shown once), copy the three-line SDK snippet
 with the secret and this hub's address filled in, and watch the status
 line flip to Connected when the code speaks.
 
+## API keys
+
+The key icon on the Agents tab opens `app/api-keys.tsx`: create a key
+with a name, see it once with a copy button, watch when each was last
+used, and revoke. These routes live on the client API, behind the
+person's own sign-in, so a key can never make another key.
+
 ## Handing an agent out, and taking one in
 
 An owner's profile has **Share**: it mints one static code for the agent

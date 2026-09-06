@@ -20,6 +20,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/mgmt"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/middleware"
+	"github.com/Saieshwar5/cuckoo/server/internal/apikeys"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/delivery"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
@@ -41,6 +42,9 @@ type Deps struct {
 	// below accepts exactly one of them.
 	UserAuth  middleware.Authenticator
 	AgentAuth middleware.Authenticator
+	// MgmtAuth identifies an agent's owner on the management API: a person
+	// signed in on their phone, or a server holding that person's API key.
+	MgmtAuth middleware.Authenticator
 
 	Users         *users.Service
 	SignIn        *signin.Service
@@ -48,6 +52,7 @@ type Deps struct {
 	Conversations *conversations.Service
 	Delivery      *delivery.Service
 	Pairing       *pairing.Service
+	APIKeys       *apikeys.Service
 	Hub           *realtime.Hub
 	Bus           realtime.Publisher
 	// CORSOrigins are the browser origins allowed to call the API; empty
@@ -93,14 +98,15 @@ func NewRouter(d Deps) http.Handler {
 	// The app's API. Every route below requires a signed-in person.
 	r.Route("/v1/client", func(r chi.Router) {
 		r.Use(middleware.RequireUser(d.UserAuth))
-		r.Mount("/", client.New(d.Users, d.Conversations, d.Hub, d.Pairing).Routes())
+		r.Mount("/", client.New(d.Users, d.Conversations, d.Hub, d.Pairing, d.APIKeys).Routes())
 	})
 
-	// Agent management: owners creating agents and connecting backends.
-	// Also a signed-in person; later also an API key producing the same
-	// principal, through the same routes.
+	// Agent management: owners creating agents, connecting backends and
+	// minting the codes that hand them out. A signed-in person, or a server
+	// holding that person's API key — the same routes either way, because
+	// they are the same powers.
 	r.Route("/v1/mgmt", func(r chi.Router) {
-		r.Use(middleware.RequireUser(d.UserAuth))
+		r.Use(middleware.RequireUser(d.MgmtAuth))
 		r.Mount("/", mgmt.New(d.Agents, d.Pairing).Routes())
 	})
 

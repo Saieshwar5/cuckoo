@@ -1,9 +1,11 @@
 import type {
   Agent,
+  ApiKey,
   Binding,
   Contact,
   Conversation,
   Message,
+  MintedApiKey,
   MintedToken,
   Page,
   PairAccepted,
@@ -103,6 +105,11 @@ export interface Api {
   listContacts(): Promise<Contact[]>;
   blockAgent(id: string): Promise<void>;
   unblockAgent(id: string): Promise<void>;
+  // API keys, for the person's own systems. Issued behind their own
+  // credential, so a key can never make another.
+  createApiKey(name: string): Promise<MintedApiKey>;
+  listApiKeys(): Promise<ApiKey[]>;
+  revokeApiKey(id: string): Promise<void>;
 }
 
 // newIdempotencyKey is unique enough that two taps of Send never collide,
@@ -199,5 +206,8 @@ export function createApi(opts: ApiOptions): Api {
     listContacts: async () => (await request<{ contacts: Contact[] }>('GET', '/v1/client/contacts')).contacts,
     blockAgent: (id) => request('POST', `/v1/client/agents/${id}/block`),
     unblockAgent: (id) => request('DELETE', `/v1/client/agents/${id}/block`),
+    createApiKey: (name) => request<MintedApiKey>('POST', '/v1/client/api-keys', { name }),
+    listApiKeys: async () => (await request<{ api_keys: ApiKey[] }>('GET', '/v1/client/api-keys')).api_keys,
+    revokeApiKey: (id) => request('DELETE', `/v1/client/api-keys/${id}`),
   };
 }

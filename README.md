@@ -173,6 +173,39 @@ curl -s -H "Authorization: Bearer bnd_sec_..." \
   "localhost:8080/v1/agent/conversations/cnv_.../messages?limit=50"
 ```
 
+### Running agents from your own systems
+
+Everything above is the app's job by default. A company with fifty bots,
+or a website that mints a code per customer, needs its servers to do it
+instead. That is an API key: created once in the app, pasted into a
+deployment, and used as a bearer token on `/v1/mgmt`.
+
+```bash
+export CUCKOO_KEY=mgt_tok_...        # from the app: Agents → the key icon
+export CUCKOO_HUB=http://localhost:8080
+
+cuckoo agents create sbi-cards "SBI Cards"
+cuckoo agents connect agt_...                     # prints the backend's secret
+cuckoo codes create agt_... --once --payload '{"customer_ref":"SBI-8812"}'
+```
+
+or from code:
+
+```python
+from cuckoo import Management
+
+cuckoo = Management(key=os.environ["CUCKOO_KEY"], hub="https://hub.example.com")
+agent = cuckoo.create_agent("sbi-cards", "SBI Cards")
+secret = cuckoo.connect(agent.id)                 # give this to your backend
+code = cuckoo.create_code(agent.id, payload={"customer_ref": "SBI-8812"})
+print(code.url)                                   # show this as a QR
+```
+
+A key does exactly what its owner can do in the management API, and
+nothing else: it cannot read a conversation, cannot speak for an agent,
+and cannot create another key. Keys are made and revoked in the app, and
+revoking one stops everything using it at once.
+
 ### Handing an agent to other people
 
 An agent starts private: only its owner has a chat with it. A pair token
