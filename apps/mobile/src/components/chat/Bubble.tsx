@@ -8,6 +8,8 @@ import { t } from '@/i18n';
 import { radius, spacing, type, useTheme, type Palette } from '@/theme';
 import { formatClock } from '@/util/time';
 
+import { Attachments } from './Attachments';
+
 interface Props {
   message: ChatMessage;
   mine: boolean;
@@ -60,10 +62,15 @@ export function Bubble({ message: m, mine, first, agentName, onReply, onButton, 
             </View>
           </View>
         ) : null}
-        <Text style={[styles.text, { color: ink }]}>
-          {m.body.text ?? ''}
-          {m.status === 'streaming' ? <Caret color={ink} /> : null}
-        </Text>
+        {m.body.attachments?.length ? (
+          <Attachments attachments={m.body.attachments} mine={mine} sending={!!m.localKey} />
+        ) : null}
+        {m.body.text || m.status === 'streaming' ? (
+          <Text style={[styles.text, { color: ink }]}>
+            {m.body.text ?? ''}
+            {m.status === 'streaming' ? <Caret color={ink} /> : null}
+          </Text>
+        ) : null}
         <View style={styles.footer}>
           {m.truncated ? (
             <Text style={[styles.meta, styles.truncated, { color: meta }]}>{t('chat.truncated')}</Text>

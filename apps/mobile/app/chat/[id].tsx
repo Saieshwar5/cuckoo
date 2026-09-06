@@ -17,6 +17,7 @@ import { DayDivider } from '@/components/chat/DayDivider';
 import { QuickReplies } from '@/components/chat/QuickReplies';
 import { TypingBubble } from '@/components/chat/TypingBubble';
 import { t } from '@/i18n';
+import type { PickedFile } from '@/media/pick';
 import { spacing, type, useTheme } from '@/theme';
 import { formatDay, sameDay } from '@/util/time';
 
@@ -38,8 +39,8 @@ export default function ChatScreen() {
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chats'));
   const dayLabels = { today: t('chat.day.today'), yesterday: t('chat.day.yesterday') };
 
-  const send = (text: string) => {
-    void chat.send({ text, replyTo: replyTo ?? undefined });
+  const send = (text: string, files: PickedFile[]) => {
+    void chat.send({ text, files, replyTo: replyTo ?? undefined });
     setReplyTo(null);
   };
   const tap = (m: ChatMessage, b: ButtonSpec) =>
@@ -113,7 +114,9 @@ export default function ChatScreen() {
         </View>
       ) : (
         <>
-          {chat.quickReplies.length ? <QuickReplies labels={chat.quickReplies} onPick={send} /> : null}
+          {chat.quickReplies.length ? (
+            <QuickReplies labels={chat.quickReplies} onPick={(label) => send(label, [])} />
+          ) : null}
           <Composer replyTo={replyTo} agentName={name} onCancelReply={() => setReplyTo(null)} onSend={send} />
         </>
       )}

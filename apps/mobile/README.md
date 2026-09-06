@@ -77,6 +77,29 @@ retry a failure with the same key. One live connection per session
 (`src/realtime/realtime.ts`, opened by `RealtimeProvider`) feeds both the
 chat list and the open chat.
 
+## Photos and files
+
+The clip on the composer opens photos, the camera, or a document. What is
+picked appears as a chip above the input and the message goes with it; a
+picture needs no caption.
+
+A photo is shrunk to 2048 pixels on its long side before it leaves the phone
+(`src/media/pick.ts`). That is more than any screen shows, saves the wait on a
+mobile connection, and drops the location and camera details the original
+carried, because the copy is re-encoded.
+
+Bubbles draw the small copy the hub made, never the original
+(`src/components/chat/Attachments.tsx`); the full picture is fetched only when
+one is opened. The bytes are behind the session token, so they cannot be a
+plain `<img src>`: `src/media/source.ts` passes the header on a phone, and
+`source.web.ts` fetches and hands the tag a blob URL, released when it leaves
+the screen. Saving a file works the same way, split by platform in
+`src/media/save.ts`.
+
+Our own send appears before it has left: the bubble draws the file from this
+device while it uploads. A failed send keeps what it already uploaded, so a
+retry finishes the message rather than sending the photo twice.
+
 ## Agents
 
 The Agents tab lists the agents you own, live: `AgentsProvider` keeps

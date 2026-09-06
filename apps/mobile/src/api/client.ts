@@ -4,6 +4,7 @@ import type {
   Binding,
   Contact,
   Conversation,
+  Media,
   Message,
   MintedApiKey,
   MintedToken,
@@ -49,8 +50,17 @@ export interface ApiOptions {
 
 export interface SendInput {
   text?: string;
+  // Ids of files already uploaded, in the order they should be shown.
+  attachments?: string[];
   action?: { button_id: string; source_message_id: string };
   reply_to?: string;
+}
+
+// A file this device is about to upload: what a picker gave us.
+export interface UploadInput {
+  uri: string;
+  name: string;
+  mimeType: string;
 }
 
 export interface CreateAgentInput {
@@ -82,6 +92,12 @@ export interface Api {
   ): Promise<Page>;
   // The key makes a retry the same send; a caller that will retry keeps it.
   sendMessage(conversationId: string, input: SendInput, idempotencyKey?: string): Promise<Message>;
+  // Files. Uploading is its own step, so a slow photo does not hold a
+  // message open; the send that follows names what came back.
+  uploadMedia(file: UploadInput): Promise<Media>;
+  // The address of a file's bytes. Fetching them needs the session token,
+  // which is why nothing here is a plain public link.
+  mediaUrl(mediaId: string, variant?: 'thumb'): string;
   listAgents(): Promise<Agent[]>;
   getAgent(id: string): Promise<Agent>;
   createAgent(input: CreateAgentInput): Promise<Agent>;
@@ -181,6 +197,45 @@ export function createApi(opts: ApiOptions): Api {
           idempotency_key: idempotencyKey,
         })
       ).message,
+    uploadMedia: async (file) => {
+      const form = new FormData();
+      // On the web a picked file is a blob URL; the platform's own File is
+      // what fetch can send. On a phone the {uri, name, type} shape is what
+      // React Native's fetch understands. Both end up as one multipart part
+      // named file, which is all the hub knows about.
+      if (file.uri.startsWith('blob:') || file.uri.startsWith('data:')) {
+        const blob = await (await fetchImpl(file.uri)).blob();
+        form.append('file', new File([blob], file.name, { type: file.mimeType }));
+      } else {
+        form.append('file', {
+          uri: file.uri,
+          name: file.name,
+          type: file.mimeType,
+        } as unknown as Blob);
+      }
+
+      const token = opts.getToken();
+      let res: Response;
+      try {
+        res = await fetchImpl(`${opts.baseUrl}/v1/client/media`, {
+          method: 'POST',
+          headers: token ? { Accept: 'application/json', Authorization: `Bearer ${token}` } : {},
+          body: form,
+        });
+      } catch (err) {
+        throw new NetworkError(err);
+      }
+      const text = await res.text();
+      const json = text ? JSON.parse(text) : {};
+      if (!res.ok) {
+        const e = json?.error ?? {};
+        if (res.status === 401 && token && opts.onUnauthorized) opts.onUnauthorized();
+        throw new ApiError(res.status, e.code ?? 'unknown', e.message ?? 'Upload failed.', e.field);
+      }
+      return (json as { media: Media }).media;
+    },
+    mediaUrl: (mediaId, variant) =>
+      `${opts.baseUrl}/v1/client/media/${mediaId}${variant ? `?variant=${variant}` : ''}`,
     listAgents: async () => (await request<{ agents: Agent[] }>('GET', '/v1/mgmt/agents')).agents,
     getAgent: async (id) => (await request<{ agent: Agent }>('GET', `/v1/mgmt/agents/${id}`)).agent,
     createAgent: async (input) => (await request<{ agent: Agent }>('POST', '/v1/mgmt/agents', input)).agent,

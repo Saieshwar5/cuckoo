@@ -32,8 +32,41 @@ export interface Button {
   style: 'default' | 'primary' | 'danger';
 }
 
+export type MediaKind = 'image' | 'video' | 'audio' | 'file';
+
+// A file a message carries. Everything needed to draw the bubble is here;
+// the bytes are fetched from /media/{media_id} when they are wanted.
+//
+// local_uri is ours, never the hub's: the file on this device, shown while
+// our own send is still uploading.
+export interface Attachment {
+  media_id: string;
+  kind: MediaKind;
+  mime_type: string;
+  byte_size: number;
+  file_name: string;
+  width?: number;
+  height?: number;
+  has_thumbnail?: boolean;
+  local_uri?: string;
+}
+
+// An uploaded file, before any message names it.
+export interface Media {
+  id: string;
+  kind: MediaKind;
+  mime_type: string;
+  byte_size: number;
+  file_name: string;
+  width?: number;
+  height?: number;
+  has_thumbnail: boolean;
+  created_at: string;
+}
+
 export interface Body {
   text?: string;
+  attachments?: Attachment[];
   buttons?: Button[][];
   quick_replies?: { label: string }[];
   action?: { button_id: string; source_message_id: string };
