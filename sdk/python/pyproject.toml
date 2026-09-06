@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cuckoo-agent"
 version = "0.0.1"
-description = "Connect an agent backend to a Cuckoo hub: receive messages, reply, done."
+description = "Connect an agent backend to a Cuckoo hub, and manage agents from your own systems."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -13,6 +13,10 @@ dependencies = [
     "websockets>=13",
     "httpx>=0.27",
 ]
+
+[project.scripts]
+# The command line: create agents and hand them out from a deploy script.
+cuckoo = "cuckoo.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["cuckoo*"]

@@ -35,6 +35,16 @@ type AgentBinding struct {
 	FailureStreakStartedAt *time.Time
 }
 
+type ApiKey struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	Name       string
+	KeyHash    []byte
+	LastUsedAt *time.Time
+	CreatedAt  time.Time
+	RevokedAt  *time.Time
+}
+
 type Contact struct {
 	UserID           uuid.UUID
 	AgentID          uuid.UUID

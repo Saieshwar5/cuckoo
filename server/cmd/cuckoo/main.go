@@ -24,6 +24,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/api"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/middleware"
+	"github.com/Saieshwar5/cuckoo/server/internal/apikeys"
 	"github.com/Saieshwar5/cuckoo/server/internal/auth"
 	"github.com/Saieshwar5/cuckoo/server/internal/config"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
@@ -100,17 +101,20 @@ func run() error {
 	deliveryService := delivery.New(db, conversationService)
 	userService := users.New(db)
 	pairingService := pairing.New(db, agentService, conversationService, userService, cfg.PublicURL)
+	apiKeyService := apikeys.New(db)
 
 	router := api.NewRouter(api.Deps{
 		Logger:        log,
 		UserAuth:      userAuth,
 		AgentAuth:     auth.NewBinding(agentService),
+		MgmtAuth:      auth.NewKeyOrUser(apiKeyService, userAuth),
 		Users:         userService,
 		SignIn:        signinService,
 		Agents:        agentService,
 		Conversations: conversationService,
 		Delivery:      deliveryService,
 		Pairing:       pairingService,
+		APIKeys:       apiKeyService,
 		Hub:           hub,
 		Bus:           bus,
 		CORSOrigins:   cfg.CORSOrigins,

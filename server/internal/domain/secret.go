@@ -14,6 +14,9 @@ const (
 	PrefixSessionToken  = "ses_tok"
 	// PrefixPairToken is the token inside a QR code or link.
 	PrefixPairToken = "pair"
+	// PrefixAPIKeySecret is the key a company's systems call the management
+	// API with.
+	PrefixAPIKeySecret = "mgt_tok"
 )
 
 // secretBytes is the entropy in every generated secret. 256 bits: not
