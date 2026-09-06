@@ -61,6 +61,8 @@ func (h *Handler) Routes() chi.Router {
 	r.Get("/pair/{code}", h.resolvePair)
 	r.Post("/pair/{code}/accept", h.acceptPair)
 	r.Get("/contacts", h.listContacts)
+	r.Patch("/contacts/{id}", h.updateContact)
+	r.Delete("/contacts/{id}", h.removeContact)
 	r.Post("/agents/{id}/block", h.blockAgent)
 	r.Delete("/agents/{id}/block", h.unblockAgent)
 

@@ -176,6 +176,20 @@ export interface Contact {
   conversation_id: string;
   created_at: string;
   agent_deleted: boolean;
+  // What this person decided about the agent. muted_until in the future
+  // means nothing about it may disturb them; far in the future means
+  // always.
+  muted_until: string | null;
+  pinned: boolean;
+  archived: boolean;
+}
+
+// ContactSettings is a partial change to those decisions. An omitted
+// field stays; muted_until null unmutes.
+export interface ContactSettings {
+  muted_until?: string | null;
+  pinned?: boolean;
+  archived?: boolean;
 }
 
 export interface PairToken {

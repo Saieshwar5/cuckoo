@@ -54,6 +54,10 @@ type Contact struct {
 	PairTokenID      *uuid.UUID
 	BlockedAt        *time.Time
 	CreatedAt        time.Time
+	MutedUntil       *time.Time
+	PinnedAt         *time.Time
+	ArchivedAt       *time.Time
+	RemovedAt        *time.Time
 }
 
 type Conversation struct {

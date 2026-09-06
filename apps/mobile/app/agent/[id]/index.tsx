@@ -4,7 +4,10 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAgent, useAgents, useContact } from '@/agents/AgentsProvider';
+import { useChats } from '@/chats/useChats';
+import { isMuted } from '@/agents/store';
 import type { AgentStatus } from '@/api/types';
+import { ActionSheet, type SheetAction } from '@/components/ActionSheet';
 import { Avatar } from '@/components/Avatar';
 import { agentAvatar } from '@/media/avatar';
 import { Button } from '@/components/Button';
@@ -14,6 +17,11 @@ import { Screen } from '@/components/Screen';
 import { TopBar } from '@/components/TopBar';
 import { t } from '@/i18n';
 import { radius, sizes, spacing, type, useStyles, useTheme, type Palette, type Theme } from '@/theme';
+import { formatClock, formatDay } from '@/util/time';
+
+// A mute with no end is a date nobody will reach.
+const ALWAYS = '2200-01-01T00:00:00.000Z';
+const HOUR = 60 * 60 * 1000;
 
 // The agent's profile: one screen for every agent, owned or added. An
 // owner sees the levers; someone who added it sees who is behind it and
@@ -26,7 +34,10 @@ export default function AgentProfileScreen() {
   const owned = useAgent(id);
   const contact = useContact(id);
   const { loading, controller } = useAgents();
-  const [confirm, setConfirm] = useState<'delete' | 'block' | null>(null);
+  const chats = useChats();
+  const [confirm, setConfirm] = useState<'delete' | 'block' | 'remove' | null>(null);
+  const [sheet, setSheet] = useState<'more' | 'mute' | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/agents'));
@@ -63,6 +74,33 @@ export default function AgentProfileScreen() {
       setBusy(false);
     }
   };
+  // decide changes one of the person's settings for this agent. The row
+  // already reflects it; a refusal — a fourth pin — is said in a line.
+  const decide = async (change: Parameters<NonNullable<typeof controller>['settings']>[1]) => {
+    if (!controller) return;
+    setNotice(null);
+    try {
+      await controller.settings(id, change);
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      setNotice(code === 'too_many_pins' ? t('agent.pin.full') : ((err as Error).message ?? ''));
+    }
+  };
+  // removeFromList takes the agent out of the list. The chat list is the
+  // hub's and the hub no longer lists this chat, so it is asked again
+  // rather than second-guessed here.
+  const removeFromList = async () => {
+    if (!controller) return;
+    setBusy(true);
+    try {
+      await controller.removeContact(id);
+      await chats.refresh();
+      setConfirm(null);
+      router.replace('/(tabs)/chats');
+    } catch {
+      setBusy(false);
+    }
+  };
 
   const view = owned
     ? {
@@ -95,6 +133,69 @@ export default function AgentProfileScreen() {
 
   const connected = view.status === 'connected';
   const blocked = contact?.blocked ?? false;
+  const muted = contact ? isMuted(contact) : false;
+  const pinned = contact?.pinned ?? false;
+  const archived = contact?.archived ?? false;
+  const mutedLabel = !contact?.muted_until
+    ? null
+    : contact.muted_until >= ALWAYS
+      ? t('agent.muted.always')
+      : t('agent.muted.until', {
+          when: `${formatDay(contact.muted_until, new Date(), { today: t('chat.day.today'), yesterday: t('chat.day.yesterday') })} ${formatClock(contact.muted_until)}`,
+        });
+  const more: SheetAction[] = [
+    muted
+      ? {
+          icon: 'volume-high-outline',
+          label: t('agent.unmute'),
+          onPress: () => void decide({ muted_until: null }),
+          testID: 'agent-unmute',
+        }
+      : {
+          icon: 'volume-mute-outline',
+          label: t('agent.mute'),
+          onPress: () => setSheet('mute'),
+          testID: 'agent-mute',
+        },
+    pinned
+      ? {
+          icon: 'pin-outline',
+          label: t('agent.unpin'),
+          onPress: () => void decide({ pinned: false }),
+          testID: 'agent-unpin',
+        }
+      : {
+          icon: 'pin',
+          label: t('agent.pin'),
+          onPress: () => void decide({ pinned: true }),
+          testID: 'agent-pin',
+        },
+    archived
+      ? {
+          icon: 'arrow-undo-outline',
+          label: t('agent.unarchive'),
+          onPress: () => void decide({ archived: false }),
+          testID: 'agent-unarchive',
+        }
+      : {
+          icon: 'archive-outline',
+          label: t('agent.archive'),
+          onPress: () => void decide({ archived: true }),
+          testID: 'agent-archive',
+        },
+    ...(contact && !owned
+      ? [
+          {
+            icon: 'person-remove-outline' as const,
+            label: t('agent.remove'),
+            onPress: () => setConfirm('remove'),
+            testID: 'agent-remove',
+          },
+        ]
+      : []),
+  ];
+  const muteFor = (ms: number | null) =>
+    void decide({ muted_until: ms === null ? ALWAYS : new Date(Date.now() + ms).toISOString() });
   return (
     <Screen padded={false}>
       <TopBar
@@ -134,6 +235,28 @@ export default function AgentProfileScreen() {
               </View>
             ) : null}
           </View>
+          {muted || pinned ? (
+            <View style={styles.ownerRow}>
+              {muted && mutedLabel ? (
+                <View
+                  style={[styles.badge, styles.badgeRow, { backgroundColor: colors.surface }]}
+                  testID="badge-muted"
+                >
+                  <Ionicons name="volume-mute-outline" size={13} color={colors.textSecondary} />
+                  <Text style={[styles.badgeText, { color: colors.textSecondary }]}>{mutedLabel}</Text>
+                </View>
+              ) : null}
+              {pinned ? (
+                <View
+                  style={[styles.badge, styles.badgeRow, { backgroundColor: colors.surface }]}
+                  testID="badge-pinned"
+                >
+                  <Ionicons name="pin" size={13} color={colors.textSecondary} />
+                  <Text style={[styles.badgeText, { color: colors.textSecondary }]}>{t('agent.pin')}</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
           {view.description ? <Text style={styles.description}>{view.description}</Text> : null}
         </View>
 
@@ -174,7 +297,21 @@ export default function AgentProfileScreen() {
               testID={blocked ? 'agent-unblock' : 'agent-block'}
             />
           )}
+          {contact ? (
+            <ActionTile
+              icon="ellipsis-horizontal"
+              label={t('agent.more')}
+              onPress={() => setSheet('more')}
+              colors={colors}
+              testID="agent-more"
+            />
+          ) : null}
         </View>
+        {notice ? (
+          <Text style={styles.notice} testID="agent-notice">
+            {notice}
+          </Text>
+        ) : null}
 
         <View style={[styles.card, { backgroundColor: colors.surface }]}>
           <Text style={styles.cardLabel}>{t('agent.status.title')}</Text>
@@ -207,6 +344,40 @@ export default function AgentProfileScreen() {
         destructive
         busy={busy}
         onConfirm={() => void remove()}
+        onCancel={() => setConfirm(null)}
+      />
+      <ActionSheet visible={sheet === 'more'} onClose={() => setSheet(null)} actions={more} />
+      <ActionSheet
+        visible={sheet === 'mute'}
+        onClose={() => setSheet(null)}
+        actions={[
+          {
+            icon: 'time-outline',
+            label: t('agent.mute.8h'),
+            onPress: () => muteFor(8 * HOUR),
+            testID: 'mute-8h',
+          },
+          {
+            icon: 'calendar-outline',
+            label: t('agent.mute.1w'),
+            onPress: () => muteFor(7 * 24 * HOUR),
+            testID: 'mute-1w',
+          },
+          {
+            icon: 'infinite-outline',
+            label: t('agent.mute.always'),
+            onPress: () => muteFor(null),
+            testID: 'mute-always',
+          },
+        ]}
+      />
+      <ConfirmSheet
+        visible={confirm === 'remove'}
+        title={t('agent.remove.title', { name: view.name })}
+        body={t('agent.remove.body')}
+        confirmLabel={t('agent.remove')}
+        busy={busy}
+        onConfirm={() => void removeFromList()}
         onCancel={() => setConfirm(null)}
       />
       <ConfirmSheet
@@ -291,7 +462,9 @@ const makeStyles = ({ colors }: Theme) =>
     ownerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
     owner: { ...type.secondary, color: colors.textSecondary },
     badge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.pill },
+    badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     badgeText: type.caption,
+    notice: { ...type.secondary, color: colors.danger, textAlign: 'center', marginTop: -spacing.sm },
     description: {
       ...type.body,
       color: colors.text,

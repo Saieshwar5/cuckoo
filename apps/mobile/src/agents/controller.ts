@@ -1,5 +1,5 @@
 import type { Api, CreateAgentInput, SetBindingInput, UpdateAgentInput } from '../api/client';
-import type { Agent, Binding, Contact, PairAccepted } from '../api/types';
+import type { Agent, Binding, Contact, ContactSettings, PairAccepted } from '../api/types';
 import type { PickedFile } from '../media/pick';
 import { keys, MemoryCache, type Cache } from '../cache/cache';
 import type { Realtime } from '../realtime/realtime';
@@ -10,6 +10,8 @@ import {
   setAgents,
   setBlocked,
   setContacts,
+  setSettings,
+  dropContact,
   upsertAgent,
   upsertContact,
   type AgentsState,
@@ -103,6 +105,25 @@ export class AgentsController {
   // moment between accepting and the reload.
   remember = (contact: Contact): void => {
     this.set(upsertContact(this.state, contact));
+  };
+
+  // settings changes what the person decided about an agent. The row is
+  // updated first, so the screen answers the tap, and put back if the hub
+  // refuses — a fourth pin, say.
+  settings = async (agentId: string, change: ContactSettings): Promise<void> => {
+    const before = this.state.contacts.find((c) => c.agent.id === agentId);
+    this.set(setSettings(this.state, agentId, change));
+    try {
+      await this.api.updateContact(agentId, change);
+    } catch (err) {
+      if (before) this.set(setSettings(this.state, agentId, before));
+      throw err;
+    }
+  };
+
+  removeContact = async (agentId: string): Promise<void> => {
+    await this.api.removeContact(agentId);
+    this.set(dropContact(this.state, agentId));
   };
 
   block = async (agentId: string): Promise<void> => {

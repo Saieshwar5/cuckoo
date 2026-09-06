@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -67,6 +68,19 @@ type contactResponse struct {
 	ConversationID string            `json:"conversation_id"`
 	CreatedAt      time.Time         `json:"created_at"`
 	AgentDeleted   bool              `json:"agent_deleted"`
+	// The person's own settings for this agent; see updateContact.
+	MutedUntil *time.Time `json:"muted_until"`
+	Pinned     bool       `json:"pinned"`
+	Archived   bool       `json:"archived"`
+}
+
+// updateContactRequest changes what the person decided about an agent. Each
+// field is optional; an omitted one stays as it is. muted_until is a raw
+// value so that null, which unmutes, is told apart from absent.
+type updateContactRequest struct {
+	MutedUntil json.RawMessage `json:"muted_until"`
+	Pinned     *bool           `json:"pinned"`
+	Archived   *bool           `json:"archived"`
 }
 
 type contactListEnvelope struct {
@@ -144,9 +158,80 @@ func (h *Handler) listContacts(w http.ResponseWriter, r *http.Request) {
 			ConversationID: domain.FormatID(domain.PrefixConv, c.ConversationID),
 			CreatedAt:      c.CreatedAt,
 			AgentDeleted:   c.AgentDeleted,
+			MutedUntil:     c.MutedUntil,
+			Pinned:         c.Pinned,
+			Archived:       c.Archived,
 		})
 	}
 	httpx.JSON(w, r, http.StatusOK, contactListEnvelope{Contacts: out})
+}
+
+// updateContact applies the person's settings for an agent: mute, pin,
+// archive. None of them is told to the agent.
+func (h *Handler) updateContact(w http.ResponseWriter, r *http.Request) {
+	userID, ok := principal.UserID(r.Context())
+	if !ok {
+		httpx.Error(w, r, domain.Unauthorized("unauthorized", "Sign in to continue."))
+		return
+	}
+	id, err := domain.ParseID(domain.PrefixAgent, chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	var req updateContactRequest
+	if err := httpx.Decode(w, r, &req); err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	if len(req.MutedUntil) > 0 {
+		var until *time.Time
+		if string(req.MutedUntil) != "null" {
+			var t time.Time
+			if err := json.Unmarshal(req.MutedUntil, &t); err != nil {
+				httpx.Error(w, r, domain.InvalidField("muted_until", "invalid_muted_until",
+					"muted_until is a time, or null to unmute."))
+				return
+			}
+			until = &t
+		}
+		if err := h.pairing.SetMuted(r.Context(), userID, id, until); err != nil {
+			httpx.Error(w, r, err)
+			return
+		}
+	}
+	if req.Pinned != nil {
+		if err := h.pairing.SetPinned(r.Context(), userID, id, *req.Pinned); err != nil {
+			httpx.Error(w, r, err)
+			return
+		}
+	}
+	if req.Archived != nil {
+		if err := h.pairing.SetArchived(r.Context(), userID, id, *req.Archived); err != nil {
+			httpx.Error(w, r, err)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// removeContact takes an added agent out of the person's list.
+func (h *Handler) removeContact(w http.ResponseWriter, r *http.Request) {
+	userID, ok := principal.UserID(r.Context())
+	if !ok {
+		httpx.Error(w, r, domain.Unauthorized("unauthorized", "Sign in to continue."))
+		return
+	}
+	id, err := domain.ParseID(domain.PrefixAgent, chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	if err := h.pairing.Remove(r.Context(), userID, id); err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) blockAgent(w http.ResponseWriter, r *http.Request) {

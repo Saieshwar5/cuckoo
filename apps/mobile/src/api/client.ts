@@ -3,6 +3,7 @@ import type {
   ApiKey,
   Binding,
   Contact,
+  ContactSettings,
   Conversation,
   Media,
   Message,
@@ -126,6 +127,12 @@ export interface Api {
   resolvePair(code: string): Promise<PairResolve>;
   acceptPair(code: string): Promise<PairAccepted>;
   listContacts(): Promise<Contact[]>;
+  // Mute, pin, archive: the person's own settings for an agent. The agent
+  // is not told any of it.
+  updateContact(agentId: string, settings: ContactSettings): Promise<void>;
+  // Take an added agent out of the list. Its chat is no longer listed but
+  // is still there to open; scanning the code again brings it back.
+  removeContact(agentId: string): Promise<void>;
   blockAgent(id: string): Promise<void>;
   unblockAgent(id: string): Promise<void>;
   // API keys, for the person's own systems. Issued behind their own
@@ -274,6 +281,8 @@ export function createApi(opts: ApiOptions): Api {
     resolvePair: (code) => request<PairResolve>('GET', `/v1/client/pair/${encodeURIComponent(code)}`),
     acceptPair: (code) => request<PairAccepted>('POST', `/v1/client/pair/${encodeURIComponent(code)}/accept`),
     listContacts: async () => (await request<{ contacts: Contact[] }>('GET', '/v1/client/contacts')).contacts,
+    updateContact: (id, settings) => request('PATCH', `/v1/client/contacts/${id}`, settings),
+    removeContact: (id) => request('DELETE', `/v1/client/contacts/${id}`),
     blockAgent: (id) => request('POST', `/v1/client/agents/${id}/block`),
     unblockAgent: (id) => request('DELETE', `/v1/client/agents/${id}/block`),
     createApiKey: (name) => request<MintedApiKey>('POST', '/v1/client/api-keys', { name }),

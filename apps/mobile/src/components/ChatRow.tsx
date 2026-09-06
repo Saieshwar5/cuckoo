@@ -38,7 +38,19 @@ export function Ticks({ status, colors }: { status: DeliveryStatus; colors: Pale
   }
 }
 
-export function ChatRow({ conversation, onPress }: { conversation: Conversation; onPress: () => void }) {
+export function ChatRow({
+  conversation,
+  onPress,
+  pinned,
+  muted,
+}: {
+  conversation: Conversation;
+  onPress: () => void;
+  // What the person decided about this chat, drawn small at the right so
+  // the row says it without saying it loudly.
+  pinned?: boolean;
+  muted?: boolean;
+}) {
   const { colors } = useTheme();
   const who = counterpart(conversation);
   const last = conversation.last_message;
@@ -78,6 +90,10 @@ export function ChatRow({ conversation, onPress }: { conversation: Conversation;
           >
             {preview(last)}
           </Text>
+          {muted ? (
+            <Ionicons name="volume-mute-outline" size={15} color={colors.textSecondary} testID="row-muted" />
+          ) : null}
+          {pinned ? <Ionicons name="pin" size={14} color={colors.textSecondary} testID="row-pinned" /> : null}
         </View>
       </View>
     </Pressable>

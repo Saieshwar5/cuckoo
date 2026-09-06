@@ -56,8 +56,40 @@ FROM contacts c
 JOIN agents a ON a.id = c.agent_id
 JOIN users  u ON u.id = a.owner_user_id
 LEFT JOIN agent_bindings b ON b.agent_id = a.id AND b.revoked_at IS NULL
-WHERE c.user_id = $1
+WHERE c.user_id = $1 AND c.removed_at IS NULL
 ORDER BY c.created_at DESC, c.agent_id;
+
+-- name: SetContactMuted :execrows
+-- NULL unmutes; a time in the future mutes until then.
+UPDATE contacts
+SET muted_until = sqlc.narg('muted_until')::timestamptz
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL;
+
+-- name: SetContactPinned :execrows
+UPDATE contacts
+SET pinned_at = CASE WHEN sqlc.arg('pinned')::bool THEN COALESCE(pinned_at, now()) ELSE NULL END
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL;
+
+-- name: CountPinnedContacts :one
+SELECT count(*) FROM contacts
+WHERE user_id = $1 AND pinned_at IS NOT NULL AND removed_at IS NULL;
+
+-- name: SetContactArchived :execrows
+UPDATE contacts
+SET archived_at = CASE WHEN sqlc.arg('archived')::bool THEN COALESCE(archived_at, now()) ELSE NULL END
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL;
+
+-- name: RemoveContact :execrows
+-- Taking an agent out of the list clears what was decided about it there,
+-- so scanning it again starts clean.
+UPDATE contacts
+SET removed_at = now(), pinned_at = NULL, archived_at = NULL, muted_until = NULL
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NULL AND added_via = 'pair_token';
+
+-- name: RestoreContact :execrows
+UPDATE contacts
+SET removed_at = NULL
+WHERE user_id = $1 AND agent_id = $2 AND removed_at IS NOT NULL;
 
 -- name: SetContactBlocked :execrows
 UPDATE contacts

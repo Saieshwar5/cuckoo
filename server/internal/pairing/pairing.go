@@ -100,7 +100,17 @@ type Contact struct {
 	ConversationID uuid.UUID
 	CreatedAt      time.Time
 	AgentDeleted   bool
+	// The person's own settings for this agent. MutedUntil in the future
+	// means nothing about it may disturb them; far in the future means
+	// always.
+	MutedUntil *time.Time
+	Pinned     bool
+	Archived   bool
 }
+
+// pinsMax is how many chats may sit above the rest. Three is what a thumb
+// reaches without scrolling; more pins and nothing is pinned.
+const pinsMax = 3
 
 func contactFromRow(r gen.ListContactsRow) Contact {
 	c := Contact{
@@ -115,6 +125,9 @@ func contactFromRow(r gen.ListContactsRow) Contact {
 		ConversationID: r.DmConversationID,
 		CreatedAt:      r.CreatedAt,
 		AgentDeleted:   r.AgentDeletedAt != nil,
+		MutedUntil:     r.MutedUntil,
+		Pinned:         r.PinnedAt != nil,
+		Archived:       r.ArchivedAt != nil,
 	}
 	if r.BindingStatus != nil {
 		s := agents.Status(*r.BindingStatus)

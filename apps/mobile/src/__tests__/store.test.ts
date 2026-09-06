@@ -1,5 +1,12 @@
-import type { Conversation, Message } from '@/api/types';
-import { applyFrame, concernsUnknown, empty, filterConversations, setConversations } from '@/chats/store';
+import type { Contact, Conversation, Message } from '@/api/types';
+import {
+  applyFrame,
+  arrange,
+  concernsUnknown,
+  empty,
+  filterConversations,
+  setConversations,
+} from '@/chats/store';
 
 function msg(over: Partial<Message> & { id: string; conversation_id: string; created_at: string }): Message {
   return {
@@ -154,5 +161,36 @@ describe('unknown conversations', () => {
     expect(concernsUnknown(s, frame('cnv_new'))).toBe(true);
     expect(concernsUnknown(s, { type: 'ready', data: { user_id: 'usr_1' } })).toBe(false);
     expect(concernsUnknown(s, { type: 'agent.status', data: { agent_id: 'a', status: 'idle' } })).toBe(false);
+  });
+});
+
+describe('pinned and archived', () => {
+  const withAgent = (id: string, agent: string, at: string): Conversation => ({
+    ...conv(id, at),
+    participants: [{ kind: 'agent', id: agent, display_name: agent }],
+  });
+  const decided = (agent: string, over: Partial<Contact>): Contact =>
+    ({ agent: { id: agent }, pinned: false, archived: false, muted_until: null, ...over }) as Contact;
+
+  it('lifts pinned chats above the rest and sets archived ones aside', () => {
+    const list = setConversations(empty, [
+      withAgent('c1', 'a1', '2026-09-05T00:00:00Z'),
+      withAgent('c2', 'a2', '2026-09-04T00:00:00Z'),
+      withAgent('c3', 'a3', '2026-09-03T00:00:00Z'),
+      withAgent('c4', 'a4', '2026-09-02T00:00:00Z'),
+    ]).conversations;
+    const { shown, archived } = arrange(list, [
+      decided('a3', { pinned: true }),
+      decided('a4', { pinned: true }),
+      decided('a2', { archived: true }),
+    ]);
+    // Pins keep their own activity order; the rest follow; archived are out.
+    expect(shown.map((c) => c.id)).toEqual(['c3', 'c4', 'c1']);
+    expect(archived.map((c) => c.id)).toEqual(['c2']);
+  });
+
+  it('leaves a chat with nothing decided where activity put it', () => {
+    const list = [withAgent('c1', 'a1', '2026-09-05T00:00:00Z'), conv('g1', '2026-09-06T00:00:00Z')];
+    expect(arrange(list, []).shown.map((c) => c.id)).toEqual(['c1', 'g1']);
   });
 });

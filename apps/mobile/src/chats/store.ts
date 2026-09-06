@@ -1,4 +1,4 @@
-import type { Conversation, Frame } from '../api/types';
+import type { Contact, Conversation, Frame } from '../api/types';
 
 // The chat list, and how live frames change it. Pure, so it is tested
 // without a screen: the same reducer runs on every frame the socket brings.
@@ -103,4 +103,26 @@ export function filterConversations(list: Conversation[], query: string): Conver
         (p) => p.display_name.toLowerCase().includes(q) || (p.handle ?? '').toLowerCase().includes(q),
       ) || (c.last_message?.body.text ?? '').toLowerCase().includes(q),
   );
+}
+
+// arrange applies what the person decided about each agent to the list:
+// pinned chats first, keeping their activity order among themselves;
+// archived ones set aside for their own screen. A chat with nothing
+// decided about it stays where activity put it.
+export function arrange(
+  list: Conversation[],
+  contacts: Contact[],
+): { shown: Conversation[]; archived: Conversation[] } {
+  const byAgent = new Map(contacts.map((c) => [c.agent.id, c]));
+  const pinned: Conversation[] = [];
+  const rest: Conversation[] = [];
+  const archived: Conversation[] = [];
+  for (const c of list) {
+    const agent = c.participants.find((p) => p.kind === 'agent');
+    const contact = agent ? byAgent.get(agent.id) : undefined;
+    if (contact?.archived) archived.push(c);
+    else if (contact?.pinned) pinned.push(c);
+    else rest.push(c);
+  }
+  return { shown: [...pinned, ...rest], archived };
 }

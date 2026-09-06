@@ -249,6 +249,12 @@ SELECT c.id, c.kind, c.created_at
 FROM conversations c
 JOIN participants p ON p.conversation_id = c.id
 WHERE p.user_id = $1::uuid
+  AND NOT EXISTS (
+      SELECT 1
+      FROM participants pa
+      JOIN contacts ct ON ct.agent_id = pa.agent_id AND ct.user_id = p.user_id
+      WHERE pa.conversation_id = c.id AND ct.removed_at IS NOT NULL
+  )
 ORDER BY COALESCE(
     (SELECT m.id FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1),
     c.id
@@ -261,6 +267,9 @@ ORDER BY COALESCE(
 // been said yet. Both are UUIDv7 identifiers, so comparing them compares
 // creation times, and the newest-message lookup is one probe of the history
 // index. No denormalised last_message_at column exists to drift.
+//
+// A chat with an agent the person removed from their list is not listed;
+// it is still theirs to open by id, so the history is not lost.
 func (q *Queries) ListUserConversations(ctx context.Context, userID uuid.UUID) ([]Conversation, error) {
 	rows, err := q.db.Query(ctx, listUserConversations, userID)
 	if err != nil {
