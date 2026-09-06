@@ -14,11 +14,12 @@ import {
   isTyping,
   newestServerId,
   quickReplies,
+  removeMessage,
   retryLocal,
   setPage,
-  upsert,
   type ChatMessage,
   type ChatState,
+  upsert,
 } from './store';
 
 export interface ChatSnapshot {
@@ -234,6 +235,14 @@ export class ChatController {
     };
     this.set(addLocal(this.state, this.localMessage(item)));
     await this.outbox.enqueue(key, this.conversationId, item.request);
+  };
+
+  // deleteForMe takes a message out of this person's view, here and on the
+  // hub. The hub is asked first: a delete that did not reach it would come
+  // back on the next load, which is worse than a moment's wait.
+  deleteForMe = async (id: string): Promise<void> => {
+    await this.api.deleteMessageForMe(this.conversationId, id);
+    this.set(removeMessage(this.state, id));
   };
 
   // retry puts a message the hub refused back in the queue, with the same

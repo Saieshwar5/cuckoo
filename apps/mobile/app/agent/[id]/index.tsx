@@ -5,9 +5,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAgent, useAgents, useContact } from '@/agents/AgentsProvider';
 import { useChats } from '@/chats/useChats';
+import { useSession } from '@/session/SessionProvider';
 import { isMuted } from '@/agents/store';
-import type { AgentStatus } from '@/api/types';
+import type { ReportReason } from '@/api/types';
 import { ActionSheet, type SheetAction } from '@/components/ActionSheet';
+import { ActionTile, statusColor } from '@/components/ActionTile';
 import { Avatar } from '@/components/Avatar';
 import { agentAvatar } from '@/media/avatar';
 import { Button } from '@/components/Button';
@@ -16,7 +18,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
 import { TopBar } from '@/components/TopBar';
 import { t } from '@/i18n';
-import { radius, sizes, spacing, type, useStyles, useTheme, type Palette, type Theme } from '@/theme';
+import { radius, sizes, spacing, type, useStyles, useTheme, type Theme } from '@/theme';
 import { formatClock, formatDay } from '@/util/time';
 
 // A mute with no end is a date nobody will reach.
@@ -34,10 +36,11 @@ export default function AgentProfileScreen() {
   const owned = useAgent(id);
   const contact = useContact(id);
   const { loading, controller } = useAgents();
+  const { api } = useSession();
   const chats = useChats();
-  const [confirm, setConfirm] = useState<'delete' | 'block' | 'remove' | null>(null);
-  const [sheet, setSheet] = useState<'more' | 'mute' | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<'delete' | 'block' | 'remove' | 'clear' | null>(null);
+  const [sheet, setSheet] = useState<'more' | 'mute' | 'report' | null>(null);
+  const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'warn' } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/agents'));
@@ -83,12 +86,43 @@ export default function AgentProfileScreen() {
       await controller.settings(id, change);
     } catch (err) {
       const code = (err as { code?: string }).code;
-      setNotice(code === 'too_many_pins' ? t('agent.pin.full') : ((err as Error).message ?? ''));
+      setNotice({
+        text: code === 'too_many_pins' ? t('agent.pin.full') : ((err as Error).message ?? ''),
+        tone: 'warn',
+      });
     }
   };
   // removeFromList takes the agent out of the list. The chat list is the
   // hub's and the hub no longer lists this chat, so it is asked again
   // rather than second-guessed here.
+  // clearChat puts everything so far out of this person's view. The list
+  // is the hub's, so it is asked again for the preview.
+  const clearChat = async () => {
+    if (!contact) return;
+    setBusy(true);
+    try {
+      await api.clearConversation(contact.conversation_id);
+      await chats.refresh();
+      setConfirm(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+  // report files the complaint with one of the fixed reasons. The agent is
+  // not told; someone reads the pile.
+  const report = async (reason: ReportReason) => {
+    setNotice(null);
+    try {
+      await api.reportAgent(id, { reason });
+      setNotice({ text: t('agent.report.thanks'), tone: 'ok' });
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      setNotice({
+        text: code === 'already_reported' ? t('agent.report.already') : ((err as Error).message ?? ''),
+        tone: 'warn',
+      });
+    }
+  };
   const removeFromList = async () => {
     if (!controller) return;
     setBusy(true);
@@ -183,8 +217,20 @@ export default function AgentProfileScreen() {
           onPress: () => void decide({ archived: true }),
           testID: 'agent-archive',
         },
+    {
+      icon: 'trash-outline',
+      label: t('agent.clear'),
+      onPress: () => setConfirm('clear'),
+      testID: 'agent-clear',
+    },
     ...(contact && !owned
       ? [
+          {
+            icon: 'flag-outline' as const,
+            label: t('agent.report'),
+            onPress: () => setSheet('report'),
+            testID: 'agent-report',
+          },
           {
             icon: 'person-remove-outline' as const,
             label: t('agent.remove'),
@@ -194,6 +240,7 @@ export default function AgentProfileScreen() {
         ]
       : []),
   ];
+  const reasons: ReportReason[] = ['spam', 'impersonation', 'abuse', 'other'];
   const muteFor = (ms: number | null) =>
     void decide({ muted_until: ms === null ? ALWAYS : new Date(Date.now() + ms).toISOString() });
   return (
@@ -308,8 +355,11 @@ export default function AgentProfileScreen() {
           ) : null}
         </View>
         {notice ? (
-          <Text style={styles.notice} testID="agent-notice">
-            {notice}
+          <Text
+            style={[styles.notice, notice.tone === 'warn' && { color: colors.danger }]}
+            testID="agent-notice"
+          >
+            {notice.text}
           </Text>
         ) : null}
 
@@ -371,6 +421,26 @@ export default function AgentProfileScreen() {
           },
         ]}
       />
+      <ActionSheet
+        visible={sheet === 'report'}
+        onClose={() => setSheet(null)}
+        actions={reasons.map((reason) => ({
+          icon: 'flag-outline' as const,
+          label: t(`agent.report.${reason}`),
+          onPress: () => void report(reason),
+          testID: `report-${reason}`,
+        }))}
+      />
+      <ConfirmSheet
+        visible={confirm === 'clear'}
+        title={t('agent.clear.title')}
+        body={t('agent.clear.body', { name: view.name })}
+        confirmLabel={t('agent.clear')}
+        destructive
+        busy={busy}
+        onConfirm={() => void clearChat()}
+        onCancel={() => setConfirm(null)}
+      />
       <ConfirmSheet
         visible={confirm === 'remove'}
         title={t('agent.remove.title', { name: view.name })}
@@ -394,65 +464,6 @@ export default function AgentProfileScreen() {
   );
 }
 
-function statusColor(colors: Palette, status: AgentStatus | null): string {
-  switch (status) {
-    case 'connected':
-      return colors.statusConnected;
-    case 'unreachable':
-      return colors.statusUnreachable;
-    default:
-      return colors.statusIdle;
-  }
-}
-
-// ActionTile is one of the pill cards under the name, as the reference
-// apps draw a contact's actions.
-function ActionTile({
-  icon,
-  label,
-  onPress,
-  disabled,
-  colors,
-  testID,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  colors: Palette;
-  testID: string;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      testID={testID}
-      style={({ pressed }) => [
-        tile.base,
-        { backgroundColor: pressed ? colors.surfaceStrong : colors.surface },
-        disabled && tile.disabled,
-      ]}
-    >
-      <Ionicons name={icon} size={22} color={colors.accent} />
-      <Text style={[tile.label, { color: colors.text }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-const tile = StyleSheet.create({
-  base: {
-    flex: 1,
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.md,
-    borderRadius: radius.lg,
-  },
-  label: type.label,
-  disabled: { opacity: 0.5 },
-});
-
 const makeStyles = ({ colors }: Theme) =>
   StyleSheet.create({
     body: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
@@ -464,7 +475,7 @@ const makeStyles = ({ colors }: Theme) =>
     badge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.pill },
     badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     badgeText: type.caption,
-    notice: { ...type.secondary, color: colors.danger, textAlign: 'center', marginTop: -spacing.sm },
+    notice: { ...type.secondary, color: colors.textSecondary, textAlign: 'center', marginTop: -spacing.sm },
     description: {
       ...type.body,
       color: colors.text,

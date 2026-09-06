@@ -1,3 +1,4 @@
+import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
@@ -10,6 +11,7 @@ import { useConversation } from '@/chats/useChats';
 import { counterpart } from '@/components/ChatRow';
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
+import { ActionSheet, type SheetAction } from '@/components/ActionSheet';
 import { Bubble } from '@/components/chat/Bubble';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { Composer } from '@/components/chat/Composer';
@@ -37,6 +39,8 @@ export default function ChatScreen() {
   const { controller: agentsController } = useAgents();
   const chat = useChat(id);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  // The message a long-press opened the menu for.
+  const [menu, setMenu] = useState<ChatMessage | null>(null);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chats'));
   const dayLabels = { today: t('chat.day.today'), yesterday: t('chat.day.yesterday') };
@@ -49,6 +53,37 @@ export default function ChatScreen() {
     void chat.send({
       action: { button_id: b.id as string, source_message_id: m.id, label: b.label },
     });
+
+  // What can be done with one message. Copy needs words; delete-for-me
+  // needs an id, which one of ours still waiting for the hub does not have.
+  const actionsFor = (m: ChatMessage): SheetAction[] => [
+    {
+      icon: 'arrow-undo-outline',
+      label: t('chat.action.reply'),
+      onPress: () => setReplyTo(m),
+      testID: 'menu-reply',
+    },
+    ...(m.body.text
+      ? [
+          {
+            icon: 'copy-outline' as const,
+            label: t('chat.action.copy'),
+            onPress: () => void Clipboard.setStringAsync(m.body.text ?? ''),
+            testID: 'menu-copy',
+          },
+        ]
+      : []),
+    ...(m.localKey
+      ? []
+      : [
+          {
+            icon: 'trash-outline' as const,
+            label: t('chat.action.delete'),
+            onPress: () => void chat.deleteForMe(m.id),
+            testID: 'menu-delete',
+          },
+        ]),
+  ];
 
   const messages = chat.messages;
   return (
@@ -88,7 +123,7 @@ export default function ChatScreen() {
                     mine={item.sender.kind === 'user'}
                     first={first}
                     agentName={name}
-                    onReply={setReplyTo}
+                    onReply={setMenu}
                     onButton={tap}
                     onOpen={(url) => void openLink(url)}
                     onRetry={(key) => void chat.retry(key)}
@@ -124,6 +159,11 @@ export default function ChatScreen() {
             <QuickReplies labels={chat.quickReplies} onPick={(label) => send(label, [])} />
           ) : null}
           <Composer replyTo={replyTo} agentName={name} onCancelReply={() => setReplyTo(null)} onSend={send} />
+          <ActionSheet
+            visible={!!menu}
+            onClose={() => setMenu(null)}
+            actions={menu ? actionsFor(menu) : []}
+          />
         </>
       )}
     </Screen>

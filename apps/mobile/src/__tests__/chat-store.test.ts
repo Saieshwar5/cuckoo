@@ -4,12 +4,14 @@ import {
   addOlder,
   appendDelta,
   applyFrame,
+  clearMessages,
   confirmLocal,
   empty,
   failLocal,
   isTyping,
   newestServerId,
   quickReplies,
+  removeMessage,
   setPage,
   upsert,
   type ChatMessage,
@@ -159,5 +161,34 @@ describe('chat store', () => {
     );
     expect(s.messages[0]?.delivery_status).toBe('delivered');
     expect(appendDelta(s, 'missing', 'x')).toEqual(s);
+  });
+});
+
+describe('out of my sight', () => {
+  it('removes one message and leaves the rest', () => {
+    let s = setPage(empty, {
+      messages: [
+        msg({ id: 'b', created_at: '2026-09-05T10:01:00Z' }),
+        msg({ id: 'a', created_at: '2026-09-05T10:00:00Z' }),
+      ],
+      next_before: 'a',
+      next_after: null,
+    });
+    s = removeMessage(s, 'b');
+    expect(s.messages.map((m) => m.id)).toEqual(['a']);
+    expect(s.nextBefore).toBe('a');
+    expect(removeMessage(s, 'zzz')).toBe(s);
+  });
+
+  it('clears everything, with nothing older to page to', () => {
+    const s = clearMessages(
+      setPage(empty, {
+        messages: [msg({ id: 'a', created_at: '2026-09-05T10:00:00Z' })],
+        next_before: 'a',
+        next_after: null,
+      }),
+    );
+    expect(s.messages).toEqual([]);
+    expect(s.nextBefore).toBeNull();
   });
 });

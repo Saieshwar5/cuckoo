@@ -53,12 +53,17 @@ ORDER BY m.id DESC
 LIMIT sqlc.arg('page_size');
 
 -- name: ListMessagesBefore :many
--- One page of history, newest first. The cursor is a message id: everything
--- older than it, or the newest page when it is null.
-SELECT * FROM messages
-WHERE conversation_id = sqlc.arg('conversation_id')
-  AND (sqlc.narg('before')::uuid IS NULL OR id < sqlc.narg('before')::uuid)
-ORDER BY id DESC
+-- One page of history as a person sees it, newest first. The cursor is a
+-- message id: everything older than it, or the newest page when it is null.
+-- What they cleared or hid is not there; it is still there for everyone
+-- else.
+SELECT m.* FROM messages m
+JOIN participants p ON p.conversation_id = m.conversation_id AND p.user_id = sqlc.arg('user_id')::uuid
+WHERE m.conversation_id = sqlc.arg('conversation_id')
+  AND (p.cleared_before IS NULL OR m.id > p.cleared_before)
+  AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.user_id = p.user_id AND h.message_id = m.id)
+  AND (sqlc.narg('before')::uuid IS NULL OR m.id < sqlc.narg('before')::uuid)
+ORDER BY m.id DESC
 LIMIT sqlc.arg('page_size');
 
 -- name: ListLatestMessages :many
@@ -68,15 +73,42 @@ FROM messages
 WHERE conversation_id = ANY(sqlc.arg('conversation_ids')::uuid[])
 ORDER BY conversation_id, id DESC;
 
+-- name: ListLatestVisibleMessages :many
+-- ListLatestMessages as one person sees it: the newest message they have
+-- not cleared or hidden, so a chat-list row never previews what they put
+-- out of sight.
+SELECT DISTINCT ON (m.conversation_id) m.*
+FROM messages m
+JOIN participants p ON p.conversation_id = m.conversation_id AND p.user_id = sqlc.arg('user_id')::uuid
+WHERE m.conversation_id = ANY(sqlc.arg('conversation_ids')::uuid[])
+  AND (p.cleared_before IS NULL OR m.id > p.cleared_before)
+  AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.user_id = p.user_id AND h.message_id = m.id)
+ORDER BY m.conversation_id, m.id DESC;
+
+-- name: ClearConversation :execrows
+-- Everything said so far goes out of this person's view. A uuid has no
+-- max(), so the newest is found by order.
+UPDATE participants p
+SET cleared_before = (SELECT m.id FROM messages m WHERE m.conversation_id = p.conversation_id ORDER BY m.id DESC LIMIT 1)
+WHERE p.conversation_id = $1 AND p.user_id = $2;
+
+-- name: HideMessage :exec
+INSERT INTO message_hides (user_id, message_id) VALUES ($1, $2)
+ON CONFLICT DO NOTHING;
+
 -- name: ListMessagesByIDs :many
 SELECT * FROM messages
 WHERE id = ANY(sqlc.arg('ids')::uuid[]);
 
 -- name: ListMessagesAfter :many
 -- Catching up: everything newer than a message the caller already has,
--- oldest first, so a client that was away fills its gap in order.
-SELECT * FROM messages
-WHERE conversation_id = sqlc.arg('conversation_id')
-  AND id > sqlc.arg('after')::uuid
-ORDER BY id ASC
+-- oldest first, so a client that was away fills its gap in order. The
+-- person's view, as in ListMessagesBefore.
+SELECT m.* FROM messages m
+JOIN participants p ON p.conversation_id = m.conversation_id AND p.user_id = sqlc.arg('user_id')::uuid
+WHERE m.conversation_id = sqlc.arg('conversation_id')
+  AND (p.cleared_before IS NULL OR m.id > p.cleared_before)
+  AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.user_id = p.user_id AND h.message_id = m.id)
+  AND m.id > sqlc.arg('after')::uuid
+ORDER BY m.id ASC
 LIMIT sqlc.arg('page_size');

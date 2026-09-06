@@ -184,6 +184,9 @@ export interface Contact {
   archived: boolean;
 }
 
+// Why an agent is being reported. Fixed, so the pile can be sorted.
+export type ReportReason = 'spam' | 'impersonation' | 'abuse' | 'other';
+
 // ContactSettings is a partial change to those decisions. An omitted
 // field stays; muted_until null unmutes.
 export interface ContactSettings {

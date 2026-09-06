@@ -115,3 +115,14 @@ SELECT EXISTS (
 -- name: GetPairToken :one
 SELECT * FROM pair_tokens
 WHERE id = $1 AND agent_id = $2;
+
+-- name: CreateReport :one
+INSERT INTO reports (id, reporter_user_id, agent_id, message_id, reason, note)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: CountRecentReports :one
+-- How many times this person has reported this agent since a moment: one
+-- is enough to be looked at, and a second within the day adds nothing.
+SELECT count(*) FROM reports
+WHERE reporter_user_id = $1 AND agent_id = $2 AND created_at > sqlc.arg('since');

@@ -166,3 +166,17 @@ export function quickReplies(state: ChatState): string[] {
 export function isTyping(state: ChatState, now: number): boolean {
   return state.typingUntil !== null && state.typingUntil > now;
 }
+
+// removeMessage takes one message off the screen: the person deleted it
+// for themselves. One of ours still waiting for the hub has no id to give
+// the hub, so it is not offered for this.
+export function removeMessage(state: ChatState, id: string): ChatState {
+  if (!state.messages.some((m) => m.id === id)) return state;
+  return { ...state, messages: state.messages.filter((m) => m.id !== id) };
+}
+
+// clearMessages empties the chat: everything so far is out of sight, and
+// there is nothing older to page to.
+export function clearMessages(state: ChatState): ChatState {
+  return { ...state, messages: [], nextBefore: null };
+}

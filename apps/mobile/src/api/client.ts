@@ -13,6 +13,7 @@ import type {
   PairAccepted,
   PairResolve,
   PairToken,
+  ReportReason,
   User,
   Verified,
 } from './types';
@@ -100,6 +101,10 @@ export interface Api {
   ): Promise<Page>;
   // The key makes a retry the same send; a caller that will retry keeps it.
   sendMessage(conversationId: string, input: SendInput, idempotencyKey?: string): Promise<Message>;
+  // Out of my sight. The agent has the message already; nobody else's
+  // view changes.
+  deleteMessageForMe(conversationId: string, messageId: string): Promise<void>;
+  clearConversation(conversationId: string): Promise<void>;
   // Files. Uploading is its own step, so a slow photo does not hold a
   // message open; the send that follows names what came back.
   uploadMedia(file: UploadInput): Promise<Media>;
@@ -133,6 +138,11 @@ export interface Api {
   // Take an added agent out of the list. Its chat is no longer listed but
   // is still there to open; scanning the code again brings it back.
   removeContact(agentId: string): Promise<void>;
+  // A complaint for the hub's operator to read. The agent is not told.
+  reportAgent(
+    agentId: string,
+    report: { reason: ReportReason; note?: string; message_id?: string },
+  ): Promise<void>;
   blockAgent(id: string): Promise<void>;
   unblockAgent(id: string): Promise<void>;
   // API keys, for the person's own systems. Issued behind their own
@@ -204,6 +214,9 @@ export function createApi(opts: ApiOptions): Api {
       const qs = params.toString();
       return request<Page>('GET', `/v1/client/conversations/${id}/messages${qs ? `?${qs}` : ''}`);
     },
+    deleteMessageForMe: (id, messageId) =>
+      request('DELETE', `/v1/client/conversations/${id}/messages/${messageId}`),
+    clearConversation: (id) => request('POST', `/v1/client/conversations/${id}/clear`),
     sendMessage: async (id, input, idempotencyKey = newIdempotencyKey()) =>
       (
         await request<{ message: Message }>('POST', `/v1/client/conversations/${id}/messages`, {
@@ -283,6 +296,7 @@ export function createApi(opts: ApiOptions): Api {
     listContacts: async () => (await request<{ contacts: Contact[] }>('GET', '/v1/client/contacts')).contacts,
     updateContact: (id, settings) => request('PATCH', `/v1/client/contacts/${id}`, settings),
     removeContact: (id) => request('DELETE', `/v1/client/contacts/${id}`),
+    reportAgent: (id, report) => request('POST', `/v1/client/agents/${id}/report`, report),
     blockAgent: (id) => request('POST', `/v1/client/agents/${id}/block`),
     unblockAgent: (id) => request('DELETE', `/v1/client/agents/${id}/block`),
     createApiKey: (name) => request<MintedApiKey>('POST', '/v1/client/api-keys', { name }),

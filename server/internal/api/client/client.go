@@ -50,6 +50,10 @@ func (h *Handler) Routes() chi.Router {
 		r.Get("/", h.getConversation)
 		r.Get("/messages", h.listMessages)
 		r.Post("/messages", h.sendMessage)
+		// Out of my sight: one message, or everything so far. Nobody else's
+		// view changes.
+		r.Delete("/messages/{mid}", h.deleteMessageForMe)
+		r.Post("/clear", h.clearConversation)
 	})
 
 	// Files: uploaded before the message that carries them, and read back
@@ -63,6 +67,7 @@ func (h *Handler) Routes() chi.Router {
 	r.Get("/contacts", h.listContacts)
 	r.Patch("/contacts/{id}", h.updateContact)
 	r.Delete("/contacts/{id}", h.removeContact)
+	r.Post("/agents/{id}/report", h.reportAgent)
 	r.Post("/agents/{id}/block", h.blockAgent)
 	r.Delete("/agents/{id}/block", h.unblockAgent)
 

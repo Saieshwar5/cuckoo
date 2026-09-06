@@ -415,6 +415,7 @@ func (s *Service) ListMessages(ctx context.Context, callerID, conversationID uui
 	var page Page
 	if in.After != nil {
 		rows, err := s.store.ListMessagesAfter(ctx, gen.ListMessagesAfterParams{
+			UserID:         callerID,
 			ConversationID: conversationID,
 			After:          *in.After,
 			PageSize:       limit + 1,
@@ -430,6 +431,7 @@ func (s *Service) ListMessages(ctx context.Context, callerID, conversationID uui
 		// One more than asked for tells us whether another page exists
 		// without a second query or a count.
 		rows, err := s.store.ListMessagesBefore(ctx, gen.ListMessagesBeforeParams{
+			UserID:         callerID,
 			ConversationID: conversationID,
 			Before:         in.Before,
 			PageSize:       limit + 1,

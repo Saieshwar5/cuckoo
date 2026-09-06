@@ -44,6 +44,26 @@ func (q *Queries) CountPinnedContacts(ctx context.Context, userID uuid.UUID) (in
 	return count, err
 }
 
+const countRecentReports = `-- name: CountRecentReports :one
+SELECT count(*) FROM reports
+WHERE reporter_user_id = $1 AND agent_id = $2 AND created_at > $3
+`
+
+type CountRecentReportsParams struct {
+	ReporterUserID uuid.UUID
+	AgentID        uuid.UUID
+	Since          time.Time
+}
+
+// How many times this person has reported this agent since a moment: one
+// is enough to be looked at, and a second within the day adds nothing.
+func (q *Queries) CountRecentReports(ctx context.Context, arg CountRecentReportsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRecentReports, arg.ReporterUserID, arg.AgentID, arg.Since)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createContact = `-- name: CreateContact :one
 INSERT INTO contacts (user_id, agent_id, dm_conversation_id, added_via, pair_token_id)
 VALUES ($1, $2, $3, $4, $5)
@@ -124,6 +144,43 @@ func (q *Queries) CreatePairToken(ctx context.Context, arg CreatePairTokenParams
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const createReport = `-- name: CreateReport :one
+INSERT INTO reports (id, reporter_user_id, agent_id, message_id, reason, note)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, reporter_user_id, agent_id, message_id, reason, note, created_at
+`
+
+type CreateReportParams struct {
+	ID             uuid.UUID
+	ReporterUserID uuid.UUID
+	AgentID        uuid.UUID
+	MessageID      *uuid.UUID
+	Reason         string
+	Note           string
+}
+
+func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (Report, error) {
+	row := q.db.QueryRow(ctx, createReport,
+		arg.ID,
+		arg.ReporterUserID,
+		arg.AgentID,
+		arg.MessageID,
+		arg.Reason,
+		arg.Note,
+	)
+	var i Report
+	err := row.Scan(
+		&i.ID,
+		&i.ReporterUserID,
+		&i.AgentID,
+		&i.MessageID,
+		&i.Reason,
+		&i.Note,
+		&i.CreatedAt,
 	)
 	return i, err
 }

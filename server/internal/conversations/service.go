@@ -104,7 +104,7 @@ func (s *Service) ListMine(ctx context.Context, callerID uuid.UUID) ([]Conversat
 	if err != nil {
 		return nil, domain.Internal(fmt.Errorf("list conversations of %s: %w", callerID, err))
 	}
-	return s.hydrate(ctx, rows)
+	return s.hydrateFor(ctx, callerID, rows)
 }
 
 // GetMine returns one conversation the caller is a member of.
@@ -118,7 +118,7 @@ func (s *Service) GetMine(ctx context.Context, callerID, id uuid.UUID) (Conversa
 	if err != nil {
 		return Conversation{}, err
 	}
-	convs, err := s.hydrate(ctx, []gen.Conversation{row})
+	convs, err := s.hydrateFor(ctx, callerID, []gen.Conversation{row})
 	if err != nil {
 		return Conversation{}, err
 	}
@@ -189,7 +189,23 @@ func (s *Service) member(ctx context.Context, callerID, id uuid.UUID) (gen.Conve
 // hydrate attaches members and the latest message to conversation rows,
 // keeping their order. Two queries however many conversations there are: the
 // chat list must not cost a round trip per chat.
+// hydrate fills conversations in for a reader with no view of their own —
+// the delivery layer, an agent — whose previews are simply the newest
+// message.
 func (s *Service) hydrate(ctx context.Context, rows []gen.Conversation) ([]Conversation, error) {
+	return s.hydrateWith(ctx, rows, s.store.ListLatestMessages)
+}
+
+// hydrateFor fills conversations in as one person sees them: a row never
+// previews a message they cleared or hid.
+func (s *Service) hydrateFor(ctx context.Context, viewer uuid.UUID, rows []gen.Conversation) ([]Conversation, error) {
+	return s.hydrateWith(ctx, rows, func(ctx context.Context, ids []uuid.UUID) ([]gen.Message, error) {
+		return s.store.ListLatestVisibleMessages(ctx, gen.ListLatestVisibleMessagesParams{UserID: viewer, ConversationIds: ids})
+	})
+}
+
+func (s *Service) hydrateWith(ctx context.Context, rows []gen.Conversation,
+	latestOf func(context.Context, []uuid.UUID) ([]gen.Message, error)) ([]Conversation, error) {
 	out := make([]Conversation, len(rows))
 	if len(rows) == 0 {
 		return out, nil
@@ -217,7 +233,7 @@ func (s *Service) hydrate(ctx context.Context, rows []gen.Conversation) ([]Conve
 		out[i].Participants = append(out[i].Participants, participantFromRow(m))
 	}
 
-	latest, err := s.store.ListLatestMessages(ctx, ids)
+	latest, err := latestOf(ctx, ids)
 	if err != nil {
 		return nil, domain.Internal(fmt.Errorf("list latest messages: %w", err))
 	}
