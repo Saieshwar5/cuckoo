@@ -171,10 +171,29 @@ certificate for `localhost`.
 link open the app. They wait for the app's package name and signing
 certificate, which arrive with the first store build.
 
-## Not here yet
+## Mail
 
-- **Mail.** Console is the only mode. An SMTP mailer and a sender with an
-  Indian region arrive when the first person who is not you signs in.
+Sign-in codes go to the hub's log until a provider is configured, which is
+enough while you are the only person signing in. For anybody else:
+
+1. **An account with a sending provider.** Amazon's mail service in the
+   Mumbai region is the closest and cheapest; Postmark, Resend and Brevo set
+   up faster and cost more. Either way it starts restricted to addresses you
+   have verified, and lifting that is a short form and about a day.
+2. **Three DNS records on the domain**: SPF, DKIM and DMARC, as the provider
+   gives them. Without these the codes land in spam folders, and a sign-in
+   code in a spam folder is a person who gives up.
+3. **Six settings in `.env`**: `CUCKOO_MAIL=smtp` plus the host, port,
+   username, password and from address. Port 587 upgrades with STARTTLS and
+   465 is TLS from the start; the hub refuses anything else rather than send
+   a code in the clear.
+4. **Send to a real inbox at each of Gmail, Outlook, Yahoo and Rediffmail**
+   before calling it done. Indian inboxes do not all behave the same.
+
+The hub logs where it is sending from at start-up, so a misconfigured
+provider is visible before anybody tries to sign in.
+
+## Not here yet
 - **Managed Postgres.** Worth buying at the same moment. It removes the
   `postgres` service from the compose file and changes one URL.
 - **Push notifications** and **store builds** are roadmap items, not deploy

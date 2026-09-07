@@ -3,9 +3,11 @@
 # The Go server runs on the host (`make dev`) so hot reload and debuggers work.
 # Only its backing services live in Docker.
 #
-# Services are added here as the code that needs them lands — MinIO (media,
-# Phase 3) and Mailpit (magic-link email, with auth) are deliberately absent
-# until then, so `make up` stays fast and nothing runs unused.
+# Services are added here as the code that needs them lands, so `make up`
+# stays fast and nothing runs unused. There is deliberately no mail server:
+# development prints sign-in codes to the log (CUCKOO_MAIL=console), and the
+# SMTP client refuses to send a code over a connection without TLS, which a
+# local catcher would not have.
 #
 # Ports are deliberately off the defaults (5433, 6380) so Cuckoo can run
 # alongside another project's Postgres and Redis without either having to be

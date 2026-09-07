@@ -59,6 +59,8 @@ type Config struct {
 	// log, which is right for development and for a private hub whose
 	// operator is its only user; it is never assumed in production.
 	Mail string
+	// SMTP is where mail goes when Mail is "smtp". Empty otherwise.
+	SMTP SMTPSettings
 
 	// Retention is what the hub keeps and for how long: messages for a
 	// period, each uploader's files to a budget. See the retention package.
@@ -77,7 +79,23 @@ type Config struct {
 }
 
 // Mail modes.
-const MailConsole = "console"
+const (
+	// MailConsole prints codes to the log. Development, and a hub whose
+	// only user reads its log.
+	MailConsole = "console"
+	// MailSMTP sends through a provider.
+	MailSMTP = "smtp"
+)
+
+// SMTPSettings is the provider the hub sends through.
+type SMTPSettings struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
+	From     string
+	FromName string
+}
 
 // Retention is the hub's window. Zero MessageAge keeps messages forever;
 // a zero budget is no budget.
@@ -138,11 +156,28 @@ func Load() (Config, error) {
 	switch {
 	case cfg.Mail == "" && cfg.Env == EnvProd:
 		l.fail("CUCKOO_MAIL must be set when CUCKOO_ENV=prod: sign-in codes have to go somewhere. " +
-			"The only mode today is console, which prints them to the log; set it deliberately or not at all")
+			"Either smtp with a provider, or console, which prints them to the log — deliberately")
 	case cfg.Mail == "":
 		cfg.Mail = MailConsole
+	case cfg.Mail == MailSMTP:
+		cfg.SMTP = SMTPSettings{
+			Host:     l.str("CUCKOO_SMTP_HOST", ""),
+			Port:     int(l.count("CUCKOO_SMTP_PORT", 587)),
+			Username: l.str("CUCKOO_SMTP_USERNAME", ""),
+			Password: l.str("CUCKOO_SMTP_PASSWORD", ""),
+			From:     l.str("CUCKOO_SMTP_FROM", ""),
+			FromName: l.str("CUCKOO_SMTP_FROM_NAME", "Cuckoo"),
+		}
+		for key, value := range map[string]string{
+			"CUCKOO_SMTP_HOST": cfg.SMTP.Host,
+			"CUCKOO_SMTP_FROM": cfg.SMTP.From,
+		} {
+			if value == "" {
+				l.fail("%s must be set when CUCKOO_MAIL=smtp", key)
+			}
+		}
 	case cfg.Mail != MailConsole:
-		l.fail("CUCKOO_MAIL must be console (got %q)", cfg.Mail)
+		l.fail("CUCKOO_MAIL must be console or smtp (got %q)", cfg.Mail)
 	}
 
 	if cfg.Env == EnvProd {

@@ -29,8 +29,15 @@ services:
       CUCKOO_DATABASE_URL: postgres://cuckoo:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/cuckoo?sslmode=disable
       CUCKOO_REDIS_URL: redis://redis:6379/0
       CUCKOO_MEDIA_DIR: /data/media
-      # console until the first stranger signs in: the code is in `docker compose logs hub`
+      # console until the first stranger signs in: the code is in
+      # `docker compose logs hub`. smtp needs the six settings below.
       CUCKOO_MAIL: ${CUCKOO_MAIL:-console}
+      CUCKOO_SMTP_HOST: ${CUCKOO_SMTP_HOST:-}
+      CUCKOO_SMTP_PORT: "${CUCKOO_SMTP_PORT:-587}"
+      CUCKOO_SMTP_USERNAME: ${CUCKOO_SMTP_USERNAME:-}
+      CUCKOO_SMTP_PASSWORD: ${CUCKOO_SMTP_PASSWORD:-}
+      CUCKOO_SMTP_FROM: ${CUCKOO_SMTP_FROM:-}
+      CUCKOO_SMTP_FROM_NAME: ${CUCKOO_SMTP_FROM_NAME:-Cuckoo}
       CUCKOO_WELCOME_HANDLE: ${WELCOME_HANDLE:-}
       CUCKOO_LOG_LEVEL: ${CUCKOO_LOG_LEVEL:-info}
       CUCKOO_SHUTDOWN_TIMEOUT: 15s
