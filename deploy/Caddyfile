@@ -1,0 +1,59 @@
+# One domain, two things behind it.
+#
+# The hub owns the paths a person or a backend actually calls; everything else
+# is the static site. Keeping them on one host is what makes a pair link short
+# enough to print on a poster, and it is the same host that must serve the app
+# link files, so there is nothing to keep in sync across two names.
+#
+# Set SITE_DOMAIN and HUB_UPSTREAM in the environment; Caddy fetches the
+# certificate itself.
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	# The hub. Everything under these prefixes is proxied untouched.
+	@hub path /v1/* /p/* /a/* /healthz
+	handle @hub {
+		reverse_proxy {$HUB_UPSTREAM} {
+			# The agent socket and the client socket are long-lived.
+			transport http {
+				read_timeout 0
+				write_timeout 0
+			}
+		}
+	}
+
+	# Apple insists on this exact type for a file with no extension.
+	@aasa path /.well-known/apple-app-site-association
+	handle @aasa {
+		header Content-Type application/json
+		root * /srv/www
+		file_server
+	}
+
+	# The site.
+	handle {
+		root * /srv/www
+		file_server
+		try_files {path} {path}/ {path}.html /404.html
+
+		header {
+			# The site is static and same-origin; nothing here needs anything else.
+			Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+			Referrer-Policy "strict-origin-when-cross-origin"
+			X-Content-Type-Options "nosniff"
+			Strict-Transport-Security "max-age=31536000; includeSubDomains"
+			Permissions-Policy "geolocation=(), microphone=(), camera=(), interest-cohort=()"
+		}
+
+		# Fingerprinted assets never change under the same name.
+		@immutable path /_astro/*
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+	}
+
+	handle_errors {
+		rewrite * /404.html
+		root * /srv/www
+		file_server
+	}
+}

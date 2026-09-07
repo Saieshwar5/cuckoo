@@ -109,6 +109,24 @@ play: ## Start everything and the app (make play EMAIL=you@example.com [TARGET=p
 web: ## Start everything and open the app in this laptop's browser
 	@TARGET=web scripts/play.sh $(EMAIL)
 
+##@ Website
+
+.PHONY: site-install
+site-install: ## Install the website's dependencies
+	cd web && npm install --no-audit --no-fund
+
+.PHONY: site
+site: ## Serve the website at http://localhost:4321 with hot reload
+	cd web && npm run dev
+
+.PHONY: site-build
+site-build: ## Build the website into web/dist (SITE_URL sets the domain)
+	cd web && npm run build
+
+.PHONY: site-check
+site-check: ## Typecheck the website
+	cd web && npm run check
+
 .PHONY: emulator-install
 emulator-install: ## Download the Android emulator and create a device (about 3 GB, once)
 	@scripts/emulator.sh install

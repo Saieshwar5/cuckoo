@@ -1,0 +1,124 @@
+---
+import Page from '../layouts/Page.astro';
+import { downloads, site } from '../config';
+
+const anyStore = downloads.play.available || downloads.appStore.available;
+---
+
+<Page title="Get the app" description={`Download ${site.name} for Android and iPhone.`}>
+  <article class="wrap narrow prose">
+    <h1>Get the app</h1>
+    <p class="updated">Android and iPhone. Free, and no phone number needed.</p>
+
+    {
+      !anyStore && (
+        <p class="notice">
+          Cuckoo is not in the app stores yet. Until it is, these are the ways in.
+          Both are the real app, and both update the same way once the store
+          listings go live.
+        </p>
+      )
+    }
+
+    <div class="platforms">
+      <div class="platform">
+        <h2>Android</h2>
+        {
+          downloads.play.available ? (
+            <a class="button primary" href={downloads.play.url} rel="noopener">
+              Get it on Google Play
+            </a>
+          ) : downloads.android.available ? (
+            <a class="button primary" href={downloads.android.url} rel="noopener">
+              {downloads.android.label}
+            </a>
+          ) : (
+            <p class="pending">
+              A downloadable build is coming. Watch{' '}
+              <a href={`${site.repo}/releases`} rel="noopener">the releases page</a>.
+            </p>
+          )
+        }
+        <p class="fineprint">Android 8 and later.</p>
+      </div>
+
+      <div class="platform">
+        <h2>iPhone</h2>
+        {
+          downloads.appStore.available ? (
+            <a class="button primary" href={downloads.appStore.url} rel="noopener">
+              Download on the App Store
+            </a>
+          ) : downloads.ios.available ? (
+            <a class="button primary" href={downloads.ios.url} rel="noopener">
+              Join the TestFlight
+            </a>
+          ) : (
+            <p class="pending">A TestFlight build is coming.</p>
+          )
+        }
+        <p class="fineprint">iOS 16 and later.</p>
+      </div>
+    </div>
+
+    <h2>Signing in</h2>
+    <p>
+      An email address makes an account. The app sends a six-digit code and that
+      is the whole of it. There is no password to forget and no phone number to
+      give. One device at a time for now, so signing in somewhere new signs the
+      old one out.
+    </p>
+
+    <h2>Scanned a code and landed here?</h2>
+    <p>
+      Somebody gave you a link to an agent. Install the app, sign in, then open
+      that link again and it will offer to add the agent to your chat list. You
+      can block or remove it at any time afterwards.
+    </p>
+
+    <h2>Building an agent instead?</h2>
+    <p>
+      You do not need the app to write one, though it is the easiest way to get
+      your first key. Start with the <a href="/docs/quickstart/">quickstart</a>.
+    </p>
+  </article>
+</Page>
+
+<style>
+  .notice {
+    border: 1px solid var(--ck-hairline);
+    border-radius: 14px;
+    padding: 1rem 1.25rem;
+    color: var(--ck-text-secondary);
+  }
+
+  .platforms {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    margin: 2rem 0 1rem;
+  }
+
+  .platform {
+    border: 1px solid var(--ck-hairline);
+    border-radius: 18px;
+    padding: 1.5rem;
+  }
+
+  .platform h2 {
+    margin-top: 0;
+    border: 0;
+    padding: 0;
+    font-size: 1.125rem;
+  }
+
+  .pending,
+  .fineprint {
+    color: var(--ck-text-secondary);
+    font-size: 0.9375rem;
+  }
+
+  .fineprint {
+    margin-bottom: 0;
+  }
+</style>

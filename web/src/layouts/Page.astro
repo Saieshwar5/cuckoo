@@ -1,0 +1,78 @@
+---
+import '../styles/cuckoo.css';
+import '../styles/site.css';
+import SiteHeader from '../components/SiteHeader.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import { site } from '../config';
+
+interface Props {
+  title: string;
+  description?: string;
+  /** Left off the landing page, which is its own title. */
+  suffix?: boolean;
+}
+
+const { title, description = site.description, suffix = true } = Astro.props;
+const pageTitle = suffix ? `${title} · ${site.name}` : title;
+const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://cuckoo.in');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical.href} />
+    <link rel="icon" href="/favicon.png" type="image/png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical.href} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="color-scheme" content="dark light" />
+    <!--
+      The theme is settled before the first paint, and out of the same store
+      Starlight uses, so moving between the landing and the docs never flashes
+      or forgets. Blocking on purpose: it is four lines.
+    -->
+    <script is:inline>
+      (() => {
+        const stored = (() => {
+          try {
+            return localStorage.getItem('starlight-theme');
+          } catch {
+            return null;
+          }
+        })();
+        const theme =
+          stored === 'light' || stored === 'dark'
+            ? stored
+            : matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark';
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <slot name="head" />
+  </head>
+  <body>
+    <SiteHeader />
+    <main>
+      <slot />
+    </main>
+    <SiteFooter />
+    <script is:inline>
+      document.querySelector('[data-theme-toggle]')?.addEventListener('click', () => {
+        const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+        document.documentElement.dataset.theme = next;
+        try {
+          localStorage.setItem('starlight-theme', next);
+        } catch {
+          /* a browser that refuses storage still gets the change for this page */
+        }
+      });
+    </script>
+  </body>
+</html>

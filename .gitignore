@@ -55,6 +55,9 @@ node_modules/
 .expo-shared/
 *.tsbuildinfo
 
+# Astro's generated types and content cache (web/)
+.astro/
+
 # ─── Local data volumes ──────────────────────────────────────────────────────
 .data/
 postgres-data/
