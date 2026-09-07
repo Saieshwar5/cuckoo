@@ -87,6 +87,29 @@ describe('api client', () => {
     await expect(api.listConversations()).rejects.toBeInstanceOf(NetworkError);
   });
 
+  it('lists devices and ends one or all the others', async () => {
+    const calls: { method: string; url: string }[] = [];
+    const api = createApi({
+      baseUrl: 'http://hub',
+      getToken: () => 'ses_tok_1',
+      fetchImpl: async (url, init) => {
+        calls.push({ method: init?.method ?? 'GET', url: String(url) });
+        return init?.method === 'DELETE'
+          ? respond(204, undefined)
+          : respond(200, { devices: [{ id: 'ses_1', name: 'laptop', current: true }] });
+      },
+    });
+    const devices = await api.listDevices();
+    expect(devices.map((d) => d.id)).toEqual(['ses_1']);
+    await api.signOutDevice('ses_2');
+    await api.signOutOtherDevices();
+    expect(calls).toEqual([
+      { method: 'GET', url: 'http://hub/v1/client/devices' },
+      { method: 'DELETE', url: 'http://hub/v1/client/devices/ses_2' },
+      { method: 'DELETE', url: 'http://hub/v1/client/devices' },
+    ]);
+  });
+
   it('handles empty responses and query parameters', async () => {
     const urls: string[] = [];
     const api = createApi({

@@ -109,9 +109,10 @@ type Contact struct {
 	Archived   bool
 }
 
-// pinsMax is how many chats may sit above the rest. Three is what a thumb
-// reaches without scrolling; more pins and nothing is pinned.
-const pinsMax = 3
+// pinsMax is how many chats may sit above the rest. Enough that everything
+// somebody uses daily fits, few enough that the pinned section is still a
+// section: past this the list is only the list again.
+const pinsMax = 10
 
 func contactFromRow(r gen.ListContactsRow) Contact {
 	c := Contact{

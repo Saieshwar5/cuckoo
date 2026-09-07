@@ -56,6 +56,7 @@ function Routes() {
           <Stack.Screen name="agent" />
           <Stack.Screen name="scan" />
           <Stack.Screen name="api-keys" />
+          <Stack.Screen name="devices" />
           <Stack.Screen name="me" />
           <Stack.Screen name="archived" />
           <Stack.Screen name="settings" />

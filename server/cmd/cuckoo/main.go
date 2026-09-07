@@ -122,7 +122,11 @@ func run() error {
 	// account; the session authenticator is built after sign-in, which it
 	// resolves tokens with. Order matters here and nothing checks it but
 	// the first request.
-	signinService := signin.New(db, mail.NewConsole(log), signin.WithLimiter(limits),
+	mailer, err := newMailer(cfg, log)
+	if err != nil {
+		return err
+	}
+	signinService := signin.New(db, mailer, signin.WithLimiter(limits),
 		signin.WithWelcome(pairingService.Welcomer(cfg.WelcomeHandle)))
 	userAuth := newUserAuthenticator(cfg, signinService)
 	apiKeyService := apikeys.New(db)
@@ -264,6 +268,29 @@ func newUserAuthenticator(cfg config.Config, s *signin.Service) middleware.Authe
 		return auth.NewDevOrSession(auth.NewDev(), session)
 	}
 	return session
+}
+
+// newMailer picks where sign-in codes go. Console prints them to the log,
+// which is right in development and on a hub whose only user reads its log;
+// smtp sends them through a provider.
+func newMailer(cfg config.Config, log *slog.Logger) (mail.Mailer, error) {
+	if cfg.Mail != config.MailSMTP {
+		log.Info("sign-in codes go to the log", "mail", cfg.Mail)
+		return mail.NewConsole(log), nil
+	}
+	m, err := mail.NewSMTP(mail.SMTPConfig{
+		Host:     cfg.SMTP.Host,
+		Port:     cfg.SMTP.Port,
+		Username: cfg.SMTP.Username,
+		Password: cfg.SMTP.Password,
+		From:     cfg.SMTP.From,
+		FromName: cfg.SMTP.FromName,
+	})
+	if err != nil {
+		return nil, err
+	}
+	log.Info("sending mail", "host", cfg.SMTP.Host, "port", cfg.SMTP.Port, "from", cfg.SMTP.From)
+	return m, nil
 }
 
 func newRedis(redisURL string) (*redis.Client, error) {

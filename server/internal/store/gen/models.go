@@ -162,6 +162,7 @@ type Session struct {
 	ExpiresAt  time.Time
 	CreatedAt  time.Time
 	RevokedAt  *time.Time
+	LastSeenAt *time.Time
 }
 
 type SignInCode struct {

@@ -106,6 +106,12 @@ export default function SettingsScreen() {
             testID="settings-profile"
           />
           <Row
+            icon="phone-portrait-outline"
+            label={t('settings.devices')}
+            onPress={() => router.push('/devices')}
+            testID="settings-devices"
+          />
+          <Row
             icon="key-outline"
             label={t('settings.keys')}
             onPress={() => router.push('/api-keys')}

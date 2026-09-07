@@ -187,6 +187,16 @@ with a name, see it once with a copy button, watch when each was last
 used, and revoke. These routes live on the client API, behind the
 person's own sign-in, so a key can never make another key.
 
+## Devices
+
+Signing in somewhere new no longer signs the old device out. Settings →
+Devices (`app/devices.tsx`) lists where the account is signed in: this
+device first and marked, each with when it was last heard from, and a
+way to sign out one of the others or all of them at once.
+`src/devices/format.ts` writes those lines over `timeSince` in
+`src/util/time.ts`, which is the app's one measure of how long ago
+something was.
+
 ## Handing an agent out, and taking one in
 
 An owner's profile has **Share**: it mints one static code for the agent

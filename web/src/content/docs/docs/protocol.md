@@ -341,6 +341,17 @@ send will be delivered when it is back.
 Any success clears that: a webhook that answers 2xx, a socket that connects, a
 heartbeat, or an acknowledgement.
 
+## Devices
+
+A person may be signed in on up to ten devices at once. The client API, which
+the app speaks, lists them at `GET /v1/client/devices` with a name, when each
+was last seen, and which one is asking; `DELETE /v1/client/devices/{id}` ends
+one, and `DELETE /v1/client/devices` ends every one but the caller's. Past ten,
+the device that has gone longest without being used is signed out to make room.
+
+None of this reaches an agent: a backend is told a person's id and display
+name, and never which device they are holding.
+
 ## Retention
 
 The hub keeps a message and its attachments for a rolling window, 90 days by

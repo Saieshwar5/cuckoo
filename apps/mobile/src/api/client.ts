@@ -5,6 +5,7 @@ import type {
   Contact,
   ContactSettings,
   Conversation,
+  Device,
   Media,
   Message,
   MintedApiKey,
@@ -150,6 +151,11 @@ export interface Api {
   ): Promise<void>;
   blockAgent(id: string): Promise<void>;
   unblockAgent(id: string): Promise<void>;
+  // The devices this person is signed in on, newest first, and the two
+  // ways to end one: that device, or every device but this one.
+  listDevices(): Promise<Device[]>;
+  signOutDevice(id: string): Promise<void>;
+  signOutOtherDevices(): Promise<void>;
   // API keys, for the person's own systems. Issued behind their own
   // credential, so a key can never make another.
   createApiKey(name: string): Promise<MintedApiKey>;
@@ -306,6 +312,9 @@ export function createApi(opts: ApiOptions): Api {
     reportAgent: (id, report) => request('POST', `/v1/client/agents/${id}/report`, report),
     blockAgent: (id) => request('POST', `/v1/client/agents/${id}/block`),
     unblockAgent: (id) => request('DELETE', `/v1/client/agents/${id}/block`),
+    listDevices: async () => (await request<{ devices: Device[] }>('GET', '/v1/client/devices')).devices,
+    signOutDevice: (id) => request('DELETE', `/v1/client/devices/${id}`),
+    signOutOtherDevices: () => request('DELETE', '/v1/client/devices'),
     createApiKey: (name) => request<MintedApiKey>('POST', '/v1/client/api-keys', { name }),
     listApiKeys: async () => (await request<{ api_keys: ApiKey[] }>('GET', '/v1/client/api-keys')).api_keys,
     revokeApiKey: (id) => request('DELETE', `/v1/client/api-keys/${id}`),
