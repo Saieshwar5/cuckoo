@@ -1,6 +1,6 @@
 import { t } from '@/i18n';
 import { avatarIndex, initials } from '@/util/avatar';
-import { formatClock, formatCountdown, formatDay, formatListTime, sameDay } from '@/util/time';
+import { formatClock, formatCountdown, formatDay, formatListTime, sameDay, timeSince } from '@/util/time';
 
 describe('strings', () => {
   it('fills placeholders and shows a missing key rather than nothing', () => {
@@ -28,6 +28,24 @@ describe('conversation time', () => {
     expect(formatClock('2026-09-05T09:05:00')).toMatch(/09:05/);
     expect(sameDay('2026-09-05T00:10:00', '2026-09-05T23:50:00')).toBe(true);
     expect(sameDay('2026-09-05T23:50:00', '2026-09-06T00:10:00')).toBe(false);
+  });
+});
+
+describe('time since', () => {
+  const now = new Date('2026-09-07T15:30:00');
+  it('picks the largest unit that still says something', () => {
+    expect(timeSince('2026-09-07T15:29:40', now)).toEqual({ unit: 'now' });
+    expect(timeSince('2026-09-07T15:20:00', now)).toEqual({ unit: 'minutes', count: 10 });
+    expect(timeSince('2026-09-07T12:30:00', now)).toEqual({ unit: 'hours', count: 3 });
+    expect(timeSince('2026-09-06T23:00:00', now)).toEqual({ unit: 'yesterday' });
+    expect(timeSince('2026-09-04T10:00:00', now)).toEqual({ unit: 'days', count: 3 });
+    expect(timeSince('2026-08-20T10:00:00', now)).toEqual({ unit: 'date', date: '20 August' });
+    expect(timeSince('2025-08-20T10:00:00', now)).toEqual({ unit: 'date', date: '20 August 2025' });
+  });
+
+  it('reads a clock that runs ahead as now, and an unreadable time as nothing', () => {
+    expect(timeSince('2026-09-07T15:40:00', now)).toEqual({ unit: 'now' });
+    expect(timeSince('garbage', now)).toBeNull();
   });
 });
 

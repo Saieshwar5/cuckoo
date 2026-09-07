@@ -221,17 +221,16 @@ func TestContactSettingsOverHTTP(t *testing.T) {
 		patch(agentID, map[string]any{"muted_until": "soon"}).ExpectError(http.StatusUnprocessableEntity, "invalid_muted_until")
 	})
 
-	t.Run("pin, three at most", func(t *testing.T) {
-		others := []string{
-			add(testutil.CreateAgent(t, f.db, f.owner), http.StatusCreated),
-			add(testutil.CreateAgent(t, f.db, f.owner), http.StatusCreated),
-			add(testutil.CreateAgent(t, f.db, f.owner), http.StatusCreated),
+	t.Run("pin, ten at most", func(t *testing.T) {
+		var others []string
+		for range 10 {
+			others = append(others, add(testutil.CreateAgent(t, f.db, f.owner), http.StatusCreated))
 		}
 		for _, id := range others {
 			patch(id, map[string]any{"pinned": true}).ExpectStatus(http.StatusNoContent)
 		}
 		patch(agentID, map[string]any{"pinned": true}).ExpectError(http.StatusConflict, "too_many_pins")
-		// Pinning a pinned chat again is not a fourth pin.
+		// Pinning a pinned chat again is not an eleventh pin.
 		patch(others[0], map[string]any{"pinned": true}).ExpectStatus(http.StatusNoContent)
 		patch(others[0], map[string]any{"pinned": false}).ExpectStatus(http.StatusNoContent)
 		patch(agentID, map[string]any{"pinned": true}).ExpectStatus(http.StatusNoContent)

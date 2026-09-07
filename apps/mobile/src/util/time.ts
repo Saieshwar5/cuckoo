@@ -49,6 +49,44 @@ export function formatDay(
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+// Since is how long ago a moment was, in the largest unit that still says
+// something: minutes within the hour, hours within the day, "yesterday",
+// days within the week, and a date beyond that.
+export type Since =
+  | { unit: 'now' }
+  | { unit: 'minutes'; count: number }
+  | { unit: 'hours'; count: number }
+  | { unit: 'yesterday' }
+  | { unit: 'days'; count: number }
+  | { unit: 'date'; date: string };
+
+// timeSince measures the distance back to a timestamp and leaves the words
+// to the caller, which is the only part that knows the sentence it is in.
+// A moment in the future — a device whose clock runs ahead of ours — is
+// "now" rather than a negative count. An unreadable timestamp is null.
+export function timeSince(iso: string, now: Date = new Date()): Since | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const minutes = Math.floor((now.getTime() - d.getTime()) / 60_000);
+  if (minutes < 1) return { unit: 'now' };
+  if (minutes < 60) return { unit: 'minutes', count: minutes };
+  // Whole days apart, not hours divided by 24: eleven last night and one
+  // this afternoon is yesterday, however few hours lie between them.
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
+  if (days === 0) return { unit: 'hours', count: Math.floor(minutes / 60) };
+  if (days === 1) return { unit: 'yesterday' };
+  if (days < 7) return { unit: 'days', count: days };
+  return {
+    unit: 'date',
+    date: d.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'long',
+      ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+    }),
+  };
+}
+
 // formatDuration is how long a recording or a video runs, as it is
 // labelled on one: minutes and seconds, counting from zero.
 export function formatDuration(seconds: number): string {

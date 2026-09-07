@@ -219,6 +219,19 @@ export interface PairToken {
   revoked_at: string | null;
 }
 
+// A device this person is signed in on: one session, as its owner sees it.
+// name is what the device called itself when it signed in, and may be
+// empty. last_seen_at is null until the device has carried a request, and
+// current marks the one asking.
+export interface Device {
+  id: string;
+  name: string;
+  last_seen_at: string | null;
+  created_at: string;
+  expires_at: string;
+  current: boolean;
+}
+
 // An API key: the credential a person's own systems call the management
 // API with. The key itself appears only in the response that made it.
 export interface ApiKey {

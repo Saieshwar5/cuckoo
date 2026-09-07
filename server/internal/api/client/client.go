@@ -16,6 +16,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/retention"
+	"github.com/Saieshwar5/cuckoo/server/internal/signin"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
@@ -29,15 +30,17 @@ type Handler struct {
 	apiKeys       *apikeys.Service
 	media         *media.Service
 	retention     *retention.Service
+	signIn        *signin.Service
 }
 
 // New builds the client API handler.
 func New(userService *users.Service, agentService *agents.Service, conversationService *conversations.Service,
 	hub *realtime.Hub, pairingService *pairing.Service, apiKeyService *apikeys.Service, mediaService *media.Service,
-	retentionService *retention.Service) *Handler {
+	retentionService *retention.Service, signInService *signin.Service) *Handler {
 	return &Handler{
 		users: userService, agents: agentService, conversations: conversationService, hub: hub,
 		pairing: pairingService, apiKeys: apiKeyService, media: mediaService, retention: retentionService,
+		signIn: signInService,
 	}
 }
 
@@ -82,6 +85,11 @@ func (h *Handler) Routes() chi.Router {
 	// API keys: the credential a person's own systems call the management
 	// API with. Issued here, behind a person's own credential, so a key can
 	// never mint another.
+	// The devices a person is signed in on, and ending one or all the others.
+	r.Get("/devices", h.listDevices)
+	r.Delete("/devices", h.signOutOtherDevices)
+	r.Delete("/devices/{id}", h.signOutDevice)
+
 	r.Post("/api-keys", h.createAPIKey)
 	r.Get("/api-keys", h.listAPIKeys)
 	r.Delete("/api-keys/{id}", h.revokeAPIKey)

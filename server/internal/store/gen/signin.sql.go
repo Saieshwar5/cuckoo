@@ -13,7 +13,7 @@ import (
 )
 
 const authenticateSession = `-- name: AuthenticateSession :one
-SELECT s.id, s.user_id
+SELECT s.id, s.user_id, s.last_seen_at
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = $1
@@ -23,16 +23,18 @@ WHERE s.token_hash = $1
 `
 
 type AuthenticateSessionRow struct {
-	ID     uuid.UUID
-	UserID uuid.UUID
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	LastSeenAt *time.Time
 }
 
 // Resolves a bearer token to its person. Joins through users so a session
-// cannot outlive the account.
+// cannot outlive the account. last_seen_at comes back so the caller can
+// decide whether it is stale enough to be worth a write.
 func (q *Queries) AuthenticateSession(ctx context.Context, tokenHash []byte) (AuthenticateSessionRow, error) {
 	row := q.db.QueryRow(ctx, authenticateSession, tokenHash)
 	var i AuthenticateSessionRow
-	err := row.Scan(&i.ID, &i.UserID)
+	err := row.Scan(&i.ID, &i.UserID, &i.LastSeenAt)
 	return i, err
 }
 
@@ -85,7 +87,7 @@ func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) 
 const createSession = `-- name: CreateSession :one
 INSERT INTO sessions (id, user_id, token_hash, device_name, expires_at)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, token_hash, device_name, expires_at, created_at, revoked_at
+RETURNING id, user_id, token_hash, device_name, expires_at, created_at, revoked_at, last_seen_at
 `
 
 type CreateSessionParams struct {
@@ -113,6 +115,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.LastSeenAt,
 	)
 	return i, err
 }
@@ -208,6 +211,48 @@ func (q *Queries) GetLatestSignInCode(ctx context.Context, email string) (SignIn
 	return i, err
 }
 
+const listUserSessions = `-- name: ListUserSessions :many
+SELECT id, device_name, last_seen_at, created_at, expires_at
+FROM sessions
+WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+ORDER BY created_at DESC
+`
+
+type ListUserSessionsRow struct {
+	ID         uuid.UUID
+	DeviceName string
+	LastSeenAt *time.Time
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+}
+
+// The devices a person is signed in on, newest first.
+func (q *Queries) ListUserSessions(ctx context.Context, userID uuid.UUID) ([]ListUserSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessions, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserSessionsRow{}
+	for rows.Next() {
+		var i ListUserSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeviceName,
+			&i.LastSeenAt,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markSignInCodeUsed = `-- name: MarkSignInCodeUsed :exec
 UPDATE sign_in_codes
 SET used_at = now()
@@ -217,6 +262,52 @@ WHERE id = $1
 func (q *Queries) MarkSignInCodeUsed(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markSignInCodeUsed, id)
 	return err
+}
+
+const revokeOldestUserSessions = `-- name: RevokeOldestUserSessions :execrows
+UPDATE sessions
+SET revoked_at = now()
+WHERE id IN (
+    SELECT older.id FROM sessions older
+    WHERE older.user_id = $1 AND older.revoked_at IS NULL AND older.expires_at > now()
+    ORDER BY COALESCE(older.last_seen_at, older.created_at) DESC
+    OFFSET $2
+)
+`
+
+type RevokeOldestUserSessionsParams struct {
+	UserID uuid.UUID
+	Keep   int32
+}
+
+// Holds a person to a number of devices: past it, the ones that have gone
+// longest without being used are ended first, then the oldest.
+func (q *Queries) RevokeOldestUserSessions(ctx context.Context, arg RevokeOldestUserSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOldestUserSessions, arg.UserID, arg.Keep)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeOtherUserSessions = `-- name: RevokeOtherUserSessions :execrows
+UPDATE sessions
+SET revoked_at = now()
+WHERE user_id = $1 AND id <> $2 AND revoked_at IS NULL
+`
+
+type RevokeOtherUserSessionsParams struct {
+	UserID uuid.UUID
+	Keep   uuid.UUID
+}
+
+// Signing out every device but the one asking.
+func (q *Queries) RevokeOtherUserSessions(ctx context.Context, arg RevokeOtherUserSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOtherUserSessions, arg.UserID, arg.Keep)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeSession = `-- name: RevokeSession :execrows
@@ -233,19 +324,51 @@ func (q *Queries) RevokeSession(ctx context.Context, id uuid.UUID) (int64, error
 	return result.RowsAffected(), nil
 }
 
+const revokeUserSession = `-- name: RevokeUserSession :execrows
+UPDATE sessions
+SET revoked_at = now()
+WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeUserSessionParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+// One device, ended by its owner. Scoped to the person so an id learned
+// from somewhere else is not enough.
+func (q *Queries) RevokeUserSession(ctx context.Context, arg RevokeUserSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeUserSession, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokeUserSessions = `-- name: RevokeUserSessions :execrows
 UPDATE sessions
 SET revoked_at = now()
 WHERE user_id = $1 AND revoked_at IS NULL
 `
 
-// One device per person at launch: signing in anywhere signs out everywhere
-// else. Enforced here rather than in the schema, so multi-device is a rule
-// change and not a migration.
+// Every device of one person: signing out everywhere, and what deleting an
+// account does on the way out.
 func (q *Queries) RevokeUserSessions(ctx context.Context, userID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, revokeUserSessions, userID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const touchSession = `-- name: TouchSession :exec
+UPDATE sessions
+SET last_seen_at = now()
+WHERE id = $1
+`
+
+// Records that a session is in use, at most as often as the caller asks.
+func (q *Queries) TouchSession(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, touchSession, id)
+	return err
 }

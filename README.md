@@ -48,8 +48,10 @@ export H="Authorization: Bearer ses_tok_..."
 curl -s -H "$H" localhost:8080/v1/client/me
 ```
 
-A new address becomes a new account. Signing in on another device signs the
-first one out. `POST /v1/auth/logout` ends the session.
+A new address becomes a new account. A person may be signed in on several
+devices at once, up to ten; `GET /v1/client/devices` lists them and
+`DELETE /v1/client/devices/{id}` ends one. `POST /v1/auth/logout` ends the
+session making the request.
 
 In development the server also accepts an `X-Dev-User` header naming any user,
 so scripts can skip signing in:

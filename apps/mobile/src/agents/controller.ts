@@ -109,7 +109,7 @@ export class AgentsController {
 
   // settings changes what the person decided about an agent. The row is
   // updated first, so the screen answers the tap, and put back if the hub
-  // refuses — a fourth pin, say.
+  // refuses — one pin too many, say.
   settings = async (agentId: string, change: ContactSettings): Promise<void> => {
     const before = this.state.contacts.find((c) => c.agent.id === agentId);
     this.set(setSettings(this.state, agentId, change));

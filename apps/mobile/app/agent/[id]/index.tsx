@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAgent, useAgents, useContact } from '@/agents/AgentsProvider';
+import { describeAgentError } from '@/agents/form';
 import { useChats } from '@/chats/useChats';
 import { useSession } from '@/session/SessionProvider';
 import { isMuted } from '@/agents/store';
@@ -78,18 +79,15 @@ export default function AgentProfileScreen() {
     }
   };
   // decide changes one of the person's settings for this agent. The row
-  // already reflects it; a refusal — a fourth pin — is said in a line.
+  // already reflects it; a refusal — one pin too many — is said in a line,
+  // in the hub's own words, because the hub is what holds the limit.
   const decide = async (change: Parameters<NonNullable<typeof controller>['settings']>[1]) => {
     if (!controller) return;
     setNotice(null);
     try {
       await controller.settings(id, change);
     } catch (err) {
-      const code = (err as { code?: string }).code;
-      setNotice({
-        text: code === 'too_many_pins' ? t('agent.pin.full') : ((err as Error).message ?? ''),
-        tone: 'warn',
-      });
+      setNotice({ text: describeAgentError(err).message, tone: 'warn' });
     }
   };
   // removeFromList takes the agent out of the list. The chat list is the

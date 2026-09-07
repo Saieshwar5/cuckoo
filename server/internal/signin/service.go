@@ -149,9 +149,6 @@ func (s *Service) Verify(ctx context.Context, rawEmail, code, deviceName string)
 				return err
 			}
 		}
-		if _, err := tx.RevokeUserSessions(ctx, userID); err != nil {
-			return domain.Internal(fmt.Errorf("revoke other sessions: %w", err))
-		}
 
 		var hash []byte
 		token, hash = domain.NewSecret(domain.PrefixSessionToken)
@@ -161,6 +158,13 @@ func (s *Service) Verify(ctx context.Context, rawEmail, code, deviceName string)
 		})
 		if err != nil {
 			return domain.Internal(fmt.Errorf("create session: %w", err))
+		}
+		// A person may hold several devices; past the limit the one that has
+		// gone longest without being used is signed out to make room.
+		if _, err := tx.RevokeOldestUserSessions(ctx, gen.RevokeOldestUserSessionsParams{
+			UserID: userID, Keep: devicesMax,
+		}); err != nil {
+			return domain.Internal(fmt.Errorf("hold %s to %d devices: %w", userID, devicesMax, err))
 		}
 		user, err := users.New(tx).Get(ctx, userID)
 		if err != nil {
@@ -221,7 +225,58 @@ func (s *Service) ResolveToken(ctx context.Context, token string) (userID, sessi
 		}
 		return uuid.Nil, uuid.Nil, domain.Internal(fmt.Errorf("authenticate session: %w", err))
 	}
+	s.touch(ctx, row.ID, row.LastSeenAt)
 	return row.UserID, row.ID, nil
+}
+
+// touch records that a session is in use, at most once an interval. A
+// failure here is not the request's problem: a device list an hour stale is
+// worth less than the request it would fail.
+func (s *Service) touch(ctx context.Context, sessionID uuid.UUID, lastSeen *time.Time) {
+	if lastSeen != nil && time.Since(*lastSeen) < seenInterval {
+		return
+	}
+	_ = s.store.TouchSession(ctx, sessionID)
+}
+
+// Devices lists what a person is signed in on, newest first, marking the one
+// asking.
+func (s *Service) Devices(ctx context.Context, userID, currentSessionID uuid.UUID) ([]Device, error) {
+	rows, err := s.store.ListUserSessions(ctx, userID)
+	if err != nil {
+		return nil, domain.Internal(fmt.Errorf("list devices of %s: %w", userID, err))
+	}
+	out := make([]Device, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Device{
+			ID: r.ID, Name: r.DeviceName, LastSeen: r.LastSeenAt,
+			CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, Current: r.ID == currentSessionID,
+		})
+	}
+	return out, nil
+}
+
+// SignOutDevice ends one of a person's devices. One that is already over, or
+// was never theirs, is not found rather than a silent success.
+func (s *Service) SignOutDevice(ctx context.Context, userID, sessionID uuid.UUID) error {
+	n, err := s.store.RevokeUserSession(ctx, gen.RevokeUserSessionParams{ID: sessionID, UserID: userID})
+	if err != nil {
+		return domain.Internal(fmt.Errorf("revoke session %s: %w", sessionID, err))
+	}
+	if n == 0 {
+		return domain.NotFound("device_not_found", "That device is already signed out.")
+	}
+	return nil
+}
+
+// SignOutOthers ends every device but the one asking: what a person taps
+// when a phone is lost.
+func (s *Service) SignOutOthers(ctx context.Context, userID, keepSessionID uuid.UUID) (int, error) {
+	n, err := s.store.RevokeOtherUserSessions(ctx, gen.RevokeOtherUserSessionsParams{UserID: userID, Keep: keepSessionID})
+	if err != nil {
+		return 0, domain.Internal(fmt.Errorf("revoke other sessions of %s: %w", userID, err))
+	}
+	return int(n), nil
 }
 
 // Logout ends a session. Ending one that is already over is not an error.
