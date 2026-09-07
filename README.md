@@ -426,6 +426,10 @@ device. `make emulator` boots it; `make emulator-stop` closes it.
 | `make hooks`            | Install the git hooks (once per clone)                      |
 | `make size-top`         | Show the longest source files                               |
 | `make psql`             | Open a shell on the development database                    |
+| `make site`             | Serve the website at http://localhost:4321                  |
+| `make site-build`       | Build the website into `web/dist`                           |
+| `make image`            | Build the hub and welcome-agent images, tagged with the git version |
+| `make deploy`           | Build, ship and start everything on the server (`deploy/README.md`) |
 
 ## Layout
 
@@ -450,19 +454,23 @@ server/          the hub: one Go binary, migrations embedded
     agents/      agent identities and the bindings that connect them to backends
     users/       the first business package, and the pattern for the rest
 apps/mobile/     the app: React Native with Expo (see apps/mobile/README.md)
+web/             the website: landing page, docs, legal (see web/README.md)
+deploy/          Caddy in front of the hub and the site (see deploy/README.md)
 sdk/python/      the Python SDK: connect, receive, reply
 protocol/        the published agent protocol spec (not started)
 examples/echo/   the reference agent, and the protocol's smoke test
 examples/stream/ an agent that answers a word at a time
 examples/buttons/ an agent that asks before it acts
+examples/welcome/ the agent a new account starts with
 scripts/         developer tooling
 ```
 
 ## How it is built
 
-- **One hub, self-hostable.** Not federated. The server is a single binary with
-  its migrations embedded, so running a private hub is one file and a compose
-  file.
+- **One hub, open source for transparency.** Not federated, and not a
+  self-host product: anyone can read what handles their messages, and we run
+  the only hub. The server is a single binary with its migrations embedded, so
+  deploying it is one image and a compose file (`deploy/`).
 - **The database is real in tests.** The hard bugs in a messaging system live in
   ordering, constraints and delivery state, and a mock agrees with whatever the
   code believes. Every test runs inside a transaction that is rolled back, so

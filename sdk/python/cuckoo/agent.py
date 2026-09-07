@@ -17,7 +17,7 @@ import httpx
 import websockets
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
-from .models import Attachment, Conversation, Link, Message, PairToken
+from .models import DEFAULT_HUB, Attachment, Conversation, Link, Message, PairToken
 
 log = logging.getLogger("cuckoo")
 
@@ -103,7 +103,7 @@ class Agent:
     """
 
     def __init__(
-        self, secret: str, hub: str = "https://api.cuckoo.in", *, max_backoff: float = 30.0
+        self, secret: str, hub: str = DEFAULT_HUB, *, max_backoff: float = 30.0
     ):
         if not secret.startswith("bnd_sec_"):
             raise ValueError("secret must be a binding secret, which starts with bnd_sec_")

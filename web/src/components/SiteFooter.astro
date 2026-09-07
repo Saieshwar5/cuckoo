@@ -1,0 +1,47 @@
+---
+import { site } from '../config';
+---
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="cols">
+      <div>
+        <h4>Build</h4>
+        <ul>
+          <li><a href="/docs/quickstart/">Quickstart</a></li>
+          <li><a href="/docs/for-companies/">For companies</a></li>
+          <li><a href="/docs/protocol/">Protocol reference</a></li>
+          <li><a href="/docs/open-source/">Why it is open source</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>App</h4>
+        <ul>
+          <li><a href="/download/">Get the app</a></li>
+          <li><a href="/docs/your-own-agent/">Connect your own agent</a></li>
+          <li><a href="/support/">Support</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Project</h4>
+        <ul>
+          <li><a href={site.repo} rel="noopener">Source on GitHub</a></li>
+          <li><a href={`${site.repo}/blob/main/LICENSE`} rel="noopener">Licence</a></li>
+          <li><a href={`mailto:${site.contact}`}>{site.contact}</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="/privacy/">Privacy</a></li>
+          <li><a href="/terms/">Terms</a></li>
+          <li><a href="/delete-account/">Delete your account</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="fine">
+      <span>{site.name} — built in India, open source.</span>
+      <span>The hub never runs a model.</span>
+    </div>
+  </div>
+</footer>

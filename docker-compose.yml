@@ -1,4 +1,4 @@
-# Local development dependencies.
+# Local development dependencies. Production is deploy/compose.yml.
 #
 # The Go server runs on the host (`make dev`) so hot reload and debuggers work.
 # Only its backing services live in Docker.

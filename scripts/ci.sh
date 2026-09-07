@@ -75,6 +75,12 @@ if [ -d apps/mobile/node_modules ]; then
 else
   skip "mobile checks"          "apps/mobile/node_modules missing, run make mobile-install"
 fi
+if [ -d web/node_modules ]; then
+  step "site typecheck"         bash -c 'cd web && npx astro check'
+  step "site build"             bash -c 'cd web && npx astro build'
+else
+  skip "site checks"            "web/node_modules missing, run make site-install"
+fi
 
 # ── Generated code matches its source ────────────────────────────────────────
 # Regenerate and compare the output with itself from a moment ago. Comparing

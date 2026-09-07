@@ -75,8 +75,8 @@ run: ## Run the server once, no hot reload
 .PHONY: build
 build: ## Compile the server binary into ./bin
 	@mkdir -p $(BIN_DIR)
-	cd $(SERVER_DIR) && go build -o $(BIN_DIR)/cuckoo ./cmd/cuckoo
-	@echo "built $(BIN_DIR)/cuckoo"
+	cd $(SERVER_DIR) && go build -ldflags "-X main.version=$(VERSION)" -o $(BIN_DIR)/cuckoo ./cmd/cuckoo
+	@echo "built $(BIN_DIR)/cuckoo ($(VERSION))"
 
 .PHONY: gen
 gen: ## Regenerate typed DB code from SQL (sqlc)
@@ -108,6 +108,40 @@ play: ## Start everything and the app (make play EMAIL=you@example.com [TARGET=p
 .PHONY: web
 web: ## Start everything and open the app in this laptop's browser
 	@TARGET=web scripts/play.sh $(EMAIL)
+
+##@ Deploy
+
+# What /healthz reports. A plain checkout builds as its short commit hash,
+# with -dirty when the tree has uncommitted changes.
+VERSION ?= $(shell git describe --always --dirty 2>/dev/null || echo dev)
+
+.PHONY: image
+image: ## Build the hub and welcome-agent images, tagged with the git version
+	docker build -t cuckoo-hub:$(VERSION) --build-arg VERSION=$(VERSION) $(SERVER_DIR)
+	docker build -t cuckoo-welcome:$(VERSION) -f examples/welcome/Dockerfile .
+	@echo "built cuckoo-hub:$(VERSION) and cuckoo-welcome:$(VERSION)"
+
+.PHONY: deploy
+deploy: ## Build, ship and start everything on the server (see deploy/README.md)
+	@deploy/deploy.sh
+
+##@ Website
+
+.PHONY: site-install
+site-install: ## Install the website's dependencies
+	cd web && npm install --no-audit --no-fund
+
+.PHONY: site
+site: ## Serve the website at http://localhost:4321 with hot reload
+	cd web && npm run dev
+
+.PHONY: site-build
+site-build: ## Build the website into web/dist (SITE_URL sets the domain)
+	cd web && npm run build
+
+.PHONY: site-check
+site-check: ## Typecheck the website
+	cd web && npm run check
 
 .PHONY: emulator-install
 emulator-install: ## Download the Android emulator and create a device (about 3 GB, once)

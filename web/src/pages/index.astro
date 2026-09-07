@@ -1,0 +1,275 @@
+---
+import { Code } from 'astro-expressive-code/components';
+import Page from '../layouts/Page.astro';
+import Phone from '../components/Phone.astro';
+import { site, hubUrl } from '../config';
+
+const quickstart = `from cuckoo import Agent
+
+agent = Agent(secret="bnd_sec_...", hub="${hubUrl}")
+
+
+@agent.on_message
+async def handle(msg, conv):
+    await conv.send(f"You said: {msg.text}")
+
+
+agent.run()`;
+---
+
+<Page title={`${site.name} — ${site.tagline}`} suffix={false}>
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <h1>A messenger where AI&nbsp;agents are first-class.</h1>
+        <p class="lede">
+          Every other chat app was designed for people, and bots were bolted on
+          afterwards. Cuckoo starts the other way round. You bring the backend;
+          the hub moves the messages and never runs a model.
+        </p>
+        <div class="cta">
+          <a class="button primary" href="/download/">Get the app</a>
+          <a class="button secondary" href="/docs/quickstart/">Build an agent</a>
+        </div>
+      </div>
+      <div class="hero-phone"><Phone /></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">Two ways an agent comes to be</p>
+      <h2>Bring your own, or hand yours out.</h2>
+      <p class="section-lede">
+        Both make the same kind of agent, speaking the same protocol. What
+        differs is reach: one is yours alone, the other is for everyone you give
+        the code to.
+      </p>
+      <div class="grid two">
+        <div class="card">
+          <span class="tag">For a person</span>
+          <h3>Your own agent</h3>
+          <p>
+            Create it in the app: a name, a picture, a description. The app shows
+            you a secret and a snippet. Paste the snippet into your own harness
+            and the screen turns to Connected while you watch.
+          </p>
+          <a class="more" href="/docs/your-own-agent/">Connect your own agent</a>
+        </div>
+        <div class="card">
+          <span class="tag">For a company</span>
+          <h3>An agent you hand out</h3>
+          <p>
+            Create it from your server with an API key, connect your backend, and
+            print a code. Everyone who scans it gets their own private chat, and
+            your backend is told who they are before they type a word.
+          </p>
+          <a class="more" href="/docs/for-companies/">Put an agent in front of customers</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap code-grid">
+      <div>
+        <p class="eyebrow">The whole idea</p>
+        <h2>An agent is a function that answers.</h2>
+        <p class="section-lede">
+          No queue to run, no webhook to expose, no inbound port to open. The
+          process dials out to the hub and stays connected, so it works from a
+          laptop, a container or a server behind any firewall.
+        </p>
+        <a class="button secondary" href="/docs/quickstart/">Ten-minute quickstart</a>
+      </div>
+      <div class="code-frame">
+        <Code code={quickstart} lang="python" />
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">Agent-native</p>
+      <h2>Things a bolted-on bot cannot do.</h2>
+      <div class="grid three feature-grid">
+        <div class="feature">
+          <h3>Stream as it thinks</h3>
+          <p>Replies arrive word by word, with a caret, the way a model writes them.</p>
+        </div>
+        <div class="feature">
+          <h3>Ask, don't guess</h3>
+          <p>Buttons and quick replies, so an agent can confirm before it acts.</p>
+        </div>
+        <div class="feature">
+          <h3>Hear and see</h3>
+          <p>Voice notes, photos, video and documents arrive as files your code can open.</p>
+        </div>
+        <div class="feature">
+          <h3>Speak first</h3>
+          <p>Once someone has added it, an agent can start the conversation.</p>
+        </div>
+        <div class="feature">
+          <h3>Break the blank page</h3>
+          <p>Starters suggest what to say, so nobody stares at an empty chat.</p>
+        </div>
+        <div class="feature">
+          <h3>Survive a restart</h3>
+          <p>The hub retries what your backend missed, and says plainly when it is away.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">For companies</p>
+      <h2>From nothing to a QR code on a poster.</h2>
+      <p class="section-lede">
+        One agent serves every customer. Each person who adds it gets a private
+        conversation, and your backend keeps its own state per person.
+      </p>
+      <ol class="steps">
+        <li>
+          <strong>Get a key</strong>
+          <span>Sign in and create an API key. It is shown once and can be revoked.</span>
+        </li>
+        <li>
+          <strong>Create the agent</strong>
+          <span>Handle, name, logo, description and a few starters, from your server.</span>
+        </li>
+        <li>
+          <strong>Connect your backend</strong>
+          <span>Ask for a binding, get a secret, run your process against it.</span>
+        </li>
+        <li>
+          <strong>Hand it out</strong>
+          <span>Mint a code. Print the QR, or generate one per logged-in customer.</span>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="grid two">
+        <div>
+          <p class="eyebrow">Open</p>
+          <h2>The protocol is the product.</h2>
+          <p class="section-lede">
+            The hub is open source so that anyone can read what handles their
+            messages: what is stored, what an agent is told, and what never
+            leaves. There is one hub, run by us, in India.
+          </p>
+          <div class="cta">
+            <a class="button secondary" href={site.repo} rel="noopener">Read the source</a>
+            <a class="button secondary" href="/docs/open-source/">Why it is open</a>
+          </div>
+        </div>
+        <div class="card">
+          <h3>What Cuckoo is not</h3>
+          <p>
+            It does not run any model. Intelligence, and its bill, belong to
+            whoever owns the agent.
+          </p>
+          <p>It is not end-to-end encrypted. Messages are in the clear on the hub.</p>
+          <p>
+            It does not ask for your phone number. An email address makes an
+            account.
+          </p>
+          <p>
+            An agent is told your display name and nothing else. Not your email,
+            not your number, not your other chats.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="status">
+    <div class="wrap narrow">
+      <p class="eyebrow">Where this is</p>
+      <p>
+        Cuckoo is early, and built in the open by one person. Agents show their
+        owner and an <b>Unverified</b> label, because verification does not exist
+        yet. Group chats and push notifications are being built. The app is
+        English first, with Hindi and Telugu next.
+      </p>
+      <p>
+        If you are building something on it, or want to run a hub,
+        <a href={`mailto:${site.contact}`}>{site.contact}</a> reaches the person who wrote it.
+      </p>
+    </div>
+  </section>
+</Page>
+
+<style>
+  .hero {
+    padding-block: 4rem 4.5rem;
+  }
+
+  .hero-grid {
+    display: grid;
+    gap: 3rem;
+    align-items: center;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  }
+
+  .hero-phone {
+    display: flex;
+    justify-content: center;
+  }
+
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .code-grid {
+    display: grid;
+    gap: 2.5rem;
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  }
+
+  /* Expressive Code draws its own frame; only the width is ours. */
+  .code-frame :global(.expressive-code) {
+    width: 100%;
+  }
+
+  .feature-grid {
+    gap: 1.75rem 2rem;
+  }
+
+  .feature h3 {
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--ck-hairline);
+  }
+
+  .feature p {
+    color: var(--ck-text-secondary);
+    margin: 0;
+    font-size: 0.9375rem;
+  }
+
+  .status p {
+    color: var(--ck-text-secondary);
+    max-width: 42rem;
+  }
+
+  .status a {
+    color: var(--ck-text);
+  }
+
+  @media (max-width: 52rem) {
+    .hero-grid,
+    .code-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .hero-phone {
+      order: -1;
+    }
+  }
+</style>

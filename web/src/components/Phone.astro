@@ -1,0 +1,247 @@
+---
+// The app, drawn rather than photographed: it is sharp on every screen, it
+// follows the theme, and it cannot go stale the way a screenshot does. The
+// bubbles, ticks, buttons and the streaming caret are the real ones.
+---
+
+<div
+  class="phone"
+  role="img"
+  aria-label="A chat in Cuckoo. An agent asks which order to look at, offers two buttons, and streams its reply as it is written."
+>
+  <div class="screen">
+    <div class="topbar">
+      <span class="disc" aria-hidden="true">SC</span>
+      <span class="who">
+        <b>SBI Cards</b>
+        <i>online</i>
+      </span>
+    </div>
+
+    <div class="thread" aria-hidden="true">
+      <div class="row them">
+        <p class="bubble">Hi Priya. Which order should I look at?</p>
+      </div>
+
+      <div class="row them">
+        <div class="buttons">
+          <span class="btn">Last order</span>
+          <span class="btn">Something else</span>
+        </div>
+      </div>
+
+      <div class="row me">
+        <p class="bubble">
+          Last order
+          <span class="meta">9:41 <span class="ticks">✓✓</span></span>
+        </p>
+      </div>
+
+      <div class="row them">
+        <p class="bubble">
+          Out for delivery, arriving by 6 pm<span class="caret"></span>
+        </p>
+      </div>
+    </div>
+
+    <div class="composer" aria-hidden="true">
+      <span class="field">Message</span>
+      <span class="mic"></span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .phone {
+    width: 100%;
+    max-width: 19rem;
+    border: 1px solid var(--ck-hairline);
+    border-radius: 30px;
+    padding: 8px;
+    background: var(--ck-ground);
+  }
+
+  .screen {
+    border-radius: 23px;
+    overflow: hidden;
+    background: var(--ck-ground);
+    border: 1px solid var(--ck-hairline);
+    display: flex;
+    flex-direction: column;
+    min-height: 27rem;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.75rem 0.9rem;
+    border-bottom: 1px solid var(--ck-hairline);
+  }
+
+  .disc {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    background: var(--ck-surface-strong);
+    color: var(--ck-text);
+    display: grid;
+    place-items: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    flex: none;
+  }
+
+  .who {
+    display: grid;
+    line-height: 1.25;
+  }
+
+  .who b {
+    font-size: 0.9375rem;
+  }
+
+  .who i {
+    font-style: normal;
+    font-size: 0.75rem;
+    color: var(--ck-text-secondary);
+  }
+
+  .thread {
+    flex: 1;
+    display: grid;
+    gap: 0.4rem;
+    align-content: start;
+    padding: 0.9rem;
+    font-size: 0.8125rem;
+  }
+
+  .row {
+    display: flex;
+  }
+
+  .row.me {
+    justify-content: flex-end;
+  }
+
+  .bubble {
+    margin: 0;
+    max-width: 84%;
+    padding: 0.5rem 0.7rem;
+    border-radius: 16px;
+    line-height: 1.4;
+  }
+
+  .them .bubble {
+    background: var(--ck-bubble-theirs);
+    color: var(--ck-bubble-theirs-text);
+    border: 1px solid var(--ck-hairline);
+    border-bottom-left-radius: 6px;
+  }
+
+  .me .bubble {
+    background: var(--ck-bubble-mine);
+    color: var(--ck-bubble-mine-text);
+    border-bottom-right-radius: 6px;
+  }
+
+  .meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.625rem;
+    opacity: 0.55;
+    margin-inline-start: 0.4rem;
+  }
+
+  .ticks {
+    letter-spacing: -0.18em;
+  }
+
+  .buttons {
+    display: grid;
+    gap: 0.3rem;
+    width: 84%;
+  }
+
+  .btn {
+    border: 1px solid var(--ck-hairline);
+    border-radius: 12px;
+    padding: 0.45rem 0.7rem;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.75rem;
+    background: var(--ck-bubble-theirs);
+  }
+
+  /* The word-by-word caret: the one thing on this page that moves. */
+  .caret {
+    display: inline-block;
+    width: 2px;
+    height: 0.85em;
+    vertical-align: -0.1em;
+    margin-inline-start: 2px;
+    background: currentColor;
+    animation: blink 1.05s steps(1, end) infinite;
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .caret {
+      animation: none;
+    }
+  }
+
+  .composer {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem 0.9rem;
+    border-top: 1px solid var(--ck-hairline);
+  }
+
+  .field {
+    flex: 1;
+    border: 1px solid var(--ck-hairline);
+    border-radius: 999px;
+    padding: 0.45rem 0.8rem;
+    color: var(--ck-text-secondary);
+    font-size: 0.8125rem;
+  }
+
+  .mic {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: var(--ck-accent);
+    flex: none;
+    position: relative;
+  }
+
+  /* A microphone, because nothing is typed yet. */
+  .mic::before {
+    content: '';
+    position: absolute;
+    inset: 8px 13px 12px;
+    border-radius: 999px;
+    background: var(--ck-on-accent);
+  }
+
+  .mic::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 7px;
+    width: 10px;
+    height: 5px;
+    transform: translateX(-50%);
+    border: 1.5px solid var(--ck-on-accent);
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
+  }
+</style>

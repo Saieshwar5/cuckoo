@@ -12,7 +12,7 @@ import (
 )
 
 // Migrations are embedded in the binary so a deployment is one file, and a
-// self-hosted hub upgrades by replacing that file and restarting.
+// deployment upgrades by replacing that file and restarting.
 //
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
@@ -21,7 +21,7 @@ var migrationsFS embed.FS
 //
 // It runs at startup rather than as a separate deploy step: with a single
 // server process there is no window in which code and schema disagree, and
-// self-hosters cannot forget to run it.
+// a deploy cannot forget to run it.
 func Migrate(ctx context.Context, databaseURL string, log *slog.Logger) error {
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {

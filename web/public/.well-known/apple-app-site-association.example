@@ -1,0 +1,10 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["REPLACE_WITH_TEAMID.REPLACE_WITH_BUNDLE_ID"],
+        "components": [{ "/": "/p/*", "comment": "Adding an agent from a code" }]
+      }
+    ]
+  }
+}

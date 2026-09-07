@@ -1,0 +1,194 @@
+/*
+ * The site wears the app's clothes: only white, greys and black, and the one
+ * thing that gets a colour is an error. The values below are the app's own
+ * palette (apps/mobile/src/theme/tokens.ts) mapped onto Starlight's scale, so
+ * a screenshot and the page around it agree.
+ *
+ * Dark is first, because that is how the phones this was built for are set.
+ */
+
+:root {
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #f2f2f2;
+  --sl-color-gray-2: #d4d4d4;
+  --sl-color-gray-3: #8e8e8e;
+  --sl-color-gray-4: #5e5e5e;
+  --sl-color-gray-5: #2a2a2a;
+  --sl-color-gray-6: #1a1a1a;
+  --sl-color-gray-7: #121212;
+  --sl-color-black: #000000;
+
+  --sl-color-accent-low: #2a2a2a;
+  --sl-color-accent: #f2f2f2;
+  --sl-color-accent-high: #ffffff;
+
+  --sl-color-text: #f2f2f2;
+  --sl-color-text-accent: #ffffff;
+  --sl-color-text-invert: #000000;
+
+  --sl-color-bg: #000000;
+  --sl-color-bg-nav: #000000;
+  --sl-color-bg-sidebar: #000000;
+  --sl-color-bg-inline-code: #1a1a1a;
+  --sl-color-bg-accent: #f2f2f2;
+
+  --sl-color-hairline: #262626;
+  --sl-color-hairline-light: #2a2a2a;
+  --sl-color-hairline-shade: #000000;
+
+  --sl-color-red: #ff5a50;
+  --sl-color-orange: #8e8e8e;
+  --sl-color-green: #8e8e8e;
+  --sl-color-blue: #8e8e8e;
+  --sl-color-purple: #8e8e8e;
+
+  /* Our own, used by the landing and legal pages too. */
+  --ck-ground: #000000;
+  --ck-surface: #1a1a1a;
+  --ck-surface-strong: #2a2a2a;
+  --ck-hairline: #262626;
+  --ck-text: #f2f2f2;
+  --ck-text-secondary: #8e8e8e;
+  --ck-accent: #f2f2f2;
+  --ck-on-accent: #000000;
+  --ck-danger: #ff5a50;
+  --ck-bubble-mine: #e8e8e8;
+  --ck-bubble-mine-text: #111111;
+  --ck-bubble-theirs: #1a1a1a;
+  --ck-bubble-theirs-text: #f2f2f2;
+
+  --sl-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  --sl-font-system-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+  --sl-nav-height: 3.75rem;
+}
+
+:root[data-theme='light'] {
+  --sl-color-white: #111111;
+  --sl-color-gray-1: #1f1f1f;
+  --sl-color-gray-2: #3a3a3a;
+  --sl-color-gray-3: #6e6e6e;
+  --sl-color-gray-4: #9a9a9a;
+  --sl-color-gray-5: #e4e4e4;
+  --sl-color-gray-6: #f2f2f2;
+  --sl-color-gray-7: #f7f7f7;
+  --sl-color-black: #ffffff;
+
+  --sl-color-accent-low: #eaeaea;
+  --sl-color-accent: #111111;
+  --sl-color-accent-high: #000000;
+
+  --sl-color-text: #111111;
+  --sl-color-text-accent: #000000;
+  --sl-color-text-invert: #ffffff;
+
+  --sl-color-bg: #ffffff;
+  --sl-color-bg-nav: #ffffff;
+  --sl-color-bg-sidebar: #ffffff;
+  --sl-color-bg-inline-code: #f2f2f2;
+  --sl-color-bg-accent: #111111;
+
+  --sl-color-hairline: #e6e6e6;
+  --sl-color-hairline-light: #e4e4e4;
+  --sl-color-hairline-shade: #e6e6e6;
+
+  --sl-color-red: #d0342c;
+  --sl-color-orange: #6e6e6e;
+  --sl-color-green: #6e6e6e;
+  --sl-color-blue: #6e6e6e;
+  --sl-color-purple: #6e6e6e;
+
+  --ck-ground: #ffffff;
+  --ck-surface: #f2f2f2;
+  --ck-surface-strong: #e4e4e4;
+  --ck-hairline: #e6e6e6;
+  --ck-text: #111111;
+  --ck-text-secondary: #6e6e6e;
+  --ck-accent: #111111;
+  --ck-on-accent: #ffffff;
+  --ck-danger: #d0342c;
+  --ck-bubble-mine: #111111;
+  --ck-bubble-mine-text: #ffffff;
+  --ck-bubble-theirs: #ffffff;
+  --ck-bubble-theirs-text: #111111;
+}
+
+/*
+ * A link is underlined and never coloured. In the app a colour would read as
+ * a promise about where the link goes; the same restraint reads as calm here.
+ */
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--sl-color-text);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--sl-color-gray-4);
+}
+
+.sl-markdown-content a:not(:where(.not-content *)):hover {
+  text-decoration-color: var(--sl-color-text);
+}
+
+/* Headings are weight, not size, wherever the difference will carry. */
+.sl-markdown-content :is(h1, h2, h3, h4) {
+  letter-spacing: -0.01em;
+}
+
+.sl-markdown-content :is(h2, h3):not(:where(.not-content *)) {
+  margin-top: 2.25rem;
+}
+
+/*
+ * One hairline under an h2 gives the page its rhythm without a rule anywhere
+ * else. It goes on the wrapper, not the heading: Starlight makes headings
+ * inline so the anchor link can sit beside them, and a border on an inline
+ * element stops at the end of the words.
+ */
+.sl-markdown-content .sl-heading-wrapper.level-h2 {
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+
+.sl-markdown-content :is(code):not(:where(.not-content *)) {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 6px;
+  padding: 0.1em 0.35em;
+  font-size: 0.875em;
+}
+
+.sl-markdown-content blockquote:not(:where(.not-content *)) {
+  border-inline-start-color: var(--sl-color-gray-4);
+  color: var(--sl-color-gray-3);
+}
+
+.sl-markdown-content table:not(:where(.not-content *)) {
+  font-size: 0.9375rem;
+}
+
+.sl-markdown-content :is(th, td):not(:where(.not-content *)) {
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+
+/* The site header carries a hairline, like every divider in the app. */
+.header {
+  border-bottom: 1px solid var(--sl-color-hairline);
+  box-shadow: none;
+}
+
+/* The mark is an app icon, so it wants a corner radius and a modest size. */
+.site-title img {
+  width: 1.875rem;
+  height: 1.875rem;
+  border-radius: 8px;
+}
+
+/* Code frames sit on the app's surface rather than a colour of their own. */
+.expressive-code .frame pre {
+  border-color: var(--sl-color-hairline);
+}
+
+/* Anything the user must copy deserves a target big enough for a thumb. */
+.expressive-code .copy button {
+  border-radius: 8px;
+}

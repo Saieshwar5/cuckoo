@@ -1,0 +1,9 @@
+# Everything here is meant to be read, including by machines.
+User-agent: *
+Allow: /
+
+# Pair links are one-time codes for one person. They are useless once spent and
+# there is nothing to index behind them.
+Disallow: /p/
+
+Sitemap: https://cuckoo.in/sitemap-index.xml

@@ -1,0 +1,56 @@
+---
+import { Image } from 'astro:assets';
+import logoLight from '../assets/logo-light.png';
+import logoDark from '../assets/logo-dark.png';
+import { site } from '../config';
+---
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <Image src={logoLight} alt="" width={28} height={28} class="on-light" />
+      <Image src={logoDark} alt="" width={28} height={28} class="on-dark" />
+      <span>{site.name}</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/docs/">Docs</a>
+      <a href="/download/">Get the app</a>
+      <a class="hide-narrow" href={site.repo} rel="noopener">Source</a>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch between light and dark">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path
+            d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+            class="glyph-moon"
+          ></path>
+          <path
+            d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0-6v3m0 16v3M1 12h3m16 0h3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"
+            class="glyph-sun"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            fill="none"></path>
+        </svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<style>
+  /*
+   * The mark is drawn for the ground it sits on, and one glyph says what
+   * tapping will do: a sun in the dark, a moon in the light. Every dark rule
+   * excludes the light theme explicitly — `:root` alone matches both, which
+   * would leave the light theme with nothing showing at all.
+   */
+  :global(:root:not([data-theme='light'])) .on-dark,
+  :global(:root[data-theme='light']) .on-light {
+    display: block;
+  }
+
+  :global(:root:not([data-theme='light'])) .on-light,
+  :global(:root[data-theme='light']) .on-dark,
+  :global(:root:not([data-theme='light'])) .glyph-moon,
+  :global(:root[data-theme='light']) .glyph-sun {
+    display: none;
+  }
+</style>
