@@ -62,6 +62,7 @@ beside it, not instead of it.
 
 ## Deploying
 
-See `deploy/README.md` at the root of the repository. In short: build, copy
-`dist/` to the server, and let Caddy route `/v1`, `/p`, `/a` and `/healthz` to
-the hub and everything else to the files.
+See `deploy/README.md` at the root of the repository. `deploy/deploy.sh`
+builds the site with the real domain and copies `dist/` to the server, where
+Caddy routes `/v1`, `/p`, `/a` and `/healthz` to the hub and everything else to
+the files.

@@ -105,7 +105,7 @@ CI run, and it checks two things nothing else does:
 
 **It rebuilds the test database and migrates from empty.** Your development
 database already has every table, so a broken migration keeps working locally
-forever and fails on a self-hoster's first install. Migrating from nothing is
+forever and fails on the next fresh database. Migrating from nothing is
 the only way to catch it.
 
 **It regenerates the sqlc output and fails if it differs.** Edit a query, forget

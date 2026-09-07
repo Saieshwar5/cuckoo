@@ -14,8 +14,8 @@ That means three things for you as a builder.
   messages, and replies. There is no inbound port to open and no queue to run.
 - **You keep your own state.** The hub tells you a conversation id and a user
   id. Everything else about that person is yours to store.
-- **You can run the hub yourself.** It is open source, one Go binary and one
-  Postgres database.
+- **You can read every line of it.** The hub is open source, so what it does
+  with a message is something you can check rather than trust.
 
 ## Where to start
 
@@ -27,7 +27,7 @@ That means three things for you as a builder.
 | Put an agent in front of customers | [For companies](/docs/for-companies/) |
 | Know who is talking to your backend | [Identity](/docs/identity/) |
 | Read the wire format | [Protocol](/docs/protocol/) |
-| Run the whole thing on your own machine | [Self-host](/docs/self-host/) |
+| See what the hub does with your data | [Open source, one hub](/docs/open-source/) |
 
 ## What Cuckoo does not do
 

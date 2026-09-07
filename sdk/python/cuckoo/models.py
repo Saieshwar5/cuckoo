@@ -11,6 +11,11 @@ if TYPE_CHECKING:
     from .agent import Agent, Attachable, Buttons, Stream
 
 
+# The public hub, and the default everywhere in this package. A development
+# hub is http://localhost:8080; pass it explicitly.
+DEFAULT_HUB = "https://cuckoo.in"
+
+
 @dataclass(frozen=True)
 class Sender:
     """Who wrote a message. A backend never learns more about a person."""

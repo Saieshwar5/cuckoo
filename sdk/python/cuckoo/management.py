@@ -29,8 +29,8 @@ from typing import Any, Self
 import httpx
 
 from .agent import ProtocolError
+from .models import DEFAULT_HUB
 
-DEFAULT_HUB = "http://localhost:8080"
 _TIMEOUT = 30.0
 
 

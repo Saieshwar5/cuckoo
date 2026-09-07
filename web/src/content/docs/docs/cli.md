@@ -18,8 +18,8 @@ export CUCKOO_HUB=https://cuckoo.in
 ```
 
 Both can be given as flags instead, as `--key` and `--hub`. Without a key the
-command stops and says so. The hub defaults to `http://localhost:8080`, which
-is convenient for development and wrong everywhere else, so set it.
+command stops and says so. The hub defaults to the public one,
+`https://cuckoo.in`; a development hub is `http://localhost:8080`, so set it.
 
 An error prints as `error: <code>: <message>` and exits with status 1.
 

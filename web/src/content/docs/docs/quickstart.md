@@ -62,9 +62,9 @@ python echo.py
 The app's Connect screen turns to **Connected** while you are watching.
 
 :::caution
-Always pass `hub=` explicitly. The SDK's two entry points ship with different
-defaults, so leaving it out is the most common way to spend twenty minutes on
-nothing.
+Pass `hub=` explicitly when you are not talking to the public hub. The default
+is `https://cuckoo.in`; a hub on your own machine is `http://localhost:8080`,
+and leaving it out is the most common way to spend twenty minutes on nothing.
 :::
 
 ## 5. Say something

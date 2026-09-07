@@ -8,8 +8,7 @@ updated: 7 September 2026
 This describes what the hosted Cuckoo hub does with your information. It is
 written to be read, not to be survived.
 
-Somebody running their own hub answers for their own copy. This page covers
-ours.
+There is one hub, and this page is about it.
 
 ## What we hold
 

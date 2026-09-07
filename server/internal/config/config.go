@@ -1,8 +1,8 @@
 // Package config loads and validates the server's runtime configuration.
 //
 // Configuration comes from the environment only (twelve-factor): the same
-// binary runs in dev, in production, and on a self-hosted hub, and the only
-// thing that differs is the environment. Self-hosting is therefore "edit .env".
+// binary runs in dev, in test and in production, and the only thing that
+// differs is the environment. Deploying is therefore "edit .env".
 package config
 
 import (

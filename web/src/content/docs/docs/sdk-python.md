@@ -24,9 +24,9 @@ It depends on `httpx` and `websockets`, and nothing else.
 Agent(secret: str, hub: str, *, max_backoff: float = 30.0)
 ```
 
-`secret` is a binding secret and must start with `bnd_sec_`. **Always pass
-`hub` explicitly**: the two halves of the SDK ship with different defaults, and
-leaving it out is the most common first mistake.
+`secret` is a binding secret and must start with `bnd_sec_`. `hub` defaults to
+the public hub, `https://cuckoo.in`; pass `http://localhost:8080` for a hub on
+your own machine. Forgetting that is the most common first mistake.
 
 ### Handlers
 

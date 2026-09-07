@@ -7,7 +7,7 @@
 // The hub streams uploads through itself rather than handing out presigned
 // URLs to a storage service. On one server that costs nothing — the bytes
 // cross the network the same number of times either way — and it keeps a
-// self-hosted hub to a single process with a single public address, with
+// hub to a single process with a single public address, with
 // no second host to give a certificate to. The interface is what leaves
 // presigned URLs open later: an implementation may redirect instead.
 package blobs

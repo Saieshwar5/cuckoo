@@ -74,7 +74,7 @@ export default defineConfig({
           ],
         },
         // One page, so it is a link rather than a group of one.
-        { slug: 'docs/self-host' },
+        { slug: 'docs/open-source' },
       ],
     }),
   ],
