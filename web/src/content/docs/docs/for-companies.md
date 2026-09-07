@@ -185,3 +185,8 @@ who sees its card. Domain verification is not built yet.
   tolerate seeing an event twice.
 - **A join is not always personalised.** If somebody blocks your agent and adds
   it again, the join arrives with no payload. Do not assume it is there.
+- **The hub keeps 90 days.** Messages and their files older than that are
+  deleted, and an agent's uploaded files are capped at 1 GB, oldest out first.
+  Your backend received every message when it was sent, so store what you
+  need. The SDK gives you `msg.signature`, the hub's own seal over each
+  message; keep it with the message, unchanged, and do not try to verify it.

@@ -58,6 +58,17 @@ thousand people needs to pace itself.
 | Thumbnail | 480 px on the long side |
 | Unsent upload kept for | 1 day |
 
+## Retention
+
+| What | Limit |
+| --- | --- |
+| A message and its attachments are kept for | 90 days |
+| Files per person, on live messages | 100 MB, then the oldest go |
+| Files per agent, on live messages | 1 GB, then the oldest go |
+| A delivery record is kept after its final state for | 1 week |
+
+A sweep runs every six hours. Profile pictures are never swept.
+
 ## Agent fields
 
 | Field | Rule |

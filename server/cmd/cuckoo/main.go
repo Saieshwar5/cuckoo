@@ -34,7 +34,9 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/ratelimit"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
+	"github.com/Saieshwar5/cuckoo/server/internal/retention"
 	"github.com/Saieshwar5/cuckoo/server/internal/signin"
+	"github.com/Saieshwar5/cuckoo/server/internal/signing"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -97,11 +99,22 @@ func run() error {
 
 	limits := ratelimit.NewRedis(redisClient, "cuckoo:")
 
+	// Every finished message carries the hub's mark; see the signing
+	// package for why. The development key proves nothing and says so.
+	signer, err := signing.New(cfg.SigningKey)
+	if err != nil {
+		return err
+	}
+	if cfg.DevSigningKey {
+		log.Warn("messages are signed with the development key; set CUCKOO_SIGNING_KEY")
+	}
+
 	agentService := agents.New(db, agents.WithPublisher(bus))
 	conversationService := conversations.New(db,
 		conversations.WithLimiter(limits),
 		conversations.WithPublisher(bus),
-		conversations.WithStreams(conversations.NewStreamStore(redisClient, "cuckoo:")))
+		conversations.WithStreams(conversations.NewStreamStore(redisClient, "cuckoo:")),
+		conversations.WithSigner(signer))
 	deliveryService := delivery.New(db, conversationService)
 	userService := users.New(db)
 	pairingService := pairing.New(db, agentService, conversationService, userService, cfg.PublicURL)
@@ -120,6 +133,15 @@ func run() error {
 	}
 	log.Info("media storage ready", "dir", blobStore.Root())
 	mediaService := media.New(db, blobStore, media.WithLimiter(limits), media.WithLogger(log))
+	retentionService := retention.New(db, blobStore, retention.Policy{
+		MessageAge:       cfg.Retention.MessageAge,
+		UserMediaBudget:  cfg.Retention.UserMediaBudget,
+		AgentMediaBudget: cfg.Retention.AgentMediaBudget,
+		DryRun:           cfg.Retention.DryRun,
+	}, retention.WithLogger(log))
+	log.Info("retention", "message_age", cfg.Retention.MessageAge,
+		"user_media_budget", cfg.Retention.UserMediaBudget, "agent_media_budget", cfg.Retention.AgentMediaBudget,
+		"dry_run", cfg.Retention.DryRun)
 
 	router := api.NewRouter(api.Deps{
 		Logger:        log,
@@ -138,6 +160,7 @@ func run() error {
 		Hub:           hub,
 		Bus:           bus,
 		CORSOrigins:   cfg.CORSOrigins,
+		Retention:     retentionService,
 		Version:       version,
 		Health: map[string]api.HealthCheck{
 			"postgres": db.Ping,
@@ -153,7 +176,7 @@ func run() error {
 		Logger:        log,
 	})
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(4)
 	go func() {
 		defer wg.Done()
 		worker.Run(ctx)
@@ -168,6 +191,11 @@ func run() error {
 	go func() {
 		defer wg.Done()
 		mediaService.RunSweeper(ctx, time.Hour, 24*time.Hour)
+	}()
+	// The hub is a window, not an archive: what is past it goes.
+	go func() {
+		defer wg.Done()
+		retentionService.Run(ctx, 6*time.Hour)
 	}()
 
 	err = serve(ctx, cfg, log, router)

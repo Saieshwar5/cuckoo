@@ -6,8 +6,12 @@
 package config
 
 import (
+	"bytes"
+	"strconv"
+
 	"errors"
 	"fmt"
+	"github.com/Saieshwar5/cuckoo/server/internal/signing"
 	"log/slog"
 	"os"
 	"strings"
@@ -56,6 +60,17 @@ type Config struct {
 	// operator is its only user; it is never assumed in production.
 	Mail string
 
+	// Retention is what the hub keeps and for how long: messages for a
+	// period, each uploader's files to a budget. See the retention package.
+	Retention Retention
+
+	// SigningKey is what the hub marks every finished message with, so a
+	// copy kept elsewhere can be shown to be what was said. Required in
+	// production; a fixed development key otherwise, and DevSigningKey says
+	// when that is the case so it can be logged.
+	SigningKey    []byte
+	DevSigningKey bool
+
 	// CORSOrigins are the browser origins allowed to call the API. Any
 	// origin in development, none in production unless listed.
 	CORSOrigins []string
@@ -63,6 +78,20 @@ type Config struct {
 
 // Mail modes.
 const MailConsole = "console"
+
+// Retention is the hub's window. Zero MessageAge keeps messages forever;
+// a zero budget is no budget.
+type Retention struct {
+	MessageAge       time.Duration
+	UserMediaBudget  int64
+	AgentMediaBudget int64
+	DryRun           bool
+}
+
+// devSigningKey signs messages on a development hub. It is public, which is
+// the point: nothing signed with it proves anything, and production refuses
+// to start with it.
+var devSigningKey = bytes.Repeat([]byte{0x63, 0x75}, 16) // "cu" ×16, 32 bytes
 
 // IsDev reports whether development-only behaviour is permitted.
 func (c Config) IsDev() bool { return c.Env == EnvDev }
@@ -86,7 +115,14 @@ func Load() (Config, error) {
 		WelcomeHandle:   l.str("CUCKOO_WELCOME_HANDLE", ""),
 		Mail:            l.str("CUCKOO_MAIL", ""),
 		CORSOrigins:     l.list("CUCKOO_CORS_ORIGINS"),
+		Retention: Retention{
+			MessageAge:       time.Duration(l.count("CUCKOO_RETENTION_DAYS", 90)) * 24 * time.Hour,
+			UserMediaBudget:  l.count("CUCKOO_USER_MEDIA_BUDGET_MB", 100) << 20,
+			AgentMediaBudget: l.count("CUCKOO_AGENT_MEDIA_BUDGET_MB", 1024) << 20,
+			DryRun:           l.flag("CUCKOO_RETENTION_DRY_RUN", false),
+		},
 	}
+	cfg.SigningKey, cfg.DevSigningKey = l.signingKey("CUCKOO_SIGNING_KEY", cfg.Env)
 	if len(cfg.CORSOrigins) == 0 && cfg.Env == EnvDev {
 		cfg.CORSOrigins = []string{"*"}
 	}
@@ -192,6 +228,59 @@ func (l *loader) logLevel(key string, def slog.Level) slog.Level {
 		return def
 	}
 	return lvl
+}
+
+// count reads a non-negative whole number.
+func (l *loader) count(key string, def int64) int64 {
+	raw := l.str(key, "")
+	if raw == "" {
+		return def
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n < 0 {
+		l.fail("%s must be a whole number, 0 or more (got %q)", key, raw)
+		return def
+	}
+	return n
+}
+
+// flag reads true or false.
+func (l *loader) flag(key string, def bool) bool {
+	raw := l.str(key, "")
+	if raw == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(raw)
+	if err != nil {
+		l.fail("%s must be true or false (got %q)", key, raw)
+		return def
+	}
+	return b
+}
+
+// signingKey reads the message signing key. Production must set one;
+// anywhere else the development key stands in, and the second result says
+// so.
+func (l *loader) signingKey(key string, env Env) ([]byte, bool) {
+	raw := l.str(key, "")
+	if raw == "" {
+		if env == EnvProd {
+			l.fail("%s must be set when CUCKOO_ENV=prod: 64 hex characters, e.g. from `openssl rand -hex 32`", key)
+		}
+		return devSigningKey, true
+	}
+	parsed, err := signing.ParseKey(raw)
+	if err != nil {
+		l.fail("%s: %v", key, err)
+		return devSigningKey, true
+	}
+	if bytes.Equal(parsed, devSigningKey) {
+		if env == EnvProd {
+			l.fail("%s is the development key, which is public", key)
+		}
+		return devSigningKey, true
+	}
+	return parsed, false
 }
 
 // requireNonDefault rejects a development default that would be unsafe in

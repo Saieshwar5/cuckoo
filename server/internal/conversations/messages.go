@@ -119,6 +119,17 @@ func (s *Service) create(ctx context.Context, sender Sender, conversationID uuid
 	case ParticipantAgent:
 		params.SenderAgentID = &sender.ID
 	}
+	// A message is signed over what it will say. A stream says nothing yet
+	// and is signed when it finishes.
+	if !streaming {
+		draft := Message{ID: params.ID, ConversationID: conversationID, Sender: sender, Body: body}
+		if replyTo != nil {
+			draft.ReplyTo = &ReplyRef{ID: *replyTo}
+		}
+		if params.Signature, err = s.sign(draft); err != nil {
+			return SendResult{}, err
+		}
+	}
 
 	var (
 		msg     Message
@@ -374,126 +385,4 @@ func (s *Service) validateReplyTo(ctx context.Context, conversationID uuid.UUID,
 		return nil, domain.InvalidField("reply_to", "invalid_reply_to", "That message is not in this conversation.")
 	}
 	return id, nil
-}
-
-// GetMessages returns the given messages in no particular order, with no
-// membership check. See GetConversations for who may call this.
-func (s *Service) GetMessages(ctx context.Context, ids []uuid.UUID) ([]Message, error) {
-	rows, err := s.store.ListMessagesByIDs(ctx, ids)
-	if err != nil {
-		return nil, domain.Internal(fmt.Errorf("list messages by id: %w", err))
-	}
-	out := make([]Message, 0, len(rows))
-	for _, r := range rows {
-		msg, err := messageFromRow(r)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, msg)
-	}
-	if err := s.decorate(ctx, out, false); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// ListMessages returns one page of a conversation's history, newest first, to
-// a caller who is a member of it.
-func (s *Service) ListMessages(ctx context.Context, callerID, conversationID uuid.UUID, in ListMessagesInput) (Page, error) {
-	if _, err := s.member(ctx, callerID, conversationID); err != nil {
-		return Page{}, err
-	}
-	limit, err := pageSize(in.Limit)
-	if err != nil {
-		return Page{}, err
-	}
-	if in.Before != nil && in.After != nil {
-		return Page{}, domain.InvalidField("after", "invalid_cursor",
-			"Use before or after, not both.")
-	}
-
-	var page Page
-	if in.After != nil {
-		rows, err := s.store.ListMessagesAfter(ctx, gen.ListMessagesAfterParams{
-			UserID:         callerID,
-			ConversationID: conversationID,
-			After:          *in.After,
-			PageSize:       limit + 1,
-		})
-		if err != nil {
-			return Page{}, domain.Internal(fmt.Errorf("list messages of %s after: %w", conversationID, err))
-		}
-		if page, err = pageOf(rows, limit); err != nil {
-			return Page{}, err
-		}
-		page.NextAfter, page.NextBefore = page.NextBefore, nil
-	} else {
-		// One more than asked for tells us whether another page exists
-		// without a second query or a count.
-		rows, err := s.store.ListMessagesBefore(ctx, gen.ListMessagesBeforeParams{
-			UserID:         callerID,
-			ConversationID: conversationID,
-			Before:         in.Before,
-			PageSize:       limit + 1,
-		})
-		if err != nil {
-			return Page{}, domain.Internal(fmt.Errorf("list messages of %s: %w", conversationID, err))
-		}
-		if page, err = pageOf(rows, limit); err != nil {
-			return Page{}, err
-		}
-	}
-	if err := s.decorate(ctx, page.Messages, true); err != nil {
-		return Page{}, err
-	}
-	return page, nil
-}
-
-// ListMessagesForAgent is ListMessages for an agent caller: only what was
-// said since it joined. Delivery status is the sender's concern and is not
-// filled in.
-func (s *Service) ListMessagesForAgent(ctx context.Context, agentID, conversationID uuid.UUID, in ListMessagesInput) (Page, error) {
-	if _, err := s.agentMember(ctx, agentID, conversationID); err != nil {
-		return Page{}, err
-	}
-	limit, err := pageSize(in.Limit)
-	if err != nil {
-		return Page{}, err
-	}
-
-	rows, err := s.store.ListMessagesBeforeForAgent(ctx, gen.ListMessagesBeforeForAgentParams{
-		AgentID:        agentID,
-		ConversationID: conversationID,
-		Before:         in.Before,
-		PageSize:       limit + 1,
-	})
-	if err != nil {
-		return Page{}, domain.Internal(fmt.Errorf("list messages of %s for agent: %w", conversationID, err))
-	}
-	page, err := pageOf(rows, limit)
-	if err != nil {
-		return Page{}, err
-	}
-	if err := s.decorate(ctx, page.Messages, false); err != nil {
-		return Page{}, err
-	}
-	return page, nil
-}
-
-// pageOf turns limit+1 rows into a page and a cursor on its last message,
-// whichever direction the rows came in. The caller names the cursor.
-func pageOf(rows []gen.Message, limit int32) (Page, error) {
-	page := Page{Messages: make([]Message, 0, len(rows))}
-	for _, r := range rows[:min(len(rows), int(limit))] {
-		msg, err := messageFromRow(r)
-		if err != nil {
-			return Page{}, err
-		}
-		page.Messages = append(page.Messages, msg)
-	}
-	if len(rows) > int(limit) {
-		oldest := page.Messages[len(page.Messages)-1].ID
-		page.NextBefore = &oldest
-	}
-	return page, nil
 }

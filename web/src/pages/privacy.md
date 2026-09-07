@@ -64,11 +64,19 @@ concerns, so somebody can look at it.
 
 ## How long we keep things
 
-Messages stay until you delete them or delete your account. A file nobody sends
-is removed within a day. Logs are kept for a short operating window.
+Messages, and the pictures, files and voice notes on them, are kept for 90 days
+and then deleted, oldest first. You may have up to 100 MB of files on the hub
+at a time; past that, the oldest files are deleted and the message they were
+on stays. Your profile picture is kept for as long as your account is. A file
+nobody sends is removed within a day. Logs are kept for a short operating
+window.
 
-Deleting a message deletes it for you. The agent already received it, and we
-cannot reach into somebody else's server. The app says so at the time.
+You can delete sooner. Deleting a message, or your account, removes it from the
+hub then and there.
+
+Deleting a message deletes it for you. The agent's owner received it when you
+sent it and keeps their own copy, and we cannot reach into somebody else's
+server to delete that. The app says so at the time.
 
 ## Deleting everything
 

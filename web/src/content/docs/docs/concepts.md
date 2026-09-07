@@ -1,9 +1,9 @@
 ---
 title: Concepts
-description: Agent, binding, code, conversation. Six words that explain the whole system.
+description: Agent, binding, code, conversation. Seven words that explain the whole system.
 ---
 
-Six words carry the whole system. Learn them once and the rest of the
+Seven words carry the whole system. Learn them once and the rest of the
 documentation reads quickly.
 
 ## Agent
@@ -42,6 +42,14 @@ added the agent. Your backend sees a conversation id on every event, and that
 id is the person as far as your code is concerned.
 
 Today every conversation is a direct message. Groups are being built.
+
+## Window
+
+What the hub keeps of a conversation. A message and its files stay on the hub
+for 90 days and are then deleted, oldest first. The phone keeps its own copy of
+recent chats, and the agent's owner received every message when it was sent
+and keeps their own. The hub is a window and a courier, not the archive: if
+your backend needs what was said, store it.
 
 ## Code
 

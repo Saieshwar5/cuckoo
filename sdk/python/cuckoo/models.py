@@ -148,7 +148,12 @@ class Attachment:
 @dataclass(frozen=True)
 class Message:
     """One thing said in a conversation. ``action`` is set when the person
-    tapped one of your buttons; ``text`` is then the button's label."""
+    tapped one of your buttons; ``text`` is then the button's label.
+
+    ``signature`` is the hub's own seal over the message, made with a key
+    only the hub holds. Keep it with the message and leave it unchanged; it
+    is what lets a copy you kept past the hub's window be served back later.
+    """
 
     id: str
     conversation_id: str
@@ -159,6 +164,8 @@ class Message:
     truncated: bool = False
     action: Action | None = None
     reply_to: ReplyRef | None = None
+    # Opaque; absent on messages from before the hub signed them.
+    signature: str | None = None
     event_id: str | None = None
     attachments: tuple[Attachment, ...] = ()
 
@@ -196,6 +203,7 @@ class Message:
             )
             if reply
             else None,
+            signature=data.get("signature") or None,
             event_id=event_id,
             attachments=tuple(
                 Attachment.from_wire(a, agent) for a in (body.get("attachments") or [])

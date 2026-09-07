@@ -1,6 +1,6 @@
 -- name: CreateMessage :one
-INSERT INTO messages (id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, idempotency_key, status, reply_to_message_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO messages (id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, idempotency_key, status, reply_to_message_id, signature)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: UpdateMessageBody :exec
@@ -24,6 +24,10 @@ WHERE id = sqlc.arg('id')
   AND sender_agent_id = sqlc.arg('sender_agent_id')::uuid
   AND status = 'streaming'
 RETURNING *;
+
+-- name: SetMessageSignature :exec
+-- The hub's mark, put on a streamed message once its whole text is known.
+UPDATE messages SET signature = $2 WHERE id = $1;
 
 -- name: ListStaleStreamingMessages :many
 -- Streams still open long after they began: the buffer's own bookkeeping

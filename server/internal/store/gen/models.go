@@ -97,6 +97,7 @@ type Message struct {
 	Status           string
 	Truncated        bool
 	ReplyToMessageID *uuid.UUID
+	Signature        []byte
 }
 
 type MessageDelivery struct {

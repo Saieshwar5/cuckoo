@@ -138,7 +138,8 @@ There are exactly three types.
     "reply_to": { "id": "msg_…", "sender_kind": "agent", "text_preview": "…" },
     "status": "complete",
     "truncated": false,
-    "created_at": "…"
+    "created_at": "…",
+    "signature": "…"
   },
   "participants": [ … ]
 }
@@ -146,7 +147,8 @@ There are exactly three types.
 
 Fields inside `body` are omitted when empty rather than sent as null. `status`
 is `streaming` or `complete`. An attachment carries no URL: fetch the bytes
-from `GET /v1/agent/media/{id}`.
+from `GET /v1/agent/media/{id}`. `signature` is the hub's seal over the
+message; see [Signatures](#signatures).
 
 You never receive your own messages.
 
@@ -338,6 +340,49 @@ send will be delivered when it is back.
 
 Any success clears that: a webhook that answers 2xx, a socket that connects, a
 heartbeat, or an acknowledgement.
+
+## Retention
+
+The hub keeps a message and its attachments for a rolling window, 90 days by
+default, then deletes them, oldest first. History paging stops at the window:
+`GET /conversations/{id}/messages` pages back no further, and `next_before` is
+null there.
+
+Each person has a budget for media they uploaded that still belongs to a live
+message, 100 MB by default; each agent has one, 1 GB by default. Over budget,
+the oldest files go until the total is under it. The message text stays, and
+the file answers `404 media_not_found` afterwards. Profile pictures are never
+touched.
+
+Delivery records, the outbox rows behind [Delivery](#delivery), are deleted a
+week after they reach a final state. A sweeper runs inside the hub every six
+hours.
+
+The hub is a window and a courier, not the archive. The phone keeps its own
+cache, and your backend received every message when it was sent. Keep your own
+copy of anything you will need later.
+
+The client API, which the app speaks, sees the same window. A history page
+there carries `"trimmed": true` when the conversation began before the window,
+and `GET /v1/client/me/storage` answers with `media.used_bytes` and
+`media.budget_bytes`, and `messages.kept_days` and `messages.kept_since`, the
+earliest moment the window still covers.
+
+### Signatures
+
+Every message the hub creates carries a `signature`: an opaque string the hub
+computes over the message's immutable content with a key only the hub holds.
+It appears on agent-facing message JSON, in events and in the agent history
+endpoint, as `"signature": "<base64url>"`, and is absent on messages created
+before signing existed. The client API does not carry it.
+
+Its purpose is the window above. An agent's owner may keep messages beyond it
+and, in a later version of the protocol, serve them back to the person through
+the hub. The hub will verify the signature before relaying, so an archive can
+omit a message but never alter one.
+
+Store it with the message and return it unchanged. Do not try to verify it
+yourself: the key is the hub's. It is unrelated to the webhook signature above.
 
 See [Limits](/docs/limits/) for the rate limits and every numeric bound in one
 table.

@@ -34,6 +34,11 @@ services:
       CUCKOO_WELCOME_HANDLE: ${WELCOME_HANDLE:-}
       CUCKOO_LOG_LEVEL: ${CUCKOO_LOG_LEVEL:-info}
       CUCKOO_SHUTDOWN_TIMEOUT: 15s
+      CUCKOO_RETENTION_DAYS: "${CUCKOO_RETENTION_DAYS:-90}"
+      CUCKOO_USER_MEDIA_BUDGET_MB: "${CUCKOO_USER_MEDIA_BUDGET_MB:-100}"
+      CUCKOO_AGENT_MEDIA_BUDGET_MB: "${CUCKOO_AGENT_MEDIA_BUDGET_MB:-1024}"
+      CUCKOO_RETENTION_DRY_RUN: "${CUCKOO_RETENTION_DRY_RUN:-false}"
+      CUCKOO_SIGNING_KEY: ${SIGNING_KEY:?set SIGNING_KEY in .env (openssl rand -hex 32)}
     volumes:
       # Owned by uid 10001, the user the image runs as (README, "First deploy").
       - ${DATA_DIR:-/data}/media:/data/media

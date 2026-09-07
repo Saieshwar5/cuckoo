@@ -147,6 +147,15 @@ func (s *Service) finishStream(ctx context.Context, agentID, messageID uuid.UUID
 		if msg, err = messageFromRow(row); err != nil {
 			return err
 		}
+		// The whole text is known only now, so the mark goes on now.
+		if msg.Signature, err = s.sign(msg); err != nil {
+			return err
+		}
+		if msg.Signature != nil {
+			if err := tx.SetMessageSignature(ctx, gen.SetMessageSignatureParams{ID: msg.ID, Signature: msg.Signature}); err != nil {
+				return domain.Internal(fmt.Errorf("sign message %s: %w", msg.ID, err))
+			}
+		}
 		pending, err = fanOut(ctx, tx, msg)
 		return err
 	})

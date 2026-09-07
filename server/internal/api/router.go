@@ -27,6 +27,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/media"
 	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
+	"github.com/Saieshwar5/cuckoo/server/internal/retention"
 	"github.com/Saieshwar5/cuckoo/server/internal/signin"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
@@ -63,7 +64,10 @@ type Deps struct {
 	// CORSOrigins are the browser origins allowed to call the API; empty
 	// means browsers are not served at all.
 	CORSOrigins []string
-	Health      map[string]HealthCheck
+	// Retention is the hub's window: what a person may keep and for how
+	// long, which the app shows and which decides when history is trimmed.
+	Retention *retention.Service
+	Health    map[string]HealthCheck
 	// Version is the build stamp shown on /healthz; empty reads as "dev".
 	Version string
 }
@@ -108,7 +112,7 @@ func NewRouter(d Deps) http.Handler {
 	// The app's API. Every route below requires a signed-in person.
 	r.Route("/v1/client", func(r chi.Router) {
 		r.Use(middleware.RequireUser(d.UserAuth))
-		r.Mount("/", client.New(d.Users, d.Agents, d.Conversations, d.Hub, d.Pairing, d.APIKeys, d.Media).Routes())
+		r.Mount("/", client.New(d.Users, d.Agents, d.Conversations, d.Hub, d.Pairing, d.APIKeys, d.Media, d.Retention).Routes())
 	})
 
 	// Agent management: owners creating agents, connecting backends and

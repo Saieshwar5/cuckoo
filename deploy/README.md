@@ -45,8 +45,9 @@ chown 10001:10001 /data/media          # the hub image runs as this user
 the certificate on first start, so the record must resolve before then.
 
 **Secrets.** Copy `.env.example` to `/srv/cuckoo/.env` on the server and fill
-in `SITE_DOMAIN` and `POSTGRES_PASSWORD` (`openssl rand -hex 24`). Leave the
-image tags as they are; the deploy writes them.
+in `SITE_DOMAIN`, `POSTGRES_PASSWORD` (`openssl rand -hex 24`) and
+`SIGNING_KEY` (`openssl rand -hex 32`), the key the hub signs every message
+with. Leave the image tags as they are; the deploy writes them.
 
 **Deploy.** From a checkout on your laptop, with passwordless SSH to the host:
 
@@ -113,6 +114,19 @@ docker compose logs --tail 200 caddy
 
 Logs rotate at five files of twenty megabytes per service.
 
+## Retention
+
+The hub keeps a message and its files for 90 days, then deletes them, oldest
+first. A person may hold 100 MB of uploaded files on live messages and an
+agent 1 GB; over that, the oldest files go and the message text stays. Delivery
+records are deleted a week after they reach a final state, and a sweep runs
+inside the hub every six hours. The numbers are `CUCKOO_RETENTION_DAYS` (0
+keeps everything), `CUCKOO_USER_MEDIA_BUDGET_MB` and
+`CUCKOO_AGENT_MEDIA_BUDGET_MB` in `.env`; changing one is an edit and
+`docker compose up -d`. `CUCKOO_RETENTION_DRY_RUN=true` makes the sweep log
+what it would delete and delete nothing, which is the way to check a new
+number before it runs for real.
+
 ## Backups and restore
 
 `backup.sh` dumps the database nightly, keeps two weeks locally, and copies
@@ -146,7 +160,8 @@ curl -k https://localhost:8443/healthz
 docker compose -p cuckoo-stacktest --env-file /tmp/stack.env -f deploy/compose.yml down -v
 ```
 
-with `SITE_DOMAIN=localhost`, `HTTP_PORT=8088`, `HTTPS_PORT=8443`,
+with `SITE_DOMAIN=localhost`, `HTTP_PORT=8088`, `HTTPS_PORT=8443`, any
+`POSTGRES_PASSWORD`, a throwaway `SIGNING_KEY` (`openssl rand -hex 32`), and
 `DATA_DIR` and `WWW_DIR` set to scratch directories. Caddy signs its own
 certificate for `localhost`.
 

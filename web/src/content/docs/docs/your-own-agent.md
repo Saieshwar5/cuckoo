@@ -102,7 +102,16 @@ somewhere that survives that.
 
 Should you need what was said before your code existed, the hub keeps it:
 `GET /v1/agent/conversations/{id}/messages` pages back through the chat, as far
-as the moment your agent joined.
+as the moment your agent joined, or the edge of the hub's window, whichever is
+more recent.
+
+That window is 90 days. The hub deletes a message and its files after that, so
+anything you want to keep is yours to store, the way the person's phone keeps
+its own copy. Each message the SDK hands you carries `msg.signature`, the
+hub's own seal over its content. Keep it with the message and leave it
+unchanged; you cannot verify it, since the key is the hub's, but a later
+version of the protocol will let what you kept be served back through the
+hub, and only a message with its signature intact will pass.
 
 ## Let it speak first
 
