@@ -125,6 +125,7 @@ Leaving the block finishes the message even if your code raised.
 | `truncated` | `bool` | The hub finished a stream you abandoned |
 | `action` | `Action \| None` | Set when a button of yours was tapped |
 | `reply_to` | `ReplyRef \| None` | |
+| `signature` | `str \| None` | The hub's seal over the message. Keep it with the message, unchanged. `None` on messages older than signing |
 | `attachments` | `tuple[Attachment, ...]` | A tuple, not a list |
 | `has_attachments` | `bool` | Property |
 

@@ -1,7 +1,8 @@
 import type { Api } from '@/api/client';
-import type { Media, Message, Page } from '@/api/types';
+import type { Media, Message, Page, StorageUsage } from '@/api/types';
 import { ChatController } from '@/chat/controller';
-import { formatBytes } from '@/media/format';
+import { formatBytes, storageLine } from '@/media/format';
+import { isGone } from '@/media/gone';
 import { kindOf, type PickedFile } from '@/media/pick';
 import { shrink } from '@/media/waveform';
 import { formatDuration } from '@/util/time';
@@ -18,7 +19,7 @@ const photo: PickedFile = {
   height: 800,
 };
 
-const emptyPage: Page = { messages: [], next_before: null, next_after: null };
+const emptyPage: Page = { messages: [], next_before: null, next_after: null, trimmed: false };
 
 const uploaded = (id: string): Media => ({
   id,
@@ -59,6 +60,45 @@ describe('formatBytes', () => {
     expect(formatBytes(2048)).toBe('2.0 KB');
     expect(formatBytes(1468006)).toBe('1.4 MB');
     expect(formatBytes(48 * 1024 * 1024)).toBe('48 MB');
+  });
+});
+
+describe('a file the hub no longer has', () => {
+  const answer = (status: number, body?: unknown) => ({
+    status,
+    json: async () => {
+      if (body === undefined) throw new SyntaxError('empty');
+      return body;
+    },
+  });
+
+  it('is told apart from every other failure by the status and the code', async () => {
+    expect(await isGone(answer(404, { error: { code: 'media_not_found', message: 'No such file.' } }))).toBe(
+      true,
+    );
+    expect(await isGone(answer(404, { error: { code: 'not_found' } }))).toBe(false);
+    expect(await isGone(answer(500, { error: { code: 'media_not_found' } }))).toBe(false);
+    expect(await isGone(answer(404))).toBe(false);
+  });
+});
+
+describe('storageLine', () => {
+  const usage = (used: number, days: number): StorageUsage => ({
+    media: { used_bytes: used, budget_bytes: 100 * 1024 * 1024 },
+    messages: { kept_days: days, kept_since: days ? '2026-06-09T00:00:00Z' : null },
+  });
+
+  it('says what the hub holds and for how long, in words a person reads', () => {
+    expect(storageLine(usage(12 * 1024 * 1024, 90))).toBe(
+      'On the hub: 12 MB of 100 MB used. Messages are kept for 90 days; your phone keeps what you have opened.',
+    );
+    expect(storageLine(usage(1468006, 1))).toBe(
+      'On the hub: 1.4 MB of 100 MB used. Messages are kept for a day; your phone keeps what you have opened.',
+    );
+    // A new account, on a hub that never sweeps: no fraction and no days.
+    expect(storageLine(usage(0, 0))).toBe(
+      'On the hub: none of 100 MB used yet. Messages stay on the hub; your phone keeps what you have opened.',
+    );
   });
 });
 

@@ -9,6 +9,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
 	"github.com/Saieshwar5/cuckoo/server/internal/ratelimit"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
+	"github.com/Saieshwar5/cuckoo/server/internal/signing"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/store/gen"
 )
@@ -22,6 +23,7 @@ type Service struct {
 	limiter   ratelimit.Limiter
 	publisher realtime.Publisher
 	streams   *StreamStore
+	signer    *signing.Signer
 }
 
 // Option configures a Service.
@@ -45,6 +47,13 @@ func WithPublisher(p realtime.Publisher) Option {
 // given store until they finish. Without it, starting a stream is refused.
 func WithStreams(s *StreamStore) Option {
 	return func(svc *Service) { svc.streams = s }
+}
+
+// WithSigner puts the hub's signature on every finished message, so a copy
+// kept elsewhere can later be shown to be what was said. Without it
+// messages are unsigned, which suits tests of other things.
+func WithSigner(sg *signing.Signer) Option {
+	return func(s *Service) { s.signer = sg }
 }
 
 // New builds the service.

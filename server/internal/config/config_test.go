@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"log/slog"
 	"strings"
 	"testing"
@@ -15,6 +16,8 @@ func isolate(t *testing.T) {
 		"CUCKOO_ENV", "CUCKOO_HTTP_ADDR", "CUCKOO_HUB_DOMAIN",
 		"CUCKOO_DATABASE_URL", "CUCKOO_REDIS_URL",
 		"CUCKOO_LOG_LEVEL", "CUCKOO_SHUTDOWN_TIMEOUT",
+		"CUCKOO_RETENTION_DAYS", "CUCKOO_USER_MEDIA_BUDGET_MB", "CUCKOO_AGENT_MEDIA_BUDGET_MB",
+		"CUCKOO_RETENTION_DRY_RUN", "CUCKOO_SIGNING_KEY",
 	} {
 		t.Setenv(key, "")
 	}
@@ -150,6 +153,7 @@ func TestProductionRejectsDevelopmentDefaults(t *testing.T) {
 func TestProductionAcceptsExplicitSettings(t *testing.T) {
 	isolate(t)
 	t.Setenv("CUCKOO_ENV", "prod")
+	t.Setenv("CUCKOO_SIGNING_KEY", strings.Repeat("cd", 32))
 	t.Setenv("CUCKOO_HUB_DOMAIN", "cuckoo.example")
 	t.Setenv("CUCKOO_DATABASE_URL", "postgres://user:pass@db.internal:5432/cuckoo")
 	t.Setenv("CUCKOO_MAIL", "console")
@@ -160,5 +164,73 @@ func TestProductionAcceptsExplicitSettings(t *testing.T) {
 	}
 	if cfg.IsDev() {
 		t.Error("IsDev() = true for CUCKOO_ENV=prod")
+	}
+}
+
+func TestRetentionAndSigningDefaults(t *testing.T) {
+	isolate(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Retention.MessageAge != 90*24*time.Hour {
+		t.Errorf("MessageAge = %v, want 90 days", cfg.Retention.MessageAge)
+	}
+	if cfg.Retention.UserMediaBudget != 100<<20 || cfg.Retention.AgentMediaBudget != 1024<<20 {
+		t.Errorf("budgets = %d, %d", cfg.Retention.UserMediaBudget, cfg.Retention.AgentMediaBudget)
+	}
+	if cfg.Retention.DryRun {
+		t.Error("dry run is on by default")
+	}
+	if !cfg.DevSigningKey || len(cfg.SigningKey) != 32 {
+		t.Errorf("dev signing key = %v (%d bytes)", cfg.DevSigningKey, len(cfg.SigningKey))
+	}
+}
+
+func TestRetentionAndSigningReadEnvironment(t *testing.T) {
+	isolate(t)
+	t.Setenv("CUCKOO_RETENTION_DAYS", "0")
+	t.Setenv("CUCKOO_USER_MEDIA_BUDGET_MB", "5")
+	t.Setenv("CUCKOO_RETENTION_DRY_RUN", "true")
+	t.Setenv("CUCKOO_SIGNING_KEY", strings.Repeat("ab", 32))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Retention.MessageAge != 0 || cfg.Retention.UserMediaBudget != 5<<20 || !cfg.Retention.DryRun {
+		t.Errorf("retention = %+v", cfg.Retention)
+	}
+	if cfg.DevSigningKey || cfg.SigningKey[0] != 0xab {
+		t.Errorf("signing key not read: dev=%v key=%x", cfg.DevSigningKey, cfg.SigningKey[:2])
+	}
+}
+
+func TestProductionNeedsARealSigningKey(t *testing.T) {
+	prod := func(t *testing.T) {
+		t.Helper()
+		isolate(t)
+		t.Setenv("CUCKOO_ENV", "prod")
+		t.Setenv("CUCKOO_MAIL", "console")
+		t.Setenv("CUCKOO_HUB_DOMAIN", "hub.example.org")
+		t.Setenv("CUCKOO_DATABASE_URL", "postgres://real")
+	}
+	prod(t)
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "CUCKOO_SIGNING_KEY") {
+		t.Errorf("production started without a signing key: %v", err)
+	}
+	prod(t)
+	t.Setenv("CUCKOO_SIGNING_KEY", hex.EncodeToString(devSigningKey))
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "development key") {
+		t.Errorf("production accepted the development key: %v", err)
+	}
+	prod(t)
+	t.Setenv("CUCKOO_SIGNING_KEY", "nothex")
+	if _, err := Load(); err == nil {
+		t.Error("a malformed key was accepted")
+	}
+	prod(t)
+	t.Setenv("CUCKOO_SIGNING_KEY", strings.Repeat("cd", 32))
+	if _, err := Load(); err != nil {
+		t.Errorf("production refused a real key: %v", err)
 	}
 }

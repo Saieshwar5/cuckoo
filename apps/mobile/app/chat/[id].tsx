@@ -139,7 +139,9 @@ export default function ChatScreen() {
           <ActivityIndicator color={colors.accent} style={styles.center} />
         ) : messages.length === 0 && !chat.typing ? (
           <View style={styles.center}>
-            <Text style={[styles.empty, { color: colors.textSecondary }]}>{t('chat.empty', { name })}</Text>
+            <Text style={[styles.empty, { color: colors.textSecondary }]}>
+              {chat.trimmed ? t('chat.history.trimmed') : t('chat.empty', { name })}
+            </Text>
             <Text style={[styles.hint, { color: colors.textSecondary }]}>{t('chat.reply.hint')}</Text>
             {who?.kind === 'agent' && who.starters?.length ? (
               <View style={styles.starters}>
@@ -183,7 +185,13 @@ export default function ChatScreen() {
             }}
             ListHeaderComponent={chat.typing ? <TypingBubble /> : null}
             ListFooterComponent={
-              chat.loadingOlder ? <ActivityIndicator color={colors.accent} style={styles.older} /> : null
+              chat.loadingOlder ? (
+                <ActivityIndicator color={colors.accent} style={styles.older} />
+              ) : chat.trimmed ? (
+                <Text style={[styles.trimmed, { color: colors.textSecondary }]} testID="history-trimmed">
+                  {t('chat.history.trimmed')}
+                </Text>
+              ) : null
             }
             onEndReached={() => void chat.loadOlder()}
             onEndReachedThreshold={0.6}
@@ -262,6 +270,14 @@ const styles = StyleSheet.create({
   empty: { ...type.body, textAlign: 'center' },
   hint: { ...type.caption, textAlign: 'center' },
   older: { paddingVertical: spacing.md },
+  // Where the hub stopped keeping, said once above the oldest message in
+  // the same grey as a day's pill, and not dressed up as a warning.
+  trimmed: {
+    ...type.caption,
+    textAlign: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+  },
   blocked: { padding: spacing.lg, gap: spacing.md, alignItems: 'center' },
   blockedText: { ...type.secondary, textAlign: 'center', lineHeight: 20 },
   // A line between the chat and the composer, quiet but not hidden.

@@ -16,11 +16,13 @@ export interface ChatState {
   // Cursor for the page before the oldest one loaded; null when history
   // is fully loaded.
   nextBefore: string | null;
+  // The hub said the conversation is older than what it still holds.
+  trimmed: boolean;
   // When the agent's typing indicator expires, or null.
   typingUntil: number | null;
 }
 
-export const empty: ChatState = { messages: [], nextBefore: null, typingUntil: null };
+export const empty: ChatState = { messages: [], nextBefore: null, trimmed: false, typingUntil: null };
 
 // newer orders two messages. At the same instant, one of ours still waiting
 // for the hub is the newer: it was typed on this device just now.
@@ -47,14 +49,26 @@ function patch(list: ChatMessage[], id: string, fn: (m: ChatMessage) => ChatMess
 
 // setPage replaces everything with the latest page of history.
 export function setPage(state: ChatState, page: Page): ChatState {
-  return { ...state, messages: page.messages, nextBefore: page.next_before };
+  return { ...state, messages: page.messages, nextBefore: page.next_before, trimmed: page.trimmed };
 }
 
 // addOlder appends a page of older history.
 export function addOlder(state: ChatState, page: Page): ChatState {
   const known = new Set(state.messages.map((m) => m.id));
   const older = page.messages.filter((m) => !known.has(m.id));
-  return { ...state, messages: [...state.messages, ...older], nextBefore: page.next_before };
+  return {
+    ...state,
+    messages: [...state.messages, ...older],
+    nextBefore: page.next_before,
+    trimmed: page.trimmed,
+  };
+}
+
+// historyTrimmed says whether the top of the chat is where the hub stopped
+// keeping, rather than where the conversation began. Only once the oldest
+// page is on screen: while there is more to load, nothing has ended yet.
+export function historyTrimmed(state: ChatState): boolean {
+  return state.nextBefore === null && state.trimmed;
 }
 
 // upsert puts a message from the hub where it belongs. A message from us
@@ -176,9 +190,10 @@ export function removeMessage(state: ChatState, id: string): ChatState {
 }
 
 // clearMessages empties the chat: everything so far is out of sight, and
-// there is nothing older to page to.
+// there is nothing older to page to. What the hub swept before that is
+// beside the point now; the person chose to start again.
 export function clearMessages(state: ChatState): ChatState {
-  return { ...state, messages: [], nextBefore: null };
+  return { ...state, messages: [], nextBefore: null, trimmed: false };
 }
 
 // unseenSince counts what others said after a message the person was

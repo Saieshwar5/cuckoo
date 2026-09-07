@@ -12,6 +12,7 @@ func prodEnv(t *testing.T) {
 	t.Setenv("CUCKOO_ENV", "prod")
 	t.Setenv("CUCKOO_HUB_DOMAIN", "cuckoo.example")
 	t.Setenv("CUCKOO_DATABASE_URL", "postgres://u:p@db.example/cuckoo")
+	t.Setenv("CUCKOO_SIGNING_KEY", strings.Repeat("cd", 32))
 }
 
 // Console mail is a development convenience that must be chosen on purpose

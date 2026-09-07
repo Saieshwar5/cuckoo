@@ -15,6 +15,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/media"
 	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
+	"github.com/Saieshwar5/cuckoo/server/internal/retention"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
@@ -27,14 +28,16 @@ type Handler struct {
 	pairing       *pairing.Service
 	apiKeys       *apikeys.Service
 	media         *media.Service
+	retention     *retention.Service
 }
 
 // New builds the client API handler.
 func New(userService *users.Service, agentService *agents.Service, conversationService *conversations.Service,
-	hub *realtime.Hub, pairingService *pairing.Service, apiKeyService *apikeys.Service, mediaService *media.Service) *Handler {
+	hub *realtime.Hub, pairingService *pairing.Service, apiKeyService *apikeys.Service, mediaService *media.Service,
+	retentionService *retention.Service) *Handler {
 	return &Handler{
 		users: userService, agents: agentService, conversations: conversationService, hub: hub,
-		pairing: pairingService, apiKeys: apiKeyService, media: mediaService,
+		pairing: pairingService, apiKeys: apiKeyService, media: mediaService, retention: retentionService,
 	}
 }
 
@@ -45,6 +48,8 @@ func (h *Handler) Routes() chi.Router {
 	r.Get("/me", h.getMe)
 	r.Patch("/me", h.updateMe)
 	r.Delete("/me", h.deleteMe)
+	// What the person keeps on the hub, and for how long.
+	r.Get("/me/storage", h.getStorage)
 
 	r.Get("/socket", h.socket)
 

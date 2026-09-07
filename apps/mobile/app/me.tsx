@@ -44,7 +44,7 @@ export default function ProfileScreen() {
     };
   }, [api]);
 
-  const current = useMediaSource(avatarMediaID ?? undefined, { thumb: true });
+  const { source: current } = useMediaSource(avatarMediaID ?? undefined, { thumb: true });
   const changed = name.trim() !== (user?.display_name ?? '') || !!picture;
 
   const save = async () => {

@@ -14,6 +14,7 @@ import type {
   PairResolve,
   PairToken,
   ReportReason,
+  StorageUsage,
   User,
   Verified,
 } from './types';
@@ -96,6 +97,8 @@ export interface Api {
   deleteMe(): Promise<void>;
   me(): Promise<User>;
   updateMe(input: { display_name?: string; avatar_media_id?: string }): Promise<User>;
+  // How much of the hub this person is using, and how long it keeps things.
+  storage(): Promise<StorageUsage>;
   listConversations(): Promise<Conversation[]>;
   listMessages(
     conversationId: string,
@@ -207,6 +210,7 @@ export function createApi(opts: ApiOptions): Api {
     deleteMe: () => request('DELETE', '/v1/client/me'),
     me: async () => (await request<{ user: User }>('GET', '/v1/client/me')).user,
     updateMe: async (input) => (await request<{ user: User }>('PATCH', '/v1/client/me', input)).user,
+    storage: () => request<StorageUsage>('GET', '/v1/client/me/storage'),
     listConversations: async () =>
       (await request<{ conversations: Conversation[] }>('GET', '/v1/client/conversations')).conversations,
     listMessages: (id, q = {}) => {

@@ -116,6 +116,16 @@ export interface Page {
   messages: Message[];
   next_before: string | null;
   next_after: string | null;
+  // The conversation began before the hub's retention window: there were,
+  // or may have been, messages older than the oldest it still holds.
+  trimmed: boolean;
+}
+
+// What the hub keeps for this person, and for how long. kept_days of 0
+// means messages are never swept, and then kept_since is null.
+export interface StorageUsage {
+  media: { used_bytes: number; budget_bytes: number };
+  messages: { kept_days: number; kept_since: string | null };
 }
 
 export type BindingMode = 'socket' | 'webhook';

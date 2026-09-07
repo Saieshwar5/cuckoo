@@ -29,6 +29,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/media"
 	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
+	"github.com/Saieshwar5/cuckoo/server/internal/retention"
 	"github.com/Saieshwar5/cuckoo/server/internal/signin"
 	"github.com/Saieshwar5/cuckoo/server/internal/store"
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
@@ -60,12 +61,29 @@ type Server struct {
 // ServerOption tunes the test server.
 type ServerOption func(*serverConfig)
 
-type serverConfig struct{ welcomeHandle string }
+type serverConfig struct {
+	welcomeHandle string
+	now           func() time.Time
+}
 
 // WithWelcomeHandle names the agent every new account is given, as
 // CUCKOO_WELCOME_HANDLE would.
 func WithWelcomeHandle(handle string) ServerOption {
 	return func(c *serverConfig) { c.welcomeHandle = handle }
+}
+
+// WithClock moves the server's idea of now, which is what retention measures
+// the window from. A test can make a conversation old without waiting.
+func WithClock(now func() time.Time) ServerOption {
+	return func(c *serverConfig) { c.now = now }
+}
+
+// TestRetention is the window the test server applies: the production
+// defaults, so what a test sees is what a person sees.
+var TestRetention = retention.Policy{
+	MessageAge:       90 * 24 * time.Hour,
+	UserMediaBudget:  100 << 20,
+	AgentMediaBudget: 1024 << 20,
 }
 
 func NewServer(t *testing.T, db *store.Store, opts ...ServerOption) *Server {
@@ -118,6 +136,11 @@ func NewServer(t *testing.T, db *store.Store, opts ...ServerOption) *Server {
 		t.Fatalf("testutil: media storage: %v", err)
 	}
 	mediaService := media.New(db, blobStore, media.WithLogger(quiet))
+	retentionOpts := []retention.Option{retention.WithLogger(quiet)}
+	if sc.now != nil {
+		retentionOpts = append(retentionOpts, retention.WithClock(sc.now))
+	}
+	retentionService := retention.New(db, blobStore, TestRetention, retentionOpts...)
 	userAuth := auth.NewDevOrSession(auth.NewDev(), auth.NewSession(signinService))
 	handler := api.NewRouter(api.Deps{
 		Logger:        quiet,
@@ -136,6 +159,7 @@ func NewServer(t *testing.T, db *store.Store, opts ...ServerOption) *Server {
 		Hub:           hub,
 		Bus:           bus,
 		CORSOrigins:   []string{"*"},
+		Retention:     retentionService,
 		Health:        map[string]api.HealthCheck{},
 	})
 

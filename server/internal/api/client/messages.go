@@ -131,6 +131,10 @@ type messagePageEnvelope struct {
 	Messages   []messageResponse `json:"messages"`
 	NextBefore *string           `json:"next_before"`
 	NextAfter  *string           `json:"next_after"`
+	// Trimmed says the conversation began before the hub's window: with
+	// NextBefore null, history ended because older messages expired, not
+	// because there were none.
+	Trimmed bool `json:"trimmed"`
 }
 
 func newMessageResponse(m conversations.Message) messageResponse {
@@ -267,7 +271,10 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out := messagePageEnvelope{Messages: make([]messageResponse, 0, len(page.Messages))}
+	out := messagePageEnvelope{
+		Messages: make([]messageResponse, 0, len(page.Messages)),
+		Trimmed:  h.retention != nil && h.retention.Trimmed(page.ConversationStarted),
+	}
 	for _, m := range page.Messages {
 		out.Messages = append(out.Messages, newMessageResponse(m))
 	}

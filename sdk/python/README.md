@@ -17,6 +17,10 @@ async def handle(msg, conv):
 agent.run()
 ```
 
+Every message the hub hands you carries `msg.signature`, the hub's own seal
+over what was said; the hub keeps messages for 90 days, so if you keep them
+longer, keep the signature with them, unchanged.
+
 Photos and files arrive as attachments, and the bytes are fetched only if
 something wants them:
 

@@ -22,10 +22,12 @@ const page = (
   messages: Message[],
   next_before: string | null = null,
   next_after: string | null = null,
+  trimmed = false,
 ): Page => ({
   messages,
   next_before,
   next_after,
+  trimmed,
 });
 
 describe('chat controller', () => {
@@ -97,6 +99,26 @@ describe('chat controller', () => {
     jest.advanceTimersByTime(3_000);
     expect(c.getSnapshot().typing).toBe(false);
     jest.useRealTimers();
+    c.stop();
+  });
+
+  it('tells the screen when the top of the chat is where the hub stopped keeping', async () => {
+    const api = {
+      listMessages: async (_id: string, q: { before?: string }) =>
+        q.before
+          ? page([msg('m01', 'first kept')], null, null, true)
+          : page([msg('m02', 'hello')], 'm02', null, true),
+    } as unknown as Api;
+    const c = new ChatController(api, new FakeRealtime(), 'cnv_1', 'usr_1');
+    c.start();
+    await flush();
+    // The hub said so from the first page, but there is more to load, so
+    // the note waits until the oldest page is on screen.
+    expect(c.getSnapshot().hasOlder).toBe(true);
+    expect(c.getSnapshot().trimmed).toBe(false);
+    await c.loadOlder();
+    expect(c.getSnapshot().hasOlder).toBe(false);
+    expect(c.getSnapshot().trimmed).toBe(true);
     c.stop();
   });
 });

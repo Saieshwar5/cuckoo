@@ -208,6 +208,10 @@ type Message struct {
 	Truncated      bool
 	DeliveryStatus DeliveryStatus
 	CreatedAt      time.Time
+	// Signature is the hub's mark over the content (see signature.go). Empty
+	// while a stream is still being written, and on messages that predate
+	// signing.
+	Signature []byte
 }
 
 // SendInput is what a sender supplies. IdempotencyKey is optional: a sender
@@ -248,6 +252,10 @@ type Page struct {
 	Messages   []Message
 	NextBefore *uuid.UUID
 	NextAfter  *uuid.UUID
+	// ConversationStarted is when the conversation was created. With
+	// NextBefore empty it tells a caller whether history ended because the
+	// conversation began there or because older messages have expired.
+	ConversationStarted time.Time
 }
 
 // ListMessagesInput selects a page of history. Neither cursor means the
@@ -303,6 +311,7 @@ func messageFromRow(r gen.Message) (Message, error) {
 		Status:         MessageStatus(r.Status),
 		Truncated:      r.Truncated,
 		CreatedAt:      r.CreatedAt,
+		Signature:      r.Signature,
 	}
 	if r.ReplyToMessageID != nil {
 		msg.ReplyTo = &ReplyRef{ID: *r.ReplyToMessageID}

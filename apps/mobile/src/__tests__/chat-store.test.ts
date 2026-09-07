@@ -8,6 +8,7 @@ import {
   confirmLocal,
   empty,
   failLocal,
+  historyTrimmed,
   isTyping,
   newestServerId,
   quickReplies,
@@ -39,8 +40,14 @@ describe('chat store', () => {
       messages: [msg({ id: 'm3', created_at: t(3) }), msg({ id: 'm2', created_at: t(2) })],
       next_before: 'm2',
       next_after: null,
+      trimmed: false,
     });
-    s = addOlder(s, { messages: [msg({ id: 'm1', created_at: t(1) })], next_before: null, next_after: null });
+    s = addOlder(s, {
+      messages: [msg({ id: 'm1', created_at: t(1) })],
+      next_before: null,
+      next_after: null,
+      trimmed: false,
+    });
     s = upsert(s, msg({ id: 'm4', created_at: t(4) }));
     // Out of order arrival still lands in place.
     s = upsert(s, msg({ id: 'm2b', created_at: t(2) }));
@@ -174,6 +181,7 @@ describe('out of my sight', () => {
       ],
       next_before: 'a',
       next_after: null,
+      trimmed: false,
     });
     s = removeMessage(s, 'b');
     expect(s.messages.map((m) => m.id)).toEqual(['a']);
@@ -187,10 +195,45 @@ describe('out of my sight', () => {
         messages: [msg({ id: 'a', created_at: '2026-09-05T10:00:00Z' })],
         next_before: 'a',
         next_after: null,
+        trimmed: false,
       }),
     );
     expect(s.messages).toEqual([]);
     expect(s.nextBefore).toBeNull();
+  });
+});
+
+describe('the end of history', () => {
+  it('says the hub stopped keeping only once the oldest page is on screen', () => {
+    let s = setPage(empty, {
+      messages: [msg({ id: 'm2', created_at: t(2) })],
+      next_before: 'm2',
+      next_after: null,
+      trimmed: true,
+    });
+    // More to load: nothing has ended yet.
+    expect(historyTrimmed(s)).toBe(false);
+    s = addOlder(s, {
+      messages: [msg({ id: 'm1', created_at: t(1) })],
+      next_before: null,
+      next_after: null,
+      trimmed: true,
+    });
+    expect(historyTrimmed(s)).toBe(true);
+    // A chat that simply began here says nothing.
+    const whole = setPage(empty, {
+      messages: [msg({ id: 'm1', created_at: t(1) })],
+      next_before: null,
+      next_after: null,
+      trimmed: false,
+    });
+    expect(historyTrimmed(whole)).toBe(false);
+    // Everything aged out is still the hub's doing, not a new chat.
+    expect(
+      historyTrimmed(setPage(empty, { messages: [], next_before: null, next_after: null, trimmed: true })),
+    ).toBe(true);
+    // Cleared by the person: there is nothing left for the note to explain.
+    expect(historyTrimmed(clearMessages(s))).toBe(false);
   });
 });
 
@@ -205,6 +248,7 @@ describe('scrolled away', () => {
       ],
       next_before: null,
       next_after: null,
+      trimmed: false,
     }).messages;
     expect(unseenSince(list, 'b')).toBe(2);
     expect(unseenSince(list, 'e')).toBe(0);

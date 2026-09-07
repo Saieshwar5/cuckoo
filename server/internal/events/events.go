@@ -7,6 +7,7 @@
 package events
 
 import (
+	"encoding/base64"
 	"time"
 
 	"github.com/google/uuid"
@@ -53,6 +54,11 @@ type Message struct {
 	Status    string    `json:"status"`
 	Truncated bool      `json:"truncated"`
 	CreatedAt time.Time `json:"created_at"`
+	// Signature is the hub's mark over the message, for a backend that keeps
+	// its own copy: store it with the message and hand it back unchanged.
+	// Absent on a stream still being written and on messages from before
+	// signing existed.
+	Signature string `json:"signature,omitempty"`
 }
 
 // Sender names who wrote a message. A backend never sees more about a person
@@ -253,7 +259,17 @@ func MessageOf(msg conversations.Message, senderName string) Message {
 		Status:    string(msg.Status),
 		Truncated: msg.Truncated,
 		CreatedAt: msg.CreatedAt,
+		Signature: signatureOf(msg.Signature),
 	}
+}
+
+// signatureOf writes a signature the way it travels: base64 without padding,
+// safe in a URL, or nothing at all.
+func signatureOf(sig []byte) string {
+	if len(sig) == 0 {
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(sig)
 }
 
 func formatParticipantID(kind conversations.ParticipantKind, id uuid.UUID) string {
