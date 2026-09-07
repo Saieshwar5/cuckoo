@@ -37,7 +37,7 @@ interface Props {
 }
 
 export function VoiceNote({ attachment, mine, sending, colors }: Props) {
-  const source = useMediaSource(attachment.media_id, { localUri: attachment.local_uri });
+  const { source, gone } = useMediaSource(attachment.media_id, { localUri: attachment.local_uri });
   const player = useAudioPlayer(source ?? null);
   const status = useAudioPlayerStatus(player);
   const [speed, setSpeed] = useState(0);
@@ -52,6 +52,10 @@ export function VoiceNote({ attachment, mine, sending, colors }: Props) {
   const total = status.duration || (attachment.duration_ms ?? 0) / 1000;
   const played = status.currentTime;
   const progress = total > 0 ? Math.min(1, played / total) : 0;
+  // The bars are the recording's own shape and travel with the message,
+  // so a note the hub has swept still shows what it looked like; only
+  // the sound is gone, and the bars stay dim to say so.
+  const reached = (i: number) => !gone && i / bars.length <= progress;
 
   const toggle = () => {
     if (status.playing) {
@@ -75,7 +79,7 @@ export function VoiceNote({ attachment, mine, sending, colors }: Props) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={status.playing ? t('chat.voice.pause') : t('chat.voice.play')}
-        accessibilityState={{ disabled: sending }}
+        accessibilityState={{ disabled: sending || gone }}
         disabled={sending || !source}
         onPress={toggle}
         hitSlop={8}
@@ -94,7 +98,7 @@ export function VoiceNote({ attachment, mine, sending, colors }: Props) {
         <Pressable
           accessibilityRole="adjustable"
           accessibilityLabel={t('chat.voice.seek')}
-          disabled={sending || total === 0}
+          disabled={sending || gone || total === 0}
           onPress={(e) => {
             const width = BARS * (BAR_WIDTH + BAR_GAP);
             void player.seekTo(Math.max(0, Math.min(1, e.nativeEvent.locationX / width)) * total);
@@ -108,26 +112,34 @@ export function VoiceNote({ attachment, mine, sending, colors }: Props) {
                 styles.bar,
                 {
                   height: BAR_MIN + (BAR_MAX - BAR_MIN) * (value / 100),
-                  backgroundColor: i / bars.length <= progress ? ink : spent,
-                  opacity: i / bars.length <= progress ? 1 : 0.4,
+                  backgroundColor: reached(i) ? ink : spent,
+                  opacity: reached(i) ? 1 : 0.4,
                 },
               ]}
             />
           ))}
         </Pressable>
         <View style={styles.footer}>
-          <Text style={[styles.time, { color: meta }]}>
-            {formatDuration(status.playing || played > 0 ? played : total)}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('chat.voice.speed')}
-            onPress={cycleSpeed}
-            hitSlop={8}
-            testID={`voice-speed-${attachment.media_id}`}
-          >
-            <Text style={[styles.speed, { color: meta, borderColor: meta }]}>{SPEEDS[speed]}×</Text>
-          </Pressable>
+          {gone ? (
+            <Text style={[styles.gone, { color: meta }]} testID={`gone-${attachment.media_id}`}>
+              {t('chat.media.gone')}
+            </Text>
+          ) : (
+            <>
+              <Text style={[styles.time, { color: meta }]}>
+                {formatDuration(status.playing || played > 0 ? played : total)}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('chat.voice.speed')}
+                onPress={cycleSpeed}
+                hitSlop={8}
+                testID={`voice-speed-${attachment.media_id}`}
+              >
+                <Text style={[styles.speed, { color: meta, borderColor: meta }]}>{SPEEDS[speed]}×</Text>
+              </Pressable>
+            </>
+          )}
         </View>
       </View>
     </View>
@@ -143,6 +155,7 @@ const styles = StyleSheet.create({
   bar: { width: BAR_WIDTH, borderRadius: 1.5 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   time: { ...type.caption, fontVariant: ['tabular-nums'] },
+  gone: type.caption,
   speed: {
     ...type.caption,
     fontWeight: '600',

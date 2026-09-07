@@ -22,7 +22,7 @@ export default function MediaScreen() {
   const insets = useSafeAreaInsets();
   const { api, token } = useSession();
   const { id, name, kind } = useLocalSearchParams<{ id: string; name?: string; kind?: string }>();
-  const source = useMediaSource(id);
+  const { source, gone } = useMediaSource(id);
   const fileName = name ?? '';
   const isVideo = kind === 'video';
   // A video opened full-screen plays at once, the way tapping one anywhere
@@ -33,7 +33,11 @@ export default function MediaScreen() {
 
   return (
     <View style={styles.screen}>
-      {!source ? (
+      {gone ? (
+        <Text style={styles.gone} testID="media-gone">
+          {t('chat.media.gone')}
+        </Text>
+      ) : !source ? (
         <ActivityIndicator color={dark.text} />
       ) : isVideo ? (
         <VideoView
@@ -67,15 +71,17 @@ export default function MediaScreen() {
         <Text style={styles.name} numberOfLines={1}>
           {fileName}
         </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.file.save')}
-          onPress={() => void openAttachment(api, id, fileName || 'photo.jpg', token)}
-          hitSlop={12}
-          testID="media-save"
-        >
-          <Ionicons name="download-outline" size={24} color={dark.text} />
-        </Pressable>
+        {gone ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.file.save')}
+            onPress={() => void openAttachment(api, id, fileName || 'photo.jpg', token)}
+            hitSlop={12}
+            testID="media-save"
+          >
+            <Ionicons name="download-outline" size={24} color={dark.text} />
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -96,4 +102,5 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   name: { ...type.secondary, color: dark.text, flex: 1 },
+  gone: { ...type.secondary, color: dark.textSecondary, textAlign: 'center', padding: spacing.xl },
 });

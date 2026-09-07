@@ -27,7 +27,12 @@ const message = (id: string, text: string, kind: 'user' | 'agent' = 'agent'): Me
   created_at: `2026-09-06T09:00:${id.slice(-2)}Z`,
 });
 
-const page = (messages: Message[]): Page => ({ messages, next_before: null, next_after: null });
+const page = (messages: Message[], trimmed = false): Page => ({
+  messages,
+  next_before: null,
+  next_after: null,
+  trimmed,
+});
 
 // never is a hub that cannot be reached: what an app with no signal sees.
 const never = () => Promise.reject(new NetworkError(new TypeError('Network request failed')));
@@ -241,6 +246,7 @@ describe('one chat offline', () => {
     await cache.set(keys.messages('usr_1', 'cnv_1'), {
       messages: [message('m02', 'remembered'), message('m01', 'older')],
       nextBefore: null,
+      trimmed: true,
     });
     await cache.set(keys.outbox('usr_1'), [
       {
@@ -273,12 +279,16 @@ describe('one chat offline', () => {
     expect(texts()).toEqual(['typed in a tunnel', 'remembered', 'older']);
     expect(c.getSnapshot().messages[0]?.delivery_status).toBe('pending');
     expect(c.getSnapshot().loading).toBe(false);
+    // Remembered along with the messages: the note about older history
+    // is there offline too.
+    expect(c.getSnapshot().trimmed).toBe(true);
 
     // The hub's page replaces what was remembered; what we have not sent
     // yet is ours and stays.
     answer(page([message('m03', 'newest'), message('m02', 'remembered'), message('m01', 'older')]));
     await flush();
     expect(texts()).toEqual(['typed in a tunnel', 'newest', 'remembered', 'older']);
+    expect(c.getSnapshot().trimmed).toBe(false);
     c.stop();
     outbox.stop();
   });
@@ -288,7 +298,7 @@ describe('one chat offline', () => {
     try {
       const cache = new MemoryCache();
       const api = {
-        listMessages: async () => page([message('m01', 'hello')]),
+        listMessages: async () => page([message('m01', 'hello')], true),
         sendMessage: never,
       } as unknown as Api;
       const realtime = new FakeRealtime();
@@ -303,8 +313,12 @@ describe('one chat offline', () => {
       await c.send({ text: 'unsent' });
       await jest.advanceTimersByTimeAsync(1000);
 
-      const saved = (await cache.get(keys.messages('usr_1', 'cnv_1'))) as { messages: Message[] };
+      const saved = (await cache.get(keys.messages('usr_1', 'cnv_1'))) as {
+        messages: Message[];
+        trimmed: boolean;
+      };
       expect(saved.messages.map((m) => m.body.text)).toEqual(['hello']);
+      expect(saved.trimmed).toBe(true);
       c.stop();
       outbox.stop();
     } finally {

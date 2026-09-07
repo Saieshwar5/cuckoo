@@ -11,6 +11,7 @@ import {
   confirmLocal,
   empty,
   failLocal,
+  historyTrimmed,
   isTyping,
   newestServerId,
   quickReplies,
@@ -28,6 +29,9 @@ export interface ChatSnapshot {
   loading: boolean;
   loadingOlder: boolean;
   hasOlder: boolean;
+  // The oldest message on screen is the oldest the hub still has, and
+  // there were older ones once.
+  trimmed: boolean;
   connected: boolean;
   error: unknown;
   quickReplies: string[];
@@ -63,6 +67,9 @@ export interface ChatDeps {
 interface Remembered {
   messages: Message[];
   nextBefore: string | null;
+  // Written down since retention arrived; a chat remembered before then
+  // has no answer, and no answer means no note.
+  trimmed?: boolean;
 }
 
 // ChatController is one open conversation as a thing outside React: its
@@ -77,6 +84,7 @@ export class ChatController {
     loading: true,
     loadingOlder: false,
     hasOlder: false,
+    trimmed: false,
     connected: false,
     error: null,
     quickReplies: [],
@@ -152,7 +160,12 @@ export class ChatController {
     if (this.stopped) return;
     let state = this.state;
     if (saved?.messages.length && !state.messages.length) {
-      state = setPage(state, { messages: saved.messages, next_before: saved.nextBefore, next_after: null });
+      state = setPage(state, {
+        messages: saved.messages,
+        next_before: saved.nextBefore,
+        next_after: null,
+        trimmed: saved.trimmed ?? false,
+      });
     }
     for (const item of this.outbox.pending(this.conversationId)) {
       if (!state.messages.some((m) => m.localKey === item.key)) {
@@ -299,7 +312,11 @@ export class ChatController {
   // change. Our own unsent ones are the outbox's to remember.
   private remember(): void {
     const messages = this.state.messages.filter((m) => !m.localKey).slice(0, MESSAGES_KEPT);
-    void this.cache.set(this.cacheKey, { messages, nextBefore: this.state.nextBefore } satisfies Remembered);
+    void this.cache.set(this.cacheKey, {
+      messages,
+      nextBefore: this.state.nextBefore,
+      trimmed: this.state.trimmed,
+    } satisfies Remembered);
   }
 
   private set(state: ChatState, extra: Partial<ChatSnapshot> = {}): void {
@@ -314,6 +331,7 @@ export class ChatController {
       messages: state.messages,
       typing: isTyping(state, this.now()),
       hasOlder: state.nextBefore !== null,
+      trimmed: historyTrimmed(state),
       quickReplies: quickReplies(state),
       ...extra,
     });

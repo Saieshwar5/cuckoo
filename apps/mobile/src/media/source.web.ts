@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from '@/session/SessionProvider';
 
 import { clearBlobs, getBlob, putBlob } from './blobs.web';
+import { isGone } from './gone';
 
 // The browser's version of reaching a file on the hub.
 //
@@ -15,13 +16,21 @@ export interface MediaSource {
   headers?: Record<string, string>;
 }
 
+// What a bubble gets: the file, or not yet, or never. A file the hub has
+// swept is gone for good, and a bubble should say so rather than wait.
+export interface MediaState {
+  source: MediaSource | null;
+  gone: boolean;
+}
+
 export function useMediaSource(
   mediaId: string | undefined,
   opts: { thumb?: boolean; localUri?: string } = {},
-): MediaSource | null {
+): MediaState {
   const { api, token } = useSession();
   const { thumb, localUri } = opts;
   const [uri, setUri] = useState<string | null>(null);
+  const [gone, setGone] = useState(false);
 
   useEffect(() => {
     if (localUri || !mediaId || !token) return;
@@ -38,7 +47,13 @@ export function useMediaSource(
           const res = await fetch(api.mediaUrl(mediaId, thumb ? 'thumb' : undefined), {
             headers: { Authorization: `Bearer ${token}` },
           });
-          if (!res.ok) return;
+          if (!res.ok) {
+            // Swept by the hub, which the bubble says; or something else,
+            // which it does not, and the placeholder stays.
+            const missing = await isGone(res);
+            if (!cancelled && missing) setGone(true);
+            return;
+          }
           blob = await res.blob();
           void putBlob(key, blob);
         } catch {
@@ -58,8 +73,8 @@ export function useMediaSource(
     };
   }, [api, mediaId, thumb, token, localUri]);
 
-  if (localUri) return { uri: localUri };
-  return uri ? { uri } : null;
+  if (localUri) return { source: { uri: localUri }, gone: false };
+  return { source: uri ? { uri } : null, gone };
 }
 
 // forgetMedia removes every copy. Signing out calls it.

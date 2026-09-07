@@ -11,6 +11,7 @@ const idle: ChatSnapshot = {
   loading: true,
   loadingOlder: false,
   hasOlder: false,
+  trimmed: false,
   connected: false,
   error: null,
   quickReplies: [],

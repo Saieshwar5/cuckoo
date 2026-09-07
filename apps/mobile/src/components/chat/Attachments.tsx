@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Attachment } from '@/api/types';
@@ -20,6 +20,10 @@ import { VoiceNote } from './VoiceNote';
 // under it, which is what every messenger does because it is what people
 // look at. Anything else is a card — an icon, a name, a size — because a
 // document has nothing to show until it is opened.
+//
+// A file the hub has swept keeps its place and its shape, and says so in
+// the same grey as the time under it. It is not an error; it is what a
+// retention window looks like from inside a chat.
 
 // The width a picture is drawn at. Fixed rather than proportional so a
 // column of photos has one edge, and small enough to leave the bubble's
@@ -67,7 +71,7 @@ function Photo({
   const router = useRouter();
   // The small copy is what a bubble needs; the full one waits until the
   // picture is opened. On a slow connection that is the whole difference.
-  const source = useMediaSource(attachment.media_id, {
+  const { source, gone } = useMediaSource(attachment.media_id, {
     thumb: attachment.has_thumbnail,
     localUri: attachment.local_uri,
   });
@@ -77,8 +81,8 @@ function Photo({
   return (
     <Pressable
       accessibilityRole="imagebutton"
-      accessibilityLabel={attachment.file_name}
-      disabled={sending}
+      accessibilityLabel={gone ? t('chat.media.gone') : attachment.file_name}
+      disabled={sending || gone}
       onPress={() =>
         router.push({
           pathname: '/media/[id]',
@@ -92,7 +96,16 @@ function Photo({
         <Image source={source} style={styles.image} resizeMode="cover" accessibilityIgnoresInvertColors />
       ) : (
         <View style={styles.centre}>
-          <ActivityIndicator color={colors.textSecondary} />
+          {gone ? (
+            <Text
+              style={[styles.gone, { color: colors.textSecondary }]}
+              testID={`gone-${attachment.media_id}`}
+            >
+              {t('chat.media.gone')}
+            </Text>
+          ) : (
+            <ActivityIndicator color={colors.textSecondary} />
+          )}
         </View>
       )}
       {sending ? (
@@ -143,14 +156,23 @@ function VideoCard({
 
 function FileCard({ attachment, mine, colors }: { attachment: Attachment; mine: boolean; colors: Palette }) {
   const { api, token } = useSession();
+  // A document is not fetched to draw its card, so whether the hub still
+  // has it is only learned on a tap.
+  const [gone, setGone] = useState(false);
   const ink = mine ? colors.bubbleTextMine : colors.bubbleTextTheirs;
   const meta = mine ? colors.bubbleMetaMine : colors.bubbleMetaTheirs;
   const size = formatBytes(attachment.byte_size);
+  const open = async () => {
+    const result = await openAttachment(api, attachment.media_id, attachment.file_name, token);
+    if (result === 'gone') setGone(true);
+  };
 
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={() => void openAttachment(api, attachment.media_id, attachment.file_name, token)}
+      accessibilityState={{ disabled: gone }}
+      disabled={gone}
+      onPress={() => void open()}
       testID={`file-${attachment.media_id}`}
       style={[styles.card, { backgroundColor: mine ? colors.bubbleQuoteMine : colors.bubbleQuoteTheirs }]}
     >
@@ -161,8 +183,12 @@ function FileCard({ attachment, mine, colors }: { attachment: Attachment; mine: 
         <Text style={[styles.name, { color: ink }]} numberOfLines={1}>
           {attachment.file_name}
         </Text>
-        <Text style={[styles.size, { color: meta }]} numberOfLines={1}>
-          {size ? `${size} · ${t('chat.file.open')}` : t('chat.file.open')}
+        <Text
+          style={[styles.size, { color: meta }]}
+          numberOfLines={1}
+          testID={gone ? `gone-${attachment.media_id}` : undefined}
+        >
+          {gone ? t('chat.media.gone') : size ? `${size} · ${t('chat.file.open')}` : t('chat.file.open')}
         </Text>
       </View>
     </Pressable>
@@ -215,6 +241,7 @@ const styles = StyleSheet.create({
   },
   image: { width: '100%', height: '100%' },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  gone: { ...type.caption, textAlign: 'center', paddingHorizontal: spacing.md },
   veil: {
     position: 'absolute',
     top: 0,

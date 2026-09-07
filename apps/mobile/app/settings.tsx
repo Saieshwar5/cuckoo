@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import type { StorageUsage } from '@/api/types';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
 import { Screen } from '@/components/Screen';
 import { TopBar } from '@/components/TopBar';
 import { t } from '@/i18n';
+import { storageLine } from '@/media/format';
 import { forgetMedia } from '@/media/source';
 import { useSession } from '@/session/SessionProvider';
 import {
@@ -36,6 +38,22 @@ export default function SettingsScreen() {
   const [cleared, setCleared] = useState(false);
   const [confirm, setConfirm] = useState<'delete' | null>(null);
   const [busy, setBusy] = useState(false);
+  // What the hub holds for this person, asked once when the screen opens.
+  // Until it answers, and if it does not, the line is simply not there:
+  // a spinner or an apology would make more of it than it is.
+  const [storage, setStorage] = useState<StorageUsage | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.storage().then(
+      (usage) => {
+        if (!cancelled) setStorage(usage);
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/agents'));
   const clearMedia = () => {
@@ -104,6 +122,12 @@ export default function SettingsScreen() {
 
         <Text style={styles.section}>{t('settings.storage')}</Text>
         <View style={[styles.card, { backgroundColor: colors.surface }]}>
+          {storage ? (
+            <View style={[styles.hub, { borderBottomColor: colors.hairline }]} testID="settings-storage-hub">
+              <Ionicons name="cloud-outline" size={22} color={colors.textSecondary} />
+              <Text style={[styles.hubText, { color: colors.text }]}>{storageLine(storage)}</Text>
+            </View>
+          ) : null}
           <Row
             icon="images-outline"
             label={cleared ? t('settings.storage.cleared') : t('settings.storage.clear')}
@@ -206,6 +230,16 @@ const makeStyles = ({ colors }: Theme) =>
     pill: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm + 2, borderRadius: radius.pill },
     pillText: { ...type.secondary, fontWeight: '600' },
     card: { borderRadius: radius.lg, overflow: 'hidden' },
+    // The hub's line sits in the card like a row, but is not one to tap.
+    hub: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    hubText: { ...type.secondary, color: colors.text, flex: 1, lineHeight: 20 },
     note: { ...type.caption, color: colors.textSecondary, lineHeight: 18 },
     danger: { alignItems: 'center', paddingVertical: spacing.lg, marginTop: spacing.lg },
     dangerText: { ...type.body, fontWeight: '600' },
