@@ -35,7 +35,8 @@
 	handle {
 		root * /srv/www
 		file_server
-		try_files {path} {path}/ {path}.html /404.html
+		# A missing page falls through to handle_errors below, so it is a real 404.
+		try_files {path} {path}/ {path}.html
 
 		header {
 			# The site is static and same-origin; nothing here needs anything else.

@@ -1,0 +1,9 @@
+# The build context for examples/welcome/Dockerfile, which is built from the
+# repository root because it needs the SDK. Everything else stays out, or the
+# context would carry two node_modules trees to the daemon on every build.
+*
+!sdk/python
+!examples/welcome
+sdk/python/**/__pycache__
+sdk/python/*.egg-info
+examples/welcome/__pycache__

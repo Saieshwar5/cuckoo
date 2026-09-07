@@ -1,0 +1,51 @@
+# Packaging only: build both images from main and publish them to the registry
+# attached to this repository, tagged with the commit. Tests stay local
+# (`make ci`); this exists so a deploy or a rollback can name an image that was
+# built from a known commit, whatever laptop it happens from.
+name: image
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Names
+        id: names
+        run: |
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          echo "version=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Hub
+        uses: docker/build-push-action@v6
+        with:
+          context: server
+          push: true
+          build-args: VERSION=${{ steps.names.outputs.version }}
+          tags: |
+            ghcr.io/${{ steps.names.outputs.owner }}/cuckoo-hub:${{ steps.names.outputs.version }}
+            ghcr.io/${{ steps.names.outputs.owner }}/cuckoo-hub:latest
+
+      - name: Welcome agent
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: examples/welcome/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.names.outputs.owner }}/cuckoo-welcome:${{ steps.names.outputs.version }}
+            ghcr.io/${{ steps.names.outputs.owner }}/cuckoo-welcome:latest

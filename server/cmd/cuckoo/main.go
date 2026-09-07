@@ -1,9 +1,8 @@
 // Command cuckoo runs the Cuckoo hub: the chat server that agent backends and
 // the mobile app both connect to.
 //
-// It is a single binary with its migrations embedded, so deploying it — or
-// self-hosting a private hub — is copying one file and setting environment
-// variables.
+// It is a single binary with its migrations embedded, so deploying it is
+// copying one file and setting environment variables.
 package main
 
 import (
@@ -40,6 +39,11 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/users"
 )
 
+// version is stamped at build time (-ldflags "-X main.version=…") and shown on
+// /healthz, so what is running on a machine is never a guess. "dev" means a
+// plain `go build` or `go run`.
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("server stopped", "error", err)
@@ -59,7 +63,7 @@ func run() error {
 
 	log := newLogger(cfg)
 	slog.SetDefault(log)
-	log.Info("starting cuckoo", "env", cfg.Env, "hub_domain", cfg.HubDomain, "addr", cfg.HTTPAddr, "mail", cfg.Mail)
+	log.Info("starting cuckoo", "version", version, "env", cfg.Env, "hub_domain", cfg.HubDomain, "addr", cfg.HTTPAddr, "mail", cfg.Mail)
 
 	// Signals cancel this context, which unwinds startup and then triggers a
 	// graceful shutdown of the running server.
@@ -134,6 +138,7 @@ func run() error {
 		Hub:           hub,
 		Bus:           bus,
 		CORSOrigins:   cfg.CORSOrigins,
+		Version:       version,
 		Health: map[string]api.HealthCheck{
 			"postgres": db.Ping,
 			"redis":    func(ctx context.Context) error { return redisClient.Ping(ctx).Err() },

@@ -64,6 +64,8 @@ type Deps struct {
 	// means browsers are not served at all.
 	CORSOrigins []string
 	Health      map[string]HealthCheck
+	// Version is the build stamp shown on /healthz; empty reads as "dev".
+	Version string
 }
 
 // NewRouter builds the server's HTTP handler.
@@ -89,7 +91,7 @@ func NewRouter(d Deps) http.Handler {
 			"That method is not allowed on this endpoint."))
 	})
 
-	r.Get("/healthz", healthHandler(d.Health))
+	r.Get("/healthz", healthHandler(d.Health, d.Version))
 
 	// What a QR code opens for someone without the app, and the picture on
 	// it. Both are public: this is the moment a stranger decides whether to

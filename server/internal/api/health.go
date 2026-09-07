@@ -17,16 +17,20 @@ const healthTimeout = 2 * time.Second
 
 type healthResponse struct {
 	Status     string            `json:"status"`
+	Version    string            `json:"version"`
 	Components map[string]string `json:"components"`
 }
 
-// healthHandler reports the server and its dependencies.
+// healthHandler reports the server, its version, and its dependencies.
 //
 // It returns 503 when any dependency is down, so a process that is running but
 // cannot reach Postgres is correctly treated as not ready to serve traffic.
 // Failure reasons are named per component but never include the underlying
 // error, which can carry connection strings.
-func healthHandler(checks map[string]HealthCheck) http.HandlerFunc {
+func healthHandler(checks map[string]HealthCheck, version string) http.HandlerFunc {
+	if version == "" {
+		version = "dev"
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), healthTimeout)
 		defer cancel()
@@ -50,6 +54,6 @@ func healthHandler(checks map[string]HealthCheck) http.HandlerFunc {
 			overall = "degraded"
 		}
 
-		httpx.JSON(w, r, status, healthResponse{Status: overall, Components: components})
+		httpx.JSON(w, r, status, healthResponse{Status: overall, Version: version, Components: components})
 	}
 }
