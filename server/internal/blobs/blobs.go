@@ -121,14 +121,25 @@ func (d *Disk) Delete(_ context.Context, key string) error {
 // the root would be the whole filesystem readable over HTTP, so the check
 // is here rather than in whoever remembers to do it.
 func (d *Disk) path(key string) (string, error) {
-	if key == "" || strings.HasPrefix(key, "/") || !validKey(key) {
-		return "", fmt.Errorf("blobs: invalid key %q", key)
+	if err := checkKey(key); err != nil {
+		return "", err
 	}
 	path := filepath.Join(d.root, filepath.FromSlash(key))
 	if path != d.root && !strings.HasPrefix(path, d.root+string(os.PathSeparator)) {
 		return "", fmt.Errorf("blobs: key %q escapes the root", key)
 	}
 	return path, nil
+}
+
+// checkKey rejects anything this server would not have generated. Disk needs
+// it because a key that escaped the root would be the filesystem readable
+// over HTTP; S3 has no such hole, but one rule both stores apply is what
+// keeps them interchangeable — a key either accepts, or neither does.
+func checkKey(key string) error {
+	if key == "" || strings.HasPrefix(key, "/") || !validKey(key) {
+		return fmt.Errorf("blobs: invalid key %q", key)
+	}
+	return nil
 }
 
 // validKey allows what this server generates and nothing that could mean

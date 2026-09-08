@@ -14,12 +14,12 @@ pip install -e sdk/python
 
 ```bash
 export CUCKOO_KEY=mgt_tok_...
-export CUCKOO_HUB=https://cuckoo.in
+export CUCKOO_HUB=https://cuckoo.onl
 ```
 
 Both can be given as flags instead, as `--key` and `--hub`. Without a key the
 command stops and says so. The hub defaults to the public one,
-`https://cuckoo.in`; a development hub is `http://localhost:8080`, so set it.
+`https://cuckoo.onl`; a development hub is `http://localhost:8080`, so set it.
 
 An error prints as `error: <code>: <message>` and exits with status 1.
 

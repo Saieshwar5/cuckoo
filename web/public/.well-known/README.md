@@ -24,7 +24,7 @@ opens the pair page in a browser, which still works: it offers an
        {
          action: 'VIEW',
          autoVerify: true,
-         data: [{ scheme: 'https', host: 'cuckoo.in', pathPrefix: '/p/' }],
+         data: [{ scheme: 'https', host: 'cuckoo.onl', pathPrefix: '/p/' }],
          category: ['BROWSABLE', 'DEFAULT'],
        },
      ],
@@ -37,7 +37,7 @@ opens the pair page in a browser, which still works: it offers an
 2. Find the team id in the Apple Developer account.
 3. Copy `apple-app-site-association.example` to `apple-app-site-association`
    — **no file extension** — and fill in `<TEAMID>.<bundle id>`.
-4. Add `ios: { associatedDomains: ['applinks:cuckoo.in'] }` to `app.config.ts`.
+4. Add `ios: { associatedDomains: ['applinks:cuckoo.onl'] }` to `app.config.ts`.
 
 The file must be served as `application/json`. The Caddyfile in `deploy/`
 already does that.

@@ -449,6 +449,7 @@ server/          the hub: one Go binary, migrations embedded
     domain/      shared error model and identifiers
     events/      what a backend receives: the event envelope and payloads
     principal/   who is calling
+    blobs/       where uploaded bytes live: a folder, or an S3 bucket
     ratelimit/   token buckets in Redis
     realtime/    live updates: the event bus and the connection hub
     store/       database access, migrations, generated queries
@@ -457,7 +458,7 @@ server/          the hub: one Go binary, migrations embedded
     users/       the first business package, and the pattern for the rest
 apps/mobile/     the app: React Native with Expo (see apps/mobile/README.md)
 web/             the website: landing page, docs, legal (see web/README.md)
-deploy/          Caddy in front of the hub and the site (see deploy/README.md)
+deploy/          the AWS deployment: compose, Caddy, backups (see deploy/README.md)
 sdk/python/      the Python SDK: connect, receive, reply
 protocol/        the published agent protocol spec (not started)
 examples/echo/   the reference agent, and the protocol's smoke test
@@ -472,7 +473,9 @@ scripts/         developer tooling
 - **One hub, open source for transparency.** Not federated, and not a
   self-host product: anyone can read what handles their messages, and we run
   the only hub. The server is a single binary with its migrations embedded, so
-  deploying it is one image and a compose file (`deploy/`).
+  deploying it is one image and a compose file (`deploy/`). It runs on one EC2
+  instance in Mumbai with RDS and S3 beside it, and nothing on the instance is
+  state worth keeping.
 - **The database is real in tests.** The hard bugs in a messaging system live in
   ordering, constraints and delivery state, and a mock agrees with whatever the
   code believes. Every test runs inside a transaction that is rolled back, so

@@ -143,12 +143,13 @@ func TestAPIKeyOutlivesSessions(t *testing.T) {
 	f := setupChat(t)
 	_, key := mintKey(t, f, "outlives sessions")
 
+	// A key is not a session: signing out every device leaves it working,
+	// which is what lets a backend keep running while nobody is signed in.
 	email := "keys@example.com"
-	first := f.srv.SignIn(t, email)
-	f.srv.AsSession(t, first).Get("/v1/client/me").ExpectStatus(http.StatusOK)
-	second := f.srv.SignIn(t, email)
-	f.srv.AsSession(t, first).Get("/v1/client/me").ExpectStatus(http.StatusUnauthorized)
-	f.srv.AsSession(t, second).Get("/v1/client/me").ExpectStatus(http.StatusOK)
+	session := f.srv.SignIn(t, email)
+	f.srv.AsSession(t, session).Get("/v1/client/me").ExpectStatus(http.StatusOK)
+	f.srv.AsSession(t, session).Post("/v1/auth/logout", nil).ExpectStatus(http.StatusNoContent)
+	f.srv.AsSession(t, session).Get("/v1/client/me").ExpectStatus(http.StatusUnauthorized)
 
 	f.srv.AsKey(t, key).Get("/v1/mgmt/agents").ExpectStatus(http.StatusOK)
 }

@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 # The public hub, and the default everywhere in this package. A development
 # hub is http://localhost:8080; pass it explicitly.
-DEFAULT_HUB = "https://cuckoo.in"
+DEFAULT_HUB = "https://cuckoo.onl"
 
 
 @dataclass(frozen=True)

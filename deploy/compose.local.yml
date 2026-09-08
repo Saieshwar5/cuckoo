@@ -1,0 +1,45 @@
+# The state on this machine instead of in AWS: a Postgres container and a
+# folder of files, in place of RDS and the bucket.
+#
+#   docker compose -f compose.yml -f compose.local.yml up -d
+#
+# This is what the laptop stack test uses (README, "Trying the whole stack on
+# a laptop"). It is also the whole of what a hub with no AWS behind it needs,
+# which is why it is an overlay rather than a second copy of everything.
+#
+# An overlay merges services, not settings: compose reads ${...} out of the
+# environment before it merges files, so the three values that decide where
+# the state lives belong in the .env beside them, not here —
+#
+#   DB_HOST=postgres
+#   DB_SSLMODE=disable
+#   CUCKOO_BLOBS=disk
+
+services:
+  hub:
+    volumes:
+      # Owned by uid 10001, the user the image runs as (README, "First deploy").
+      - ${DATA_DIR:-/data}/media:/data/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    environment:
+      POSTGRES_USER: ${DB_USER:-cuckoo}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-cuckoo}
+    volumes:
+      - ${DATA_DIR:-/data}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cuckoo} -d ${DB_NAME:-cuckoo}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

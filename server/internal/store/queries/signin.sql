@@ -94,7 +94,12 @@ SET revoked_at = now()
 WHERE id IN (
     SELECT older.id FROM sessions older
     WHERE older.user_id = sqlc.arg('user_id') AND older.revoked_at IS NULL AND older.expires_at > now()
-    ORDER BY COALESCE(older.last_seen_at, older.created_at) DESC
+    -- The id breaks a tie. Two sessions can share a timestamp — they are
+    -- written by now(), which is the transaction's clock, not the statement's
+    -- — and without a second term the row that ends is whichever one Postgres
+    -- happened to return. Identifiers are UUIDv7, so ordering by one is
+    -- ordering by when it was made.
+    ORDER BY COALESCE(older.last_seen_at, older.created_at) DESC, older.id DESC
     OFFSET sqlc.arg('keep')
 );
 

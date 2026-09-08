@@ -1,12 +1,11 @@
 // Everything about the site that is a decision rather than a fact, in one
 // place, so changing the domain is one edit and not a search.
 //
-// The domain is not settled yet (cuckoo.in or cuckoo.chat). `SITE_URL` in the
-// environment wins, so a preview deploy can run on its own host without a
-// commit.
+// The domain is cuckoo.onl. `SITE_URL` in the environment wins, so a preview
+// deploy can run on its own host without a commit.
 
 /** Where the site is served. The hub answers on the same host under /v1, /p and /a. */
-export const siteUrl = import.meta.env.SITE_URL ?? 'https://cuckoo.in';
+export const siteUrl = import.meta.env.SITE_URL ?? 'https://cuckoo.onl';
 
 /** The hub every code sample talks to. Same host as the site, by design. */
 export const hubUrl = siteUrl;
@@ -20,7 +19,7 @@ export const site = {
     'messages: it never runs a model.',
   repo: 'https://github.com/Saieshwar5/cuckoo',
   /** One address for support, privacy questions and, in time, grievances. */
-  contact: 'hello@cuckoo.in',
+  contact: 'hello@cuckoo.onl',
   /** The protocol's own name, so a company can say what it supports. */
   protocol: { name: 'Cuckoo Agent Protocol', short: 'CAP', version: '0.1' },
 } as const;

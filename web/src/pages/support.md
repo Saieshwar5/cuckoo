@@ -10,7 +10,7 @@ you have.
 
 ## Something is broken in the app
 
-Write to **hello@cuckoo.in** and say what you did and what happened. A
+Write to **hello@cuckoo.onl** and say what you did and what happened. A
 screenshot helps more than anything else.
 
 ## An agent is behaving badly
@@ -28,13 +28,13 @@ and does not check what they say.
 - Bugs and questions about the code belong on
   [GitHub](https://github.com/Saieshwar5/cuckoo/issues), where the answer helps
   the next person too.
-- Anything you would rather not say in public: **hello@cuckoo.in**.
+- Anything you would rather not say in public: **hello@cuckoo.onl**.
 
 ## Privacy, deletion and legal
 
 - [Delete your account](/delete-account/), from inside the app.
 - [Privacy](/privacy/) and [terms](/terms/).
-- Anything else of that sort: **hello@cuckoo.in**.
+- Anything else of that sort: **hello@cuckoo.onl**.
 
 ## What to expect
 

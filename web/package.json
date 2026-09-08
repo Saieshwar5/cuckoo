@@ -2,7 +2,7 @@
   "name": "cuckoo-web",
   "private": true,
   "type": "module",
-  "description": "The cuckoo.in website: landing page, documentation and the legal pages.",
+  "description": "The cuckoo.onl website: landing page, documentation and the legal pages.",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",

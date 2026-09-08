@@ -18,6 +18,7 @@ func isolate(t *testing.T) {
 		"CUCKOO_LOG_LEVEL", "CUCKOO_SHUTDOWN_TIMEOUT",
 		"CUCKOO_RETENTION_DAYS", "CUCKOO_USER_MEDIA_BUDGET_MB", "CUCKOO_AGENT_MEDIA_BUDGET_MB",
 		"CUCKOO_RETENTION_DRY_RUN", "CUCKOO_SIGNING_KEY",
+		"CUCKOO_BLOBS", "CUCKOO_MEDIA_DIR", "CUCKOO_S3_BUCKET", "CUCKOO_S3_REGION",
 	} {
 		t.Setenv(key, "")
 	}
@@ -232,5 +233,64 @@ func TestProductionNeedsARealSigningKey(t *testing.T) {
 	t.Setenv("CUCKOO_SIGNING_KEY", strings.Repeat("cd", 32))
 	if _, err := Load(); err != nil {
 		t.Errorf("production refused a real key: %v", err)
+	}
+}
+
+func TestBlobsDefaultsToDisk(t *testing.T) {
+	isolate(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Blobs != BlobsDisk {
+		t.Errorf("Blobs = %q, want %q", cfg.Blobs, BlobsDisk)
+	}
+	if cfg.MediaDir != "./.data/media" {
+		t.Errorf("MediaDir = %q", cfg.MediaDir)
+	}
+	if cfg.S3 != (S3Settings{}) {
+		t.Errorf("S3 = %+v for a disk hub, want nothing", cfg.S3)
+	}
+}
+
+func TestBlobsS3NeedsABucket(t *testing.T) {
+	isolate(t)
+	t.Setenv("CUCKOO_BLOBS", "s3")
+
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "CUCKOO_S3_BUCKET") {
+		t.Fatalf("a bucketless s3 hub started: %v", err)
+	}
+}
+
+// The region may be left to the SDK — on an EC2 instance it knows its own —
+// so a bucket alone is a complete setting.
+func TestBlobsS3ReadsBucketAndRegion(t *testing.T) {
+	isolate(t)
+	t.Setenv("CUCKOO_BLOBS", "s3")
+	t.Setenv("CUCKOO_S3_BUCKET", "cuckoo-media")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Blobs != BlobsS3 || cfg.S3.Bucket != "cuckoo-media" || cfg.S3.Region != "" {
+		t.Errorf("blobs = %q, s3 = %+v", cfg.Blobs, cfg.S3)
+	}
+
+	t.Setenv("CUCKOO_S3_REGION", "ap-south-1")
+	if cfg, err = Load(); err != nil {
+		t.Fatalf("Load with a region: %v", err)
+	}
+	if cfg.S3.Region != "ap-south-1" {
+		t.Errorf("S3.Region = %q", cfg.S3.Region)
+	}
+}
+
+func TestBlobsRejectsAnUnknownBackend(t *testing.T) {
+	isolate(t)
+	t.Setenv("CUCKOO_BLOBS", "gcs")
+
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "CUCKOO_BLOBS") {
+		t.Fatalf("an unknown storage backend was accepted: %v", err)
 	}
 }
