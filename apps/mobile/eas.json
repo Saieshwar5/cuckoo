@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/expo/eas-cli/main/schema/eas.json",
+  "cli": { "version": ">= 12.0.0", "appVersionSource": "remote" },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": { "EXPO_PUBLIC_HUB_URL": "http://localhost:8080" }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": { "EXPO_PUBLIC_HUB_URL": "https://cuckoo.onl" }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": { "buildType": "app-bundle" },
+      "env": { "EXPO_PUBLIC_HUB_URL": "https://cuckoo.onl" }
+    }
+  },
+  "submit": { "production": {} }
+}

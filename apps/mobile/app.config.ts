@@ -15,6 +15,12 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'automatic',
   ios: { supportsTablet: false },
   android: {
+    // Permanent: an app's package name cannot change once it is published,
+    // and everything Google knows about it hangs off this string.
+    package: 'onl.cuckoo.app',
+    // What tells the app which Firebase project delivers its notifications.
+    // Not in the repository: it identifies this app to Google.
+    googleServicesFile: './google-services.json',
     adaptiveIcon: {
       backgroundColor: '#000000',
       foregroundImage: './assets/android-icon-foreground.png',
@@ -28,6 +34,16 @@ const config: ExpoConfig = {
     'expo-router',
     'expo-secure-store',
     ['expo-camera', { cameraPermission: 'Cuckoo uses the camera to scan agent codes.' }],
+    [
+      'expo-notifications',
+      {
+        // Android tints the small icon itself, so it must be a silhouette on
+        // transparency — which is exactly what the monochrome adaptive icon
+        // already is. One drawing, two places it is right.
+        icon: './assets/android-icon-monochrome.png',
+        color: '#000000',
+      },
+    ],
     [
       'expo-splash-screen',
       {

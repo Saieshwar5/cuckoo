@@ -7,6 +7,7 @@ import { AgentsProvider } from '@/agents/AgentsProvider';
 import { CacheProvider } from '@/cache/CacheProvider';
 import { ChatsProvider } from '@/chats/ChatsProvider';
 import { RealtimeProvider } from '@/realtime/RealtimeProvider';
+import { usePush } from '@/notifications/usePush';
 import { SessionProvider, useSession } from '@/session/SessionProvider';
 import { ThemeProvider, useTheme } from '@/theme';
 
@@ -32,6 +33,9 @@ export default function RootLayout() {
 
 function Routes() {
   const { status } = useSession();
+  // Registers this device once signed in, and opens the chat a notification
+  // was about when one is tapped.
+  usePush();
   const { scheme, colors } = useTheme();
   const bar = <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />;
   if (status === 'loading') {
