@@ -81,7 +81,7 @@ function setup(script: Script[], tools: Tool[] = []) {
   const deps = {
     turns,
     harness,
-    tools: new Map(tools.map((t) => [t.name, t])),
+    tools: new Map(tools.map((t) => [t.name, () => t])),
     client: hub.asClient(),
   };
   return { hub, turns, harness, deps };
@@ -244,4 +244,55 @@ test("past the day's ceiling nothing is spent, and the person is told why", asyn
   assert.equal(turns.rows.length, 0);
   // And the person is not left staring at silence.
   assert.match(hub.said() + hub.calls.join(" "), /reached today|send/i);
+});
+
+/**
+ * The claim the whole shape of this service rests on: one process answers for
+ * every agent, of every person, and never confuses two of them.
+ *
+ * Until the translator there was one agent, so none of this had run twice.
+ */
+test("two agents in one process keep their own persona, tools and memory", async () => {
+  const weatherTool: Tool = {
+    name: "weather",
+    description: "",
+    parameters: {},
+    execute: async () => ({ highC: 31 }),
+  };
+  const hub = new StubHub();
+  const turns = new MemoryTurns();
+  const harness = new FakeHarness([{ say: "answered" }]);
+  const deps = {
+    turns,
+    harness,
+    tools: new Map([[weatherTool.name, () => weatherTool]]),
+    client: hub.asClient(),
+  };
+
+  const translator: AgentRecord = {
+    ...AGENT,
+    id: "00000000-0000-0000-0000-000000000002",
+    hubAgentId: "agt_2",
+    persona: "You translate.",
+    template: { id: "translator", name: "Translator", persona: "You translate.", tools: [], model: "", starters: [] },
+  };
+
+  await answer({ ...ASKED, agent: AGENT, conversationId: "cnv_w" }, deps);
+  await answer({ ...ASKED, agent: translator, conversationId: "cnv_t" }, deps);
+
+  // Each was run with its own words...
+  assert.equal(harness.runs[0]!.system, "You are the weather.");
+  assert.equal(harness.runs[1]!.system, "You translate.");
+  // ...and its own tools: the translator has none, and must not be handed the
+  // weather one merely because the process knows about it.
+  assert.deepEqual(harness.runs[0]!.tools.map((t) => t.name), ["weather"]);
+  assert.deepEqual(harness.runs[1]!.tools, []);
+
+  // What was written down belongs to one agent and one conversation each.
+  const weatherRows = turns.rows.filter((r) => r.agentId === AGENT.id);
+  const translatorRows = turns.rows.filter((r) => r.agentId === translator.id);
+  assert.equal(weatherRows.length, 2);
+  assert.equal(translatorRows.length, 2);
+  assert.ok(weatherRows.every((r) => r.conversationId === "cnv_w"));
+  assert.ok(translatorRows.every((r) => r.conversationId === "cnv_t"));
 });

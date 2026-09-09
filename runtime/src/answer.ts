@@ -8,10 +8,17 @@
  * agent, and what lets it be restarted in the middle of a busy afternoon.
  */
 
-import type { HubClient } from "@cuckoo/agent";
+import type { Buttons, HubClient } from "@cuckoo/agent";
 
 import type { AgentRecord } from "./agents/registry.ts";
-import type { Harness, HarnessMessage, Tool } from "./harness/harness.ts";
+import {
+  asksToConfirm,
+  type Confirmation,
+  type Harness,
+  type HarnessMessage,
+  type Tool,
+  type ToolFactory,
+} from "./harness/harness.ts";
 import type { Turn, TurnStore } from "./memory/turns.ts";
 
 /**
@@ -37,8 +44,12 @@ export interface AnswerInput {
 export interface AnswerDeps {
   turns: TurnStore;
   harness: Harness;
-  /** The tools this runtime knows, by name. An agent gets the ones it names. */
-  tools: Map<string, Tool>;
+  /**
+   * The tools this runtime knows, by name, built per run: a tool that touches
+   * a person's own things is given the conversation it was called in and
+   * cannot reach outside it.
+   */
+  tools: Map<string, ToolFactory>;
   /** A client already authenticated as the agent being answered for. */
   client: HubClient;
   /** The ceiling, and the counter a subscription will one day read. */
@@ -83,7 +94,13 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
     hubMessageId: input.hubMessageId,
   });
 
-  const tools = toolsFor(agent, deps.tools);
+  const tools = toolsFor(agent, deps.tools, {
+    agentId: agent.id,
+    conversationId,
+    userId: input.userId,
+  });
+  // What the reply will end with, if a tool asked for a tap.
+  let confirmation: Confirmation | undefined;
   const writer = new Writer(deps.client, conversationId);
 
   // The model may think for a while before it says anything, and a tool call
@@ -107,6 +124,10 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
           await writer.thinking();
           break;
         case "tool_result":
+          // A tool that would change something returns an offer instead of
+          // doing it. The buttons go on the end of the reply; the tap is
+          // carried out later by code, without asking the model again.
+          if (asksToConfirm(event.result)) confirmation = event.result.confirm;
           await deps.turns.record({
             agentId: agent.id,
             conversationId,
@@ -123,7 +144,7 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
       }
     }
 
-    const said = await writer.close();
+    const said = await writer.close(confirmation);
     if (said) {
       await deps.turns.record({
         agentId: agent.id,
@@ -143,11 +164,15 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
 }
 
 /** The tools an agent may use: what its template names, and nothing else. */
-function toolsFor(agent: AgentRecord, known: Map<string, Tool>): Tool[] {
+function toolsFor(
+  agent: AgentRecord,
+  known: Map<string, ToolFactory>,
+  context: { agentId: string; conversationId: string; userId: string },
+): Tool[] {
   const tools: Tool[] = [];
   for (const name of agent.template.tools) {
-    const tool = known.get(name);
-    if (tool) tools.push(tool);
+    const build = known.get(name);
+    if (build) tools.push(build(context));
   }
   return tools;
 }
@@ -243,13 +268,21 @@ class Writer {
   }
 
   /** Finish the message. Returns what was said, or undefined if nothing was. */
-  async close(): Promise<{ messageId: string; text: string } | undefined> {
+  async close(confirmation?: Confirmation): Promise<{ messageId: string; text: string } | undefined> {
     if (!this.stream) {
       await this.client.typing(this.conversationId, "stop").catch(() => {});
+      // A tool asked for a tap and the model said nothing at all. The question
+      // still has to reach the person, or the offer is lost.
+      if (confirmation) {
+        const sent = await this.client.send(this.conversationId, "Shall I?", {
+          buttons: buttonsFor(confirmation),
+        });
+        return { messageId: sent.id, text: "Shall I?" };
+      }
       return undefined;
     }
     await this.flush();
-    await this.stream.finish();
+    await this.stream.finish(confirmation ? { buttons: buttonsFor(confirmation) } : {});
     return { messageId: this.stream.messageId, text: this.text };
   }
 
@@ -266,6 +299,16 @@ class Writer {
       // The hub being unreachable is what put us here; nothing more to do.
     }
   }
+}
+
+/** Yes and no, in that order. Buttons are attached when a stream finishes. */
+function buttonsFor(confirmation: Confirmation): Buttons {
+  return [
+    [
+      { id: confirmation.buttonId, label: confirmation.label },
+      { id: `${confirmation.buttonId}_no`, label: confirmation.cancelLabel ?? "Cancel" },
+    ],
+  ];
 }
 
 /** The SDK's Stream, without importing its class for a type-only use. */
@@ -285,9 +328,9 @@ class StreamHandle {
     await this.client.appendStream(this.messageId, text);
   }
 
-  async finish(): Promise<void> {
+  async finish(options: { buttons?: Buttons } = {}): Promise<void> {
     if (this.finished) return;
     this.finished = true;
-    await this.client.finishStream(this.messageId, this.conversationId);
+    await this.client.finishStream(this.messageId, this.conversationId, options);
   }
 }

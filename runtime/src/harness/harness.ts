@@ -7,6 +7,32 @@
  * the entire reason this interface exists rather than calling pi directly.
  */
 
+/**
+ * What a tool may ask for instead of acting: a button the person must tap.
+ *
+ * A tool returns this when what it would do changes the world. The loop
+ * attaches the buttons to the reply; the tap is looked up and carried out by
+ * code that does not consult the model again. The model chooses the words, not
+ * whether there is a button.
+ */
+export interface Confirmation {
+  /** The id recorded against the pending action; it comes back on the tap. */
+  buttonId: string;
+  label: string;
+  cancelLabel?: string;
+}
+
+/** A tool result that wants a tap before anything happens. */
+export interface ConfirmingResult {
+  confirm: Confirmation;
+  [key: string]: unknown;
+}
+
+export function asksToConfirm(result: unknown): result is ConfirmingResult {
+  const candidate = result as { confirm?: { buttonId?: unknown } } | null;
+  return typeof candidate?.confirm?.buttonId === "string";
+}
+
 /** A tool the model may call. The schema is JSON Schema, which every provider takes. */
 export interface Tool {
   name: string;
@@ -21,6 +47,20 @@ export interface HarnessMessage {
   role: "user" | "assistant";
   content: string;
 }
+
+/**
+ * Who a run is for. Tools that touch a person's own things — their routines,
+ * later their mail — are built per run with this, so a tool cannot reach
+ * outside the conversation it was called in even if the model asks it to.
+ */
+export interface ToolContext {
+  agentId: string;
+  conversationId: string;
+  userId: string;
+}
+
+/** A tool that needs to know whose conversation it is in. */
+export type ToolFactory = (context: ToolContext) => Tool;
 
 export interface RunInput {
   /** Who the agent is, in words. The persona. */

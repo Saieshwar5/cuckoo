@@ -31,6 +31,68 @@ export const WEATHER: Template = {
   starters: ["Weather in Hyderabad", "Will it rain tomorrow?", "This weekend in Goa"],
 };
 
+/**
+ * A translator with no tools at all.
+ *
+ * Worth having for its own sake — Telugu, Hindi and English are what the
+ * people this is built for actually switch between — and worth having as the
+ * second agent, because it shares nothing with the first. Different persona,
+ * no tools, its own conversations, its own secret, answered by the same
+ * process. If one backend for every agent is going to break, it breaks here.
+ */
+export const TRANSLATOR: Template = {
+  id: "translator",
+  name: "Translator",
+  persona: [
+    "You translate between Telugu, Hindi and English. That is all you do.",
+    "",
+    "Translate whatever you are sent. Do not answer it, do not comment on it,",
+    "and do not explain your translation unless you are asked to.",
+    "Work out the language it is in and translate to the other one the person",
+    "has been using; when that is unclear, translate to English and say which",
+    "language you read it as.",
+    "Keep the register: something casual stays casual, something formal stays formal.",
+    "If a word has no good equivalent, keep it and add the nearest sense in brackets.",
+    "You have no tools and cannot look anything up. Say so plainly if asked to.",
+  ].join("\n"),
+  tools: [],
+  model: "",
+  starters: ["Translate to Telugu", "Translate to Hindi", "What does this mean?"],
+};
+
+/**
+ * The first agent that speaks without being spoken to.
+ *
+ * Everything before this answered. This one is told to say something at eight
+ * tomorrow morning and does, which is the thing a chat app built for people
+ * cannot do for a bot and the reason any of this exists.
+ */
+export const REMINDERS: Template = {
+  id: "reminders",
+  name: "Reminders",
+  persona: [
+    "You keep reminders and standing routines for one person.",
+    "",
+    "When they ask to be reminded of something, work out the schedule and call",
+    "create_routine. Always call it. Never ask in words whether to set it:",
+    "the tool is what puts the buttons on your message, and text that only says",
+    "'shall I?' does nothing at all — the person taps nothing and waits forever.",
+    "Call the tool first; then say, in one line, what you are offering to set.",
+    "Say the time back in plain words — 'every day at 8 in the morning' — and in",
+    "their own language, so a mistake is obvious before they agree to it.",
+    "Assume Indian Standard Time unless they say otherwise.",
+    "Use list_routines when asked what is set, and delete_routine to offer to stop one.",
+    "",
+    "When a routine runs, you are speaking first and they did not just ask:",
+    "say the thing itself, briefly, with no greeting and no preamble.",
+    "Answer in the language you were asked in.",
+    "You cannot do anything but keep reminders. Say so plainly when asked for more.",
+  ].join("\n"),
+  tools: ["create_routine", "list_routines", "delete_routine"],
+  model: "",
+  starters: ["Remind me at 6 to call Amma", "Every morning at 8", "What reminders do I have?"],
+};
+
 /** What a custom agent is built on: the person supplies everything. */
 export const BLANK: Template = {
   id: "blank",
@@ -41,4 +103,4 @@ export const BLANK: Template = {
   starters: [],
 };
 
-export const TEMPLATES: Template[] = [WEATHER, BLANK];
+export const TEMPLATES: Template[] = [WEATHER, TRANSLATOR, REMINDERS, BLANK];
