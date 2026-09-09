@@ -7,14 +7,16 @@
 #   deploy/deploy.sh rollback <tag>     put an earlier image tag back
 #
 # Needs: DEPLOY_HOST (user@host), and SITE_DOMAIN unless deploy/.env exists
-# locally with it. Passwordless ssh to the host. rsync on both ends.
+# locally with it. Passwordless ssh to the host. rsync on both ends. Nothing
+# here uses sudo: the deploy user owns /srv/cuckoo and /srv/www and is in the
+# docker group (deploy/README.md, "The instance").
 #
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-HOST="${DEPLOY_HOST:?set DEPLOY_HOST, e.g. root@203.0.113.4}"
+HOST="${DEPLOY_HOST:?set DEPLOY_HOST, e.g. ubuntu@203.0.113.4}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/cuckoo}"
 WWW_DIR="${REMOTE_WWW_DIR:-/srv/www}"
 

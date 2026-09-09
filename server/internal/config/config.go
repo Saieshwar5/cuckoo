@@ -50,10 +50,15 @@ type Config struct {
 	// like any other; this only says which one is the greeter.
 	WelcomeHandle string
 
-	// MediaDir is the directory uploaded files are kept in. A folder on
-	// this machine is the whole of storage today; the seam for a bucket is
-	// in the blobs package, not here.
+	// Blobs is where uploaded files are kept: BlobsDisk, a folder on this
+	// machine, or BlobsS3, a bucket. Both use the same keys, so moving
+	// between them is a copy and this setting, not a migration.
+	Blobs string
+	// MediaDir is the directory uploaded files are kept in when Blobs is
+	// BlobsDisk.
 	MediaDir string
+	// S3 is the bucket uploaded files go to when Blobs is BlobsS3.
+	S3 S3Settings
 
 	// Mail is how sign-in codes are delivered. "console" prints them to the
 	// log, which is right for development and for a private hub whose
@@ -86,6 +91,24 @@ const (
 	// MailSMTP sends through a provider.
 	MailSMTP = "smtp"
 )
+
+// Blob backends.
+const (
+	// BlobsDisk keeps uploaded files in a directory on this machine.
+	BlobsDisk = "disk"
+	// BlobsS3 keeps them in a bucket.
+	BlobsS3 = "s3"
+)
+
+// S3Settings is the bucket uploaded files go to. There are no credentials
+// here on purpose: the AWS SDK finds them the way every AWS tool does, which
+// on the hub's machine is the instance's own role, so nothing secret has to
+// live in .env for storage to work.
+type S3Settings struct {
+	Bucket string
+	// Region may be empty, leaving the SDK to resolve it.
+	Region string
+}
 
 // SMTPSettings is the provider the hub sends through.
 type SMTPSettings struct {
@@ -129,6 +152,7 @@ func Load() (Config, error) {
 		RedisURL:        l.str("CUCKOO_REDIS_URL", "redis://localhost:6380/0"),
 		LogLevel:        l.logLevel("CUCKOO_LOG_LEVEL", slog.LevelInfo),
 		ShutdownTimeout: l.duration("CUCKOO_SHUTDOWN_TIMEOUT", 15*time.Second),
+		Blobs:           l.oneOf("CUCKOO_BLOBS", BlobsDisk, BlobsDisk, BlobsS3),
 		MediaDir:        l.str("CUCKOO_MEDIA_DIR", "./.data/media"),
 		WelcomeHandle:   l.str("CUCKOO_WELCOME_HANDLE", ""),
 		Mail:            l.str("CUCKOO_MAIL", ""),
@@ -150,6 +174,16 @@ func Load() (Config, error) {
 			cfg.PublicURL = "http://localhost" + portOf(cfg.HTTPAddr)
 		} else {
 			cfg.PublicURL = "https://" + cfg.HubDomain
+		}
+	}
+
+	if cfg.Blobs == BlobsS3 {
+		cfg.S3 = S3Settings{
+			Bucket: l.str("CUCKOO_S3_BUCKET", ""),
+			Region: l.str("CUCKOO_S3_REGION", ""),
+		}
+		if cfg.S3.Bucket == "" {
+			l.fail("CUCKOO_S3_BUCKET must be set when CUCKOO_BLOBS=s3")
 		}
 	}
 

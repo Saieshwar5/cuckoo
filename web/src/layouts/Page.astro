@@ -14,7 +14,7 @@ interface Props {
 
 const { title, description = site.description, suffix = true } = Astro.props;
 const pageTitle = suffix ? `${title} · ${site.name}` : title;
-const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://cuckoo.in');
+const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://cuckoo.onl');
 ---
 
 <!doctype html>

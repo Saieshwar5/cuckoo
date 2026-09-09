@@ -131,11 +131,10 @@ func run() error {
 	userAuth := newUserAuthenticator(cfg, signinService)
 	apiKeyService := apikeys.New(db)
 
-	blobStore, err := blobs.NewDisk(cfg.MediaDir)
+	blobStore, err := newBlobStore(ctx, cfg, log)
 	if err != nil {
 		return err
 	}
-	log.Info("media storage ready", "dir", blobStore.Root())
 	mediaService := media.New(db, blobStore, media.WithLimiter(limits), media.WithLogger(log))
 	retentionService := retention.New(db, blobStore, retention.Policy{
 		MessageAge:       cfg.Retention.MessageAge,
@@ -273,6 +272,27 @@ func newUserAuthenticator(cfg config.Config, s *signin.Service) middleware.Authe
 // newMailer picks where sign-in codes go. Console prints them to the log,
 // which is right in development and on a hub whose only user reads its log;
 // smtp sends them through a provider.
+// newBlobStore opens the store uploaded files live in. Both backends use the
+// same keys, so which one is underneath is a setting and a copy rather than a
+// migration; the log line says which, because "where are the files" should
+// never need a look at .env.
+func newBlobStore(ctx context.Context, cfg config.Config, log *slog.Logger) (blobs.Store, error) {
+	if cfg.Blobs == config.BlobsS3 {
+		store, err := blobs.NewS3(ctx, cfg.S3.Bucket, cfg.S3.Region)
+		if err != nil {
+			return nil, err
+		}
+		log.Info("media storage ready", "backend", config.BlobsS3, "bucket", store.Bucket())
+		return store, nil
+	}
+	store, err := blobs.NewDisk(cfg.MediaDir)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("media storage ready", "backend", config.BlobsDisk, "dir", store.Root())
+	return store, nil
+}
+
 func newMailer(cfg config.Config, log *slog.Logger) (mail.Mailer, error) {
 	if cfg.Mail != config.MailSMTP {
 		log.Info("sign-in codes go to the log", "mail", cfg.Mail)

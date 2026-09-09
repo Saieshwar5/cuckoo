@@ -1,12 +1,22 @@
-# Production: one machine, five containers. Development is docker-compose.yml
-# at the repository root, which runs only Postgres and Redis.
+# Production: one EC2 instance, four containers, and two AWS services beside
+# them. Development is docker-compose.yml at the repository root, which runs
+# only Postgres and Redis.
+#
+#   the database   RDS PostgreSQL, reached over TLS inside the VPC
+#   uploaded files an S3 bucket, through the hub — CUCKOO_BLOBS=s3
+#   Redis          a container: nothing in it survives a restart by design,
+#                  so there is nothing for a managed cache to manage
 #
 # Every value comes from .env beside this file (start from .env.example).
-# Data lives on the block volume under /data, bind-mounted rather than hidden
-# in a named volume, so it is visible, copyable, and what backup.sh reads.
+# `docker compose config` shows the result.
 #
 # The hub and the welcome agent are images built on a laptop or in CI and
 # loaded here by deploy/deploy.sh; nothing is compiled on this machine.
+#
+# To keep the database and the files on the machine instead — the laptop test,
+# or a hub with no AWS behind it — add the overlay:
+#
+#   docker compose -f compose.yml -f compose.local.yml up -d
 
 name: cuckoo
 
@@ -26,8 +36,16 @@ services:
       CUCKOO_HUB_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN in .env}
       CUCKOO_PUBLIC_URL: https://${SITE_DOMAIN}
       CUCKOO_HTTP_ADDR: ":8080"
-      CUCKOO_DATABASE_URL: postgres://cuckoo:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/cuckoo?sslmode=disable
+      # sslmode=require encrypts without checking who answered, which is what
+      # a private subnet already settles. verify-full needs the RDS root
+      # certificate mounted and named here; see README, "The database".
+      CUCKOO_DATABASE_URL: postgres://${DB_USER:-cuckoo}:${DB_PASSWORD:?set DB_PASSWORD in .env}@${DB_HOST:?set DB_HOST in .env}:${DB_PORT:-5432}/${DB_NAME:-cuckoo}?sslmode=${DB_SSLMODE:-require}
       CUCKOO_REDIS_URL: redis://redis:6379/0
+      # Where uploaded files go: s3, or disk with the overlay. The keys are
+      # the same either way, so changing this is a copy, not a migration.
+      CUCKOO_BLOBS: ${CUCKOO_BLOBS:-s3}
+      CUCKOO_S3_BUCKET: ${S3_BUCKET:-}
+      CUCKOO_S3_REGION: ${AWS_REGION:-}
       CUCKOO_MEDIA_DIR: /data/media
       # console until the first stranger signs in: the code is in
       # `docker compose logs hub`. smtp needs the six settings below.
@@ -46,37 +64,17 @@ services:
       CUCKOO_AGENT_MEDIA_BUDGET_MB: "${CUCKOO_AGENT_MEDIA_BUDGET_MB:-1024}"
       CUCKOO_RETENTION_DRY_RUN: "${CUCKOO_RETENTION_DRY_RUN:-false}"
       CUCKOO_SIGNING_KEY: ${SIGNING_KEY:?set SIGNING_KEY in .env (openssl rand -hex 32)}
-    volumes:
-      # Owned by uid 10001, the user the image runs as (README, "First deploy").
-      - ${DATA_DIR:-/data}/media:/data/media
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
-
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    logging: *logging
-    environment:
-      POSTGRES_USER: cuckoo
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: cuckoo
-    volumes:
-      - ${DATA_DIR:-/data}/postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cuckoo -d cuckoo"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     logging: *logging
     # Nothing in Redis needs to survive a restart: stream buffers, rate-limit
-    # counters and the live-event bus are all rebuilt from use.
+    # counters and the live-event bus are all rebuilt from use. That is also
+    # why this is a container and not ElastiCache.
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]

@@ -33,7 +33,7 @@ Install the SDK, then run this once, ever.
 ```python
 from cuckoo import Management
 
-cuckoo = Management(key="mgt_tok_...", hub="https://cuckoo.in")
+cuckoo = Management(key="mgt_tok_...", hub="https://cuckoo.onl")
 
 agent = cuckoo.create_agent(
     "sbi-cards",
@@ -57,7 +57,7 @@ The same thing from a terminal:
 
 ```bash
 export CUCKOO_KEY=mgt_tok_...
-export CUCKOO_HUB=https://cuckoo.in
+export CUCKOO_HUB=https://cuckoo.onl
 cuckoo agents create sbi-cards "SBI Cards" \
   --description "Block a card, get a statement, raise a dispute." \
   --avatar logo.png --starter "Card blocked" --starter "Statement"
@@ -79,7 +79,7 @@ against it, as an ordinary long-lived process.
 ```python
 from cuckoo import Agent
 
-agent = Agent(secret=os.environ["CUCKOO_SECRET"], hub="https://cuckoo.in")
+agent = Agent(secret=os.environ["CUCKOO_SECRET"], hub="https://cuckoo.onl")
 
 
 @agent.on_message
@@ -108,7 +108,7 @@ or link it from your site.
 
 ```python
 code = cuckoo.create_code(agent.id)
-print(code.url)                         # https://cuckoo.in/p/pair_...
+print(code.url)                         # https://cuckoo.onl/p/pair_...
 open("poster.png", "wb").write(code.png_bytes())
 ```
 

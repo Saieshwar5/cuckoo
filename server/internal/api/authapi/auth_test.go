@@ -59,7 +59,8 @@ func TestSignInFlow(t *testing.T) {
 	me.Get("/v1/client/me").ExpectError(http.StatusUnauthorized, "invalid_credentials")
 }
 
-func TestSecondDeviceSignsOutTheFirst(t *testing.T) {
+// A phone and a laptop are two devices of one person, not a contradiction.
+func TestSecondDeviceLeavesTheFirstSignedIn(t *testing.T) {
 	srv := testutil.NewServer(t, testutil.NewStore(t))
 	first := signIn(t, srv, "priya@example.com")
 	second := signIn(t, srv, "priya@example.com")
@@ -67,7 +68,7 @@ func TestSecondDeviceSignsOutTheFirst(t *testing.T) {
 	if second.IsNew || second.User.ID != first.User.ID {
 		t.Errorf("second sign-in = %+v, want the same account", second)
 	}
-	srv.AsSession(t, first.Token).Get("/v1/client/me").ExpectError(http.StatusUnauthorized, "invalid_credentials")
+	srv.AsSession(t, first.Token).Get("/v1/client/me").ExpectStatus(http.StatusOK)
 	srv.AsSession(t, second.Token).Get("/v1/client/me").ExpectStatus(http.StatusOK)
 }
 

@@ -10,7 +10,7 @@ All four take the same two environment variables.
 
 ```bash
 pip install -e sdk/python
-CUCKOO_SECRET=bnd_sec_... CUCKOO_HUB=https://cuckoo.in python echo.py
+CUCKOO_SECRET=bnd_sec_... CUCKOO_HUB=https://cuckoo.onl python echo.py
 ```
 
 ## echo — the smallest thing that works

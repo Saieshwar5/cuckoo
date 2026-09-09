@@ -11,9 +11,18 @@ ALTER TABLE sessions ADD COLUMN last_seen_at timestamptz;
 
 -- The device list, newest first, and the sweep that ends the oldest when
 -- somebody passes the limit.
+--
+-- This replaces 00008's index of the same name on (user_id) alone. It has to
+-- be dropped rather than added beside: the name is taken, and creating it
+-- without this line fails on every database that has run 00008 — which is
+-- every database. The old one is a prefix of this one under the same
+-- predicate, so nothing that used it loses anything, a binary rolled back to
+-- before this migration included.
+DROP INDEX IF EXISTS sessions_user_live_idx;
 CREATE INDEX sessions_user_live_idx
     ON sessions (user_id, created_at DESC) WHERE revoked_at IS NULL;
 
 -- +goose Down
 DROP INDEX sessions_user_live_idx;
+CREATE INDEX sessions_user_live_idx ON sessions (user_id) WHERE revoked_at IS NULL;
 ALTER TABLE sessions DROP COLUMN last_seen_at;

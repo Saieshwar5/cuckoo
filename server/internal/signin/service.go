@@ -96,7 +96,8 @@ func (s *Service) Start(ctx context.Context, rawEmail string) error {
 }
 
 // Verify checks a code and signs the person in. A new address becomes a new
-// account. Every other device of that person is signed out.
+// account. Other devices of that person stay signed in, up to devicesMax;
+// past that the least recently used one ends.
 func (s *Service) Verify(ctx context.Context, rawEmail, code, deviceName string) (Verified, error) {
 	email, err := normalizeEmail(rawEmail)
 	if err != nil {

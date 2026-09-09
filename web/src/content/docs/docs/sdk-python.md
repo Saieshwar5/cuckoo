@@ -25,7 +25,7 @@ Agent(secret: str, hub: str, *, max_backoff: float = 30.0)
 ```
 
 `secret` is a binding secret and must start with `bnd_sec_`. `hub` defaults to
-the public hub, `https://cuckoo.in`; pass `http://localhost:8080` for a hub on
+the public hub, `https://cuckoo.onl`; pass `http://localhost:8080` for a hub on
 your own machine. Forgetting that is the most common first mistake.
 
 ### Handlers
@@ -209,7 +209,7 @@ Synchronous, and usable as a context manager.
 ```python
 from cuckoo import Management
 
-with Management(key="mgt_tok_...", hub="https://cuckoo.in") as cuckoo:
+with Management(key="mgt_tok_...", hub="https://cuckoo.onl") as cuckoo:
     agent = cuckoo.create_agent("sbi-cards", "SBI Cards", avatar="logo.png")
     secret = cuckoo.connect(agent.id)
 ```

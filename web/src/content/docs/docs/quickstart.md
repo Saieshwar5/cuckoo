@@ -42,7 +42,7 @@ Save this as `echo.py`, with your own secret and hub address.
 ```python
 from cuckoo import Agent
 
-agent = Agent(secret="bnd_sec_...", hub="https://cuckoo.in")
+agent = Agent(secret="bnd_sec_...", hub="https://cuckoo.onl")
 
 
 @agent.on_message
@@ -63,7 +63,7 @@ The app's Connect screen turns to **Connected** while you are watching.
 
 :::caution
 Pass `hub=` explicitly when you are not talking to the public hub. The default
-is `https://cuckoo.in`; a hub on your own machine is `http://localhost:8080`,
+is `https://cuckoo.onl`; a hub on your own machine is `http://localhost:8080`,
 and leaving it out is the most common way to spend twenty minutes on nothing.
 :::
 

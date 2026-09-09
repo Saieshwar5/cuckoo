@@ -46,7 +46,7 @@ old one stops working the moment the new one is made.
 ```python
 from cuckoo import Agent
 
-agent = Agent(secret="bnd_sec_...", hub="https://cuckoo.in")
+agent = Agent(secret="bnd_sec_...", hub="https://cuckoo.onl")
 
 
 @agent.on_message

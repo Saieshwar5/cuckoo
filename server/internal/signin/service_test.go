@@ -94,8 +94,9 @@ func TestSignInOpensAnAccount(t *testing.T) {
 	}
 }
 
-// Signing in again finds the same account and signs out the earlier device.
-func TestSecondSignInReusesAccountAndReplacesSession(t *testing.T) {
+// Signing in again finds the same account and leaves the earlier device
+// signed in: a phone and a laptop are two devices, not a contradiction.
+func TestSecondSignInReusesAccountAndKeepsBothDevices(t *testing.T) {
 	ctx := context.Background()
 	f := setup(t)
 	first := f.signIn(t, "priya@example.com")
@@ -104,11 +105,42 @@ func TestSecondSignInReusesAccountAndReplacesSession(t *testing.T) {
 	if second.IsNew || second.User.ID != first.User.ID {
 		t.Errorf("second sign-in = new %v user %v, want the same existing account", second.IsNew, second.User.ID)
 	}
-	if _, _, err := f.svc.ResolveToken(ctx, first.Token); domain.CodeOf(err) != "invalid_credentials" {
-		t.Errorf("first device's token still works after a second sign-in: %v", err)
+	for name, token := range map[string]string{"first": first.Token, "second": second.Token} {
+		if _, _, err := f.svc.ResolveToken(ctx, token); err != nil {
+			t.Errorf("%s device's token refused: %v", name, err)
+		}
 	}
-	if _, _, err := f.svc.ResolveToken(ctx, second.Token); err != nil {
-		t.Errorf("second device's token refused: %v", err)
+}
+
+// Past the limit the device that has gone longest without being used is the
+// one that ends, so signing in on a new phone never locks anybody out.
+func TestPastTheDeviceLimitTheOldestEnds(t *testing.T) {
+	ctx := context.Background()
+	f := setup(t)
+
+	const limit = 10
+	tokens := make([]string, 0, limit+1)
+	for range limit {
+		tokens = append(tokens, f.signIn(t, "priya@example.com").Token)
+	}
+	for i, token := range tokens {
+		if _, _, err := f.svc.ResolveToken(ctx, token); err != nil {
+			t.Fatalf("device %d of %d was refused before the limit was passed: %v", i+1, limit, err)
+		}
+	}
+
+	newest := f.signIn(t, "priya@example.com")
+
+	if _, _, err := f.svc.ResolveToken(ctx, tokens[0]); domain.CodeOf(err) != "invalid_credentials" {
+		t.Errorf("the oldest device survived the eleventh sign-in: %v", err)
+	}
+	for i, token := range tokens[1:] {
+		if _, _, err := f.svc.ResolveToken(ctx, token); err != nil {
+			t.Errorf("device %d ended too: %v", i+2, err)
+		}
+	}
+	if _, _, err := f.svc.ResolveToken(ctx, newest.Token); err != nil {
+		t.Errorf("the newest device's token refused: %v", err)
 	}
 }
 
