@@ -38,6 +38,18 @@ func (q *Queries) AuthenticateSession(ctx context.Context, tokenHash []byte) (Au
 	return i, err
 }
 
+const clearSessionPush = `-- name: ClearSessionPush :exec
+UPDATE sessions SET push_token = NULL, push_platform = '', push_registered_at = NULL
+WHERE push_token = $1
+`
+
+// What a dead token gets: Expo says the app is gone from that device, so the
+// address is wrong and keeping it means sending there forever.
+func (q *Queries) ClearSessionPush(ctx context.Context, pushToken *string) error {
+	_, err := q.db.Exec(ctx, clearSessionPush, pushToken)
+	return err
+}
+
 const countSignInAttempt = `-- name: CountSignInAttempt :one
 UPDATE sign_in_codes
 SET attempts = attempts + 1
@@ -87,7 +99,7 @@ func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) 
 const createSession = `-- name: CreateSession :one
 INSERT INTO sessions (id, user_id, token_hash, device_name, expires_at)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, token_hash, device_name, expires_at, created_at, revoked_at, last_seen_at
+RETURNING id, user_id, token_hash, device_name, expires_at, created_at, revoked_at, last_seen_at, push_token, push_platform, push_registered_at
 `
 
 type CreateSessionParams struct {
@@ -116,6 +128,9 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.CreatedAt,
 		&i.RevokedAt,
 		&i.LastSeenAt,
+		&i.PushToken,
+		&i.PushPlatform,
+		&i.PushRegisteredAt,
 	)
 	return i, err
 }
@@ -264,6 +279,84 @@ func (q *Queries) MarkSignInCodeUsed(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const pushTargets = `-- name: PushTargets :many
+SELECT s.id, s.user_id, s.push_token
+FROM sessions s
+JOIN users u ON u.id = s.user_id
+LEFT JOIN contacts c ON c.user_id = s.user_id AND c.agent_id = $1::uuid
+WHERE s.user_id = ANY($2::uuid[])
+  AND s.push_token IS NOT NULL
+  AND s.revoked_at IS NULL
+  AND s.expires_at > now()
+  AND u.deleted_at IS NULL
+  AND (c.user_id IS NULL OR (
+        c.blocked_at IS NULL
+    AND c.removed_at IS NULL
+    AND (c.muted_until IS NULL OR c.muted_until <= now())
+  ))
+`
+
+type PushTargetsParams struct {
+	AgentID *uuid.UUID
+	UserIds []uuid.UUID
+}
+
+type PushTargetsRow struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	PushToken *string
+}
+
+// The devices that should be woken about one agent's message: live sessions,
+// of live accounts, that have an address, belonging to people who have not
+// muted, blocked or removed the agent.
+//
+// The settings are applied here rather than in Go because they are the whole
+// question — a notification from a muted contact is worse than no feature at
+// all, and a rule enforced in one query cannot be forgotten by one caller.
+// A person with no contact row (their own agent, before they added it) is
+// included: nothing has been said about it either way.
+func (q *Queries) PushTargets(ctx context.Context, arg PushTargetsParams) ([]PushTargetsRow, error) {
+	rows, err := q.db.Query(ctx, pushTargets, arg.AgentID, arg.UserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PushTargetsRow{}
+	for rows.Next() {
+		var i PushTargetsRow
+		if err := rows.Scan(&i.ID, &i.UserID, &i.PushToken); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const registerSessionPush = `-- name: RegisterSessionPush :execrows
+UPDATE sessions
+SET push_token = $1, push_platform = $2,
+    push_registered_at = now()
+WHERE id = $3 AND revoked_at IS NULL
+`
+
+type RegisterSessionPushParams struct {
+	PushToken    *string
+	PushPlatform string
+	ID           uuid.UUID
+}
+
+func (q *Queries) RegisterSessionPush(ctx context.Context, arg RegisterSessionPushParams) (int64, error) {
+	result, err := q.db.Exec(ctx, registerSessionPush, arg.PushToken, arg.PushPlatform, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokeOldestUserSessions = `-- name: RevokeOldestUserSessions :execrows
 UPDATE sessions
 SET revoked_at = now()
@@ -364,6 +457,26 @@ func (q *Queries) RevokeUserSessions(ctx context.Context, userID uuid.UUID) (int
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setSessionPushToken = `-- name: SetSessionPushToken :exec
+UPDATE sessions
+SET push_token = NULL, push_platform = '', push_registered_at = NULL
+WHERE push_token = $1 AND id <> $2
+`
+
+type SetSessionPushTokenParams struct {
+	PushToken *string
+	ID        uuid.UUID
+}
+
+// Records where this device can be reached. The token is cleared from any
+// other session first: a reinstall, or a different person signing in on the
+// same phone, hands the same token to a new session, and the old one must
+// stop being reachable before this one starts.
+func (q *Queries) SetSessionPushToken(ctx context.Context, arg SetSessionPushTokenParams) error {
+	_, err := q.db.Exec(ctx, setSessionPushToken, arg.PushToken, arg.ID)
+	return err
 }
 
 const touchSession = `-- name: TouchSession :exec

@@ -10,6 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"github.com/google/uuid"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/agents"
 	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
@@ -107,6 +108,14 @@ func (h *Handler) socket(w http.ResponseWriter, r *http.Request) {
 
 	sub := h.hub.Subscribe(userID)
 	defer sub.Close()
+
+	// Say this person is looking, and keep saying it. What stops a
+	// notification arriving about a message they are watching land — and it
+	// is shared, so a second instance of the hub knows too, which a map in
+	// this process would not.
+	presenceCtx, stopPresence := context.WithCancel(r.Context())
+	defer stopPresence()
+	h.announcePresence(presenceCtx, userID)
 
 	// The app sends nothing; reading in the background is what processes
 	// its pongs and close frames, and ctx ends when the connection does.
@@ -218,4 +227,41 @@ func frameOf(ev realtime.Event) (frame, error) {
 	default:
 		return frame{}, fmt.Errorf("unknown event type %q", ev.Type)
 	}
+}
+
+// announcePresence marks somebody as connected and keeps the mark fresh until
+// the connection ends.
+//
+// A heartbeat rather than a flag, so a process killed mid-connection stops
+// suppressing that person's notifications within a minute rather than
+// forever.
+func (h *Handler) announcePresence(ctx context.Context, userID uuid.UUID) {
+	if h.presence == nil {
+		return
+	}
+	mark := func() {
+		if err := h.presence.Arrived(ctx, userID); err != nil {
+			slog.WarnContext(ctx, "presence: could not mark connected", "user", userID, "error", err)
+		}
+	}
+	mark()
+	go func() {
+		ticker := time.NewTicker(realtime.HeartbeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				// Best effort, with a context of its own: the request's is
+				// already cancelled, and the key expires regardless.
+				gone, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+				defer cancel()
+				if err := h.presence.Left(gone, userID); err != nil {
+					slog.WarnContext(gone, "presence: could not mark gone", "user", userID, "error", err)
+				}
+				return
+			case <-ticker.C:
+				mark()
+			}
+		}
+	}()
 }

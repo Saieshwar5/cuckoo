@@ -67,6 +67,13 @@ type Config struct {
 	// SMTP is where mail goes when Mail is "smtp". Empty otherwise.
 	SMTP SMTPSettings
 
+	// ExpoAccessToken authenticates the hub to Expo's push service. Optional:
+	// Expo requires it only for accounts that have turned on enhanced
+	// security, and notifications work without one until then. Empty is a hub
+	// that still records device addresses and still decides who to notify —
+	// the sending is simply refused at the far end.
+	ExpoAccessToken string
+
 	// Retention is what the hub keeps and for how long: messages for a
 	// period, each uploader's files to a budget. See the retention package.
 	Retention Retention
@@ -165,6 +172,7 @@ func Load() (Config, error) {
 		},
 	}
 	cfg.SigningKey, cfg.DevSigningKey = l.signingKey("CUCKOO_SIGNING_KEY", cfg.Env)
+	cfg.ExpoAccessToken = l.str("CUCKOO_EXPO_ACCESS_TOKEN", "")
 	if len(cfg.CORSOrigins) == 0 && cfg.Env == EnvDev {
 		cfg.CORSOrigins = []string{"*"}
 	}

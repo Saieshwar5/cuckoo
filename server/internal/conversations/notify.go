@@ -73,4 +73,55 @@ func (s *Service) notify(ctx context.Context, eventType string, conversationID u
 		slog.WarnContext(ctx, "realtime: could not publish",
 			"event", eventType, "conversation", conversationID, "error", err)
 	}
+
+	// A finished message may also be worth waking a pocket for. Only a
+	// finished one: a stream announces itself token by token, and a
+	// notification per token is unusable.
+	if eventType == EventMessageCreated || eventType == EventMessageCompleted {
+		if ev, ok := payload.(MessageCreatedEvent); ok {
+			s.pushed(ctx, conversationID, userIDs, ev.Message)
+		}
+	}
+}
+
+// Landed is a finished message and the people it reached, handed to whatever
+// notifies phones. Declared here rather than in the push package so that
+// nothing in the message path has to know push exists.
+type Landed struct {
+	ConversationID uuid.UUID
+	MessageID      uuid.UUID
+	// AgentID said it. The settings that decide whether to interrupt somebody
+	// are per agent, and its name is the notification's title.
+	AgentID uuid.UUID
+	Text    string
+	// Recipients are everyone in the conversation; the sender is removed by
+	// the notifier rather than by every caller.
+	Recipients     []uuid.UUID
+	SenderID       uuid.UUID
+	HasAttachments bool
+}
+
+// Pusher wakes the phones of people who are not looking. Optional: a hub with
+// none simply does not notify.
+type Pusher interface {
+	MessageLanded(ctx context.Context, in Landed)
+}
+
+// pushed hands a finished message to whatever notifies phones, if anything
+// does. Everything about whether it is welcome is decided there.
+func (s *Service) pushed(ctx context.Context, conversationID uuid.UUID, userIDs []uuid.UUID, msg Message) {
+	if s.push == nil || msg.Sender.Kind != ParticipantAgent {
+		// Only an agent's words reach a person's lock screen. A person's own
+		// message is already on their screen, and nobody else is in a DM.
+		return
+	}
+	s.push.MessageLanded(ctx, Landed{
+		ConversationID: conversationID,
+		MessageID:      msg.ID,
+		AgentID:        msg.Sender.ID,
+		Text:           msg.Body.Text,
+		Recipients:     userIDs,
+		SenderID:       msg.Sender.ID,
+		HasAttachments: len(msg.Body.Attachments) > 0,
+	})
 }

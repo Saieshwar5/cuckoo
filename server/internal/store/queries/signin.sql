@@ -106,3 +106,49 @@ WHERE id IN (
 -- name: DeleteIdentities :exec
 -- Cut the ways in. The address is free to open a fresh account afterwards.
 DELETE FROM user_identities WHERE user_id = $1;
+
+-- name: SetSessionPushToken :exec
+-- Records where this device can be reached. The token is cleared from any
+-- other session first: a reinstall, or a different person signing in on the
+-- same phone, hands the same token to a new session, and the old one must
+-- stop being reachable before this one starts.
+UPDATE sessions
+SET push_token = NULL, push_platform = '', push_registered_at = NULL
+WHERE push_token = sqlc.arg('push_token') AND id <> sqlc.arg('id');
+
+-- name: RegisterSessionPush :execrows
+UPDATE sessions
+SET push_token = sqlc.arg('push_token'), push_platform = sqlc.arg('push_platform'),
+    push_registered_at = now()
+WHERE id = sqlc.arg('id') AND revoked_at IS NULL;
+
+-- name: ClearSessionPush :exec
+-- What a dead token gets: Expo says the app is gone from that device, so the
+-- address is wrong and keeping it means sending there forever.
+UPDATE sessions SET push_token = NULL, push_platform = '', push_registered_at = NULL
+WHERE push_token = $1;
+
+-- name: PushTargets :many
+-- The devices that should be woken about one agent's message: live sessions,
+-- of live accounts, that have an address, belonging to people who have not
+-- muted, blocked or removed the agent.
+--
+-- The settings are applied here rather than in Go because they are the whole
+-- question — a notification from a muted contact is worse than no feature at
+-- all, and a rule enforced in one query cannot be forgotten by one caller.
+-- A person with no contact row (their own agent, before they added it) is
+-- included: nothing has been said about it either way.
+SELECT s.id, s.user_id, s.push_token
+FROM sessions s
+JOIN users u ON u.id = s.user_id
+LEFT JOIN contacts c ON c.user_id = s.user_id AND c.agent_id = sqlc.narg('agent_id')::uuid
+WHERE s.user_id = ANY(sqlc.arg('user_ids')::uuid[])
+  AND s.push_token IS NOT NULL
+  AND s.revoked_at IS NULL
+  AND s.expires_at > now()
+  AND u.deleted_at IS NULL
+  AND (c.user_id IS NULL OR (
+        c.blocked_at IS NULL
+    AND c.removed_at IS NULL
+    AND (c.muted_until IS NULL OR c.muted_until <= now())
+  ));

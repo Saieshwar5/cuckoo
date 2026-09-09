@@ -157,14 +157,17 @@ type Report struct {
 }
 
 type Session struct {
-	ID         uuid.UUID
-	UserID     uuid.UUID
-	TokenHash  []byte
-	DeviceName string
-	ExpiresAt  time.Time
-	CreatedAt  time.Time
-	RevokedAt  *time.Time
-	LastSeenAt *time.Time
+	ID               uuid.UUID
+	UserID           uuid.UUID
+	TokenHash        []byte
+	DeviceName       string
+	ExpiresAt        time.Time
+	CreatedAt        time.Time
+	RevokedAt        *time.Time
+	LastSeenAt       *time.Time
+	PushToken        *string
+	PushPlatform     string
+	PushRegisteredAt *time.Time
 }
 
 type SignInCode struct {
