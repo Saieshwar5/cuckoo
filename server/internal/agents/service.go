@@ -192,7 +192,8 @@ func (s *Service) Update(ctx context.Context, callerID, id uuid.UUID, in UpdateI
 		}
 		params.Description = &desc
 	}
-	if params.DisplayName == nil && params.Description == nil && params.AvatarMediaID == nil && params.Starters == nil {
+	if params.DisplayName == nil && params.Description == nil && params.AvatarMediaID == nil &&
+		params.Starters == nil && !params.Private.Valid && !params.Listed.Valid {
 		return Agent{}, domain.Invalid("no_changes", "Provide at least one field to update.")
 	}
 

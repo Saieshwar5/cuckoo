@@ -256,30 +256,69 @@ func (s *Service) Accept(ctx context.Context, callerID uuid.UUID, plaintext stri
 	if err != nil {
 		return Accepted{}, err
 	}
+	tokenID := tok.ID
+	return s.join(ctx, callerID, arrival{
+		agentID: tok.AgentID, tokenID: &tokenID, payload: tok.Payload, addedVia: "pair_token",
+	})
+}
 
+// AddFromCatalogue puts a listed agent in somebody's chat list.
+//
+// A listed agent needs no code: a code is for handing something out privately
+// — a poster, a link, one customer — and the catalogue is a public shelf,
+// where being listed is itself the invitation. The listing is checked here and
+// not only when the list was drawn, so an agent taken out of the catalogue
+// stops being addable by whoever kept the identifier.
+func (s *Service) AddFromCatalogue(ctx context.Context, callerID, agentID uuid.UUID) (Accepted, error) {
+	agent, err := s.agents.Get(ctx, agentID)
+	if err != nil {
+		return Accepted{}, err
+	}
+	if !agent.Listed {
+		return Accepted{}, domain.NotFound("agent_not_listed", "That agent is not on offer.")
+	}
+	return s.join(ctx, callerID, arrival{agentID: agentID, addedVia: "catalogue"})
+}
+
+// arrival is how somebody came to an agent: a code they were given, or the
+// catalogue they found it in. Everything after that point is the same, which
+// is why it is one function.
+type arrival struct {
+	agentID  uuid.UUID
+	tokenID  *uuid.UUID // nil when there was no code
+	payload  json.RawMessage
+	addedVia string
+}
+
+// join adds the agent to a person's list, whichever door they came through.
+//
+// Someone who removed the agent and comes back gets it back, clean; someone
+// who blocked it and comes back is unblocked and the agent is told they
+// joined, because from the backend's side that is what happened.
+func (s *Service) join(ctx context.Context, callerID uuid.UUID, in arrival) (Accepted, error) {
 	var (
 		convID  uuid.UUID
 		isNew   bool
 		pending bool
 	)
-	err = s.store.WithTx(ctx, func(tx *store.Store) error {
+	err := s.store.WithTx(ctx, func(tx *store.Store) error {
 		convs := conversations.New(tx)
-		existing, err := tx.GetContact(ctx, gen.GetContactParams{UserID: callerID, AgentID: tok.AgentID})
+		existing, err := tx.GetContact(ctx, gen.GetContactParams{UserID: callerID, AgentID: in.agentID})
 		if err == nil {
 			convID = existing.DmConversationID
 			// Someone who removed the agent and scans it again gets it
 			// back, clean. The agent was never told they left, so it is
 			// not told they returned.
 			if existing.RemovedAt != nil {
-				if _, err := tx.RestoreContact(ctx, gen.RestoreContactParams{UserID: callerID, AgentID: tok.AgentID}); err != nil {
+				if _, err := tx.RestoreContact(ctx, gen.RestoreContactParams{UserID: callerID, AgentID: in.agentID}); err != nil {
 					return domain.Internal(fmt.Errorf("restore contact: %w", err))
 				}
 			}
 			if existing.BlockedAt != nil {
-				if _, err := tx.ClearContactBlocked(ctx, gen.ClearContactBlockedParams{UserID: callerID, AgentID: tok.AgentID}); err != nil {
+				if _, err := tx.ClearContactBlocked(ctx, gen.ClearContactBlockedParams{UserID: callerID, AgentID: in.agentID}); err != nil {
 					return domain.Internal(fmt.Errorf("unblock: %w", err))
 				}
-				pending, err = convs.Enqueue(ctx, tok.AgentID, convID, conversations.EventConversationJoined,
+				pending, err = convs.Enqueue(ctx, in.agentID, convID, conversations.EventConversationJoined,
 					conversations.JoinedPayload{})
 				return err
 			}
@@ -289,35 +328,37 @@ func (s *Service) Accept(ctx context.Context, callerID uuid.UUID, plaintext stri
 			return domain.Internal(fmt.Errorf("get contact: %w", err))
 		}
 
-		// The token gives up a use only for someone new.
-		if _, err := tx.UsePairToken(ctx, tok.ID); err != nil {
-			if store.IsNoRows(err) {
-				return errTokenSpent()
+		// A code gives up a use only for someone new. The catalogue has
+		// none to spend.
+		if in.tokenID != nil {
+			if _, err := tx.UsePairToken(ctx, *in.tokenID); err != nil {
+				if store.IsNoRows(err) {
+					return errTokenSpent()
+				}
+				return domain.Internal(fmt.Errorf("use pair token %s: %w", *in.tokenID, err))
 			}
-			return domain.Internal(fmt.Errorf("use pair token %s: %w", tok.ID, err))
 		}
-		conv, _, err := convs.FindOrCreateDM(ctx, callerID, tok.AgentID)
+		conv, _, err := convs.FindOrCreateDM(ctx, callerID, in.agentID)
 		if err != nil {
 			return err
 		}
 		convID = conv.ID
-		tokenID := tok.ID
 		if _, err := tx.CreateContact(ctx, gen.CreateContactParams{
-			UserID: callerID, AgentID: tok.AgentID, DmConversationID: conv.ID,
-			AddedVia: "pair_token", PairTokenID: &tokenID,
+			UserID: callerID, AgentID: in.agentID, DmConversationID: conv.ID,
+			AddedVia: in.addedVia, PairTokenID: in.tokenID,
 		}); err != nil {
 			return domain.Internal(fmt.Errorf("create contact: %w", err))
 		}
 		isNew = true
-		pending, err = convs.Enqueue(ctx, tok.AgentID, conv.ID, conversations.EventConversationJoined,
-			conversations.JoinedPayload{PairTokenID: &tokenID, Payload: tok.Payload})
+		pending, err = convs.Enqueue(ctx, in.agentID, conv.ID, conversations.EventConversationJoined,
+			conversations.JoinedPayload{PairTokenID: in.tokenID, Payload: in.payload})
 		return err
 	})
 	if err != nil {
 		return Accepted{}, err
 	}
 	if pending {
-		s.conversations.Nudge(ctx, []uuid.UUID{tok.AgentID})
+		s.conversations.Nudge(ctx, []uuid.UUID{in.agentID})
 	}
 
 	convs, err := s.conversations.GetConversations(ctx, []uuid.UUID{convID})

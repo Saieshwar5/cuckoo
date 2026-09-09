@@ -47,7 +47,7 @@
   "agents.title": "Agents",
   "agents.yours": "Your agents",
   "agents.empty.title": "No agents yet",
-  "agents.empty.subtitle": "Two ways in: scan a company's code to add its agent, or create your own and connect your code to it.",
+  "agents.empty.subtitle": "Add one Cuckoo runs, scan a code, or make your own and point it at your code.",
   "agents.status.connected": "Connected",
   "agents.status.idle": "Not connected",
   "agents.status.unreachable": "Unreachable",
@@ -297,5 +297,12 @@
   "settings.about.version": "Cuckoo {version}. Open source; the hub is yours to run.",
   "settings.delete": "Delete my account",
   "settings.delete.title": "Delete your account?",
-  "settings.delete.body": "Your agents are retired, your chats leave your list, and you are signed out everywhere. What you sent to agents stays with them. This cannot be undone."
+  "settings.delete.body": "Your agents are retired, your chats leave your list, and you are signed out everywhere. What you sent to agents stays with them. This cannot be undone.",
+  "catalogue.title": "Agents",
+  "catalogue.intro": "Agents run by Cuckoo. Add one and it appears in your chats.",
+  "catalogue.add": "Add",
+  "catalogue.open": "Open",
+  "catalogue.empty.title": "Nothing here yet",
+  "catalogue.empty.subtitle": "Agents will appear here as they are published.",
+  "agents.empty.browse": "See what Cuckoo runs"
 }

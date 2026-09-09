@@ -10,6 +10,32 @@ function respond(status: number, body: unknown, headers: Record<string, string> 
 }
 
 describe('api client', () => {
+  it('reads the catalogue and adds from it without a code', async () => {
+    const calls: { url: string; method?: string }[] = [];
+    const api = createApi({
+      baseUrl: 'http://hub',
+      getToken: () => 'ses_tok_1',
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), method: init?.method });
+        return String(url).endsWith('/catalogue')
+          ? respond(200, { agents: [{ agent: { id: 'agt_1', handle: 'weather' } }] })
+          : respond(200, { conversation: { id: 'cnv_1' }, new: true });
+      },
+    });
+
+    // The listing comes back unwrapped, as a list of cards.
+    const listed = await api.listCatalogue();
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.agent.handle).toBe('weather');
+    expect(calls[0]?.url).toBe('http://hub/v1/client/catalogue');
+
+    // Adding names the agent, not a code: being listed is the invitation.
+    const accepted = await api.addFromCatalogue('agt_1');
+    expect(accepted.conversation.id).toBe('cnv_1');
+    expect(calls[1]?.url).toBe('http://hub/v1/client/catalogue/agt_1/add');
+    expect(calls[1]?.method).toBe('POST');
+  });
+
   it('sends the token and an idempotency key, and unwraps envelopes', async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     const api = createApi({

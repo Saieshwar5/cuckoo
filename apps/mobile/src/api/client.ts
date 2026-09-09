@@ -12,6 +12,7 @@ import type {
   MintedToken,
   Page,
   PairAccepted,
+  CatalogueEntry,
   PairResolve,
   PairToken,
   ReportReason,
@@ -137,6 +138,10 @@ export interface Api {
   pairTokenQR(agentId: string, tokenId: string, code: string): Promise<{ url: string; qr_png: string }>;
   resolvePair(code: string): Promise<PairResolve>;
   acceptPair(code: string): Promise<PairAccepted>;
+  // The agents on offer, whether or not this person has them. A listed agent
+  // needs no code: being in the catalogue is the invitation.
+  listCatalogue(): Promise<CatalogueEntry[]>;
+  addFromCatalogue(agentId: string): Promise<PairAccepted>;
   listContacts(): Promise<Contact[]>;
   // Mute, pin, archive: the person's own settings for an agent. The agent
   // is not told any of it.
@@ -306,6 +311,10 @@ export function createApi(opts: ApiOptions): Api {
       ),
     resolvePair: (code) => request<PairResolve>('GET', `/v1/client/pair/${encodeURIComponent(code)}`),
     acceptPair: (code) => request<PairAccepted>('POST', `/v1/client/pair/${encodeURIComponent(code)}/accept`),
+    listCatalogue: async () =>
+      (await request<{ agents: CatalogueEntry[] }>('GET', '/v1/client/catalogue')).agents,
+    addFromCatalogue: (agentId) =>
+      request<PairAccepted>('POST', `/v1/client/catalogue/${encodeURIComponent(agentId)}/add`),
     listContacts: async () => (await request<{ contacts: Contact[] }>('GET', '/v1/client/contacts')).contacts,
     updateContact: (id, settings) => request('PATCH', `/v1/client/contacts/${id}`, settings),
     removeContact: (id) => request('DELETE', `/v1/client/contacts/${id}`),

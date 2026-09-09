@@ -176,6 +176,10 @@ export interface PairResolve {
   conversation_id: string | null;
 }
 
+// A row of the catalogue: the same card a scanned code resolves to, so one
+// screen's worth of drawing serves a list and a poster alike.
+export type CatalogueEntry = PairResolve;
+
 export interface PairAccepted {
   conversation: Conversation;
   new: boolean;

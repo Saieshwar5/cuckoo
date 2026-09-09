@@ -96,6 +96,90 @@ func TestAPrivateAgentCannotBeHandedOut(t *testing.T) {
 	}
 }
 
+// Adding from the catalogue is the same act as scanning, reached another way:
+// the same contact, the same chat, and the backend told the same thing.
+func TestAddingFromTheCatalogueNeedsNoCode(t *testing.T) {
+	ctx := context.Background()
+	f := setup(t)
+	svc := agents.New(f.db)
+
+	listed, err := svc.Create(ctx, f.owner.ID, agents.CreateInput{
+		Handle: "weather", DisplayName: "Weather", Listed: true,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	accepted, err := f.svc.AddFromCatalogue(ctx, f.priya.ID, listed.ID)
+	if err != nil {
+		t.Fatalf("AddFromCatalogue: %v", err)
+	}
+	if !accepted.New {
+		t.Error("the first add is new")
+	}
+
+	// It is in her list now, and the catalogue says so rather than offering
+	// it again.
+	cards, err := f.svc.Catalogue(ctx, f.priya.ID, 0)
+	if err != nil {
+		t.Fatalf("Catalogue: %v", err)
+	}
+	if len(cards) != 1 || !cards[0].AlreadyAdded {
+		t.Fatalf("card = %+v, want it marked as added", cards[0])
+	}
+	// Adding twice is not two chats.
+	again, err := f.svc.AddFromCatalogue(ctx, f.priya.ID, listed.ID)
+	if err != nil {
+		t.Fatalf("second add: %v", err)
+	}
+	if again.New || again.Conversation.ID != accepted.Conversation.ID {
+		t.Error("adding twice should find the same chat, not open another")
+	}
+}
+
+// The listing is checked when adding, not only when the list was drawn.
+// Otherwise taking an agent out of the catalogue leaves it addable forever by
+// anyone who kept the identifier.
+func TestAnAgentTakenOutOfTheCatalogueCannotBeAdded(t *testing.T) {
+	ctx := context.Background()
+	f := setup(t)
+	svc := agents.New(f.db)
+
+	listed, err := svc.Create(ctx, f.owner.ID, agents.CreateInput{
+		Handle: "weather", DisplayName: "Weather", Listed: true,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	no := false
+	if _, err := svc.Update(ctx, f.owner.ID, listed.ID, agents.UpdateInput{Listed: &no}); err != nil {
+		t.Fatalf("unlist: %v", err)
+	}
+
+	if _, err := f.svc.AddFromCatalogue(ctx, f.priya.ID, listed.ID); code(t, err) != "agent_not_listed" {
+		t.Fatalf("adding an unlisted agent got %v, want agent_not_listed", err)
+	}
+}
+
+// An agent that was never on offer is not addable merely because somebody
+// knows its identifier.
+func TestAPrivateAgentCannotBeAddedFromTheCatalogue(t *testing.T) {
+	ctx := context.Background()
+	f := setup(t)
+	svc := agents.New(f.db)
+
+	private, err := svc.Create(ctx, f.priya.ID, agents.CreateInput{
+		Handle: "priyas-mail", DisplayName: "Mail", Private: true,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	stranger := f.owner.ID
+	if _, err := f.svc.AddFromCatalogue(ctx, stranger, private.ID); code(t, err) != "agent_not_listed" {
+		t.Fatalf("adding a private agent got %v, want agent_not_listed", err)
+	}
+}
+
 // The schema refuses the contradiction rather than trusting every caller to
 // notice it: an agent cannot be hidden from everyone and offered to everyone.
 func TestAnAgentCannotBeBothPrivateAndListed(t *testing.T) {
