@@ -146,6 +146,29 @@ func (h *Handler) listCatalogue(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, r, http.StatusOK, out)
 }
 
+// addFromCatalogue puts a listed agent in the caller's chat list. No code:
+// being in the catalogue is the invitation.
+func (h *Handler) addFromCatalogue(w http.ResponseWriter, r *http.Request) {
+	userID, ok := principal.UserID(r.Context())
+	if !ok {
+		httpx.Error(w, r, domain.Unauthorized("unauthorized", "Sign in to continue."))
+		return
+	}
+	agentID, err := domain.ParseID(domain.PrefixAgent, chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	accepted, err := h.pairing.AddFromCatalogue(r.Context(), userID, agentID)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	httpx.JSON(w, r, http.StatusOK, acceptResponse{
+		Conversation: newConversationResponse(accepted.Conversation), New: accepted.New,
+	})
+}
+
 func (h *Handler) acceptPair(w http.ResponseWriter, r *http.Request) {
 	userID, ok := principal.UserID(r.Context())
 	if !ok {

@@ -30,7 +30,17 @@ ALTER TABLE agents
 -- the order they were published in.
 CREATE INDEX agents_listed_idx ON agents (created_at) WHERE listed AND deleted_at IS NULL;
 
+-- Adding an agent from the catalogue is a third way in, beside a code and
+-- owning the thing. Recorded because "how did this get here" is the first
+-- question asked when somebody wants it gone.
+ALTER TABLE contacts DROP CONSTRAINT contacts_added_via_check;
+ALTER TABLE contacts ADD CONSTRAINT contacts_added_via_check
+    CHECK (added_via IN ('owner', 'pair_token', 'hub', 'catalogue'));
+
 -- +goose Down
+ALTER TABLE contacts DROP CONSTRAINT contacts_added_via_check;
+ALTER TABLE contacts ADD CONSTRAINT contacts_added_via_check
+    CHECK (added_via IN ('owner', 'pair_token', 'hub'));
 DROP INDEX agents_listed_idx;
 ALTER TABLE agents DROP CONSTRAINT agents_private_not_listed;
 ALTER TABLE agents DROP COLUMN listed, DROP COLUMN private;

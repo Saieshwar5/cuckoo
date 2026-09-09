@@ -65,6 +65,14 @@ export default function AgentsScreen() {
         title={t('agents.title')}
         actions={
           <>
+            {/* What Cuckoo runs. The one way in that needs nobody to have
+                given you a code and nothing of your own to run. */}
+            <IconButton
+              icon="sparkles-outline"
+              label={t('catalogue.title')}
+              onPress={() => router.push('/catalogue')}
+              testID="open-catalogue"
+            />
             <IconButton
               icon="person-circle-outline"
               label={t('profile.open')}
@@ -116,8 +124,8 @@ export default function AgentsScreen() {
               icon="sparkles-outline"
               title={t('agents.empty.title')}
               subtitle={t('agents.empty.subtitle')}
-              action={{ title: t('agents.empty.action'), onPress: create }}
-              secondary={{ title: t('agents.empty.scan'), onPress: () => router.push('/scan') }}
+              action={{ title: t('agents.empty.browse'), onPress: () => router.push('/catalogue') }}
+              secondary={{ title: t('agents.empty.action'), onPress: create }}
             />
           )
         }
