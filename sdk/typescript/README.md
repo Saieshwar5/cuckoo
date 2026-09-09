@@ -126,12 +126,41 @@ await conversation.send("here it is", { attachments: [uploaded] });
 Uploading is a separate step from sending, so a slow upload never holds a
 message open. An upload nobody sends is removed after a day.
 
+## Management: creating agents from a server
+
+The half a server uses. Authenticate with an API key (`mgt_tok_…`) or a
+person's session token — never a binding secret.
+
+```ts
+import { Management } from "@cuckoo/agent";
+
+const mgmt = new Management(process.env.CUCKOO_KEY!, { hub: "https://cuckoo.onl" });
+
+const agent = await mgmt.createAgent({
+  handle: "support",
+  displayName: "Acme Support",
+  starters: ["Where is my order?"],
+});
+const secret = await mgmt.connect(agent.id, {
+  webhookUrl: `https://acme.example/hooks/${agent.id}`,
+});   // shown once — store it now
+
+const code = await mgmt.createCode(agent.id);   // a poster: anyone may use it
+console.log(code.url, code.qrPng);
+```
+
+`createCode` with `maxUses: 1` and your own reference in `payload` mints one
+per customer; the payload comes back on the join event, before they say a word.
+The code exists in full exactly once, in the answer that minted it — the hub
+keeps only its hash.
+
 ## Parity with the Python SDK
 
-The same protocol, the same names where the languages allow it. Two deliberate
-differences: this package has the **webhook receiver** Python does not, and
-attachments are plain data whose bytes are fetched through the client rather
-than through a method on the attachment.
+The same protocol, the same names where the languages allow it. Three
+deliberate differences: this package has the **webhook receiver** Python does
+not; attachments are plain data whose bytes are fetched through the client
+rather than through a method on the attachment; and `Management` is
+asynchronous here, because there is no synchronous `fetch`.
 
 ## Development
 

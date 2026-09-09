@@ -19,7 +19,7 @@ import { createRuntimeServer } from "./api/server.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { migrate, openPool } from "./db/pool.ts";
 import type { Harness } from "./harness/harness.ts";
-import { PiHarness } from "./harness/pi.ts";
+import { selectHarness } from "./harness/select.ts";
 import { Jobs, Worker, type Job } from "./jobs.ts";
 import { Turns } from "./memory/turns.ts";
 import { TEMPLATES } from "./templates.ts";
@@ -38,7 +38,7 @@ export async function start(config: Config = loadConfig()) {
   const turns = new Turns(pool);
   const jobs = new Jobs(pool);
   const tools = builtinTools();
-  const harness: Harness = new PiHarness({ apiKey: config.anthropicApiKey });
+  const harness: Harness = selectHarness(config);
 
   // Anything a previous process claimed and did not finish is due again.
   const recovered = await jobs.recoverAbandoned();

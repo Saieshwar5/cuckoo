@@ -1,0 +1,19 @@
+{
+  "name": "cuckoo-examples-typescript",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "echo": "node --experimental-strip-types echo.ts",
+    "stream": "node --experimental-strip-types stream.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cuckoo/agent": "file:../../sdk/typescript"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

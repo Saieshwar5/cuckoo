@@ -13,6 +13,16 @@
 export { Agent, type AgentOptions } from "./agent.ts";
 export { HubClient, type ClientOptions, type SendOptions } from "./client.ts";
 export { Conversation, Stream } from "./conversation.ts";
+export {
+  Management,
+  type AgentInfo,
+  type BindingInfo,
+  type Code,
+  type CodeSummary,
+  type CreateAgentInput,
+  type ManagementOptions,
+  type UpdateAgentInput,
+} from "./management.ts";
 export { ProtocolError } from "./errors.ts";
 export {
   EVENT_CONVERSATION_JOINED,

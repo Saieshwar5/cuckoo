@@ -69,6 +69,7 @@ export default defineConfig({
           items: [
             { slug: 'docs/protocol' },
             { slug: 'docs/sdk-python' },
+            { slug: 'docs/sdk-typescript' },
             { slug: 'docs/cli' },
             { slug: 'docs/limits' },
           ],
