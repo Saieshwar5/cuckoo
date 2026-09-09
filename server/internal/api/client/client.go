@@ -73,6 +73,8 @@ func (h *Handler) Routes() chi.Router {
 	r.Get("/media/{id}", h.getMedia)
 
 	// Adding agents: what a scanned code resolves to, and accepting it.
+	// The catalogue: agents on offer, whether or not the person has them.
+	r.Get("/catalogue", h.listCatalogue)
 	r.Get("/pair/{code}", h.resolvePair)
 	r.Post("/pair/{code}/accept", h.acceptPair)
 	r.Get("/contacts", h.listContacts)

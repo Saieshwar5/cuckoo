@@ -68,6 +68,11 @@ type CreateTokenInput struct {
 
 // Card is what a person sees before deciding to add an agent: who it is,
 // who owns it, and whether it is already theirs.
+// catalogueMax bounds the listing. The catalogue is a screen someone scrolls,
+// not a dataset; when there are more agents than this it needs paging and a
+// reason to page, and neither exists yet.
+const catalogueMax = 100
+
 type Card struct {
 	Agent     agents.Agent
 	OwnerName string

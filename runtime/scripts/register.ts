@@ -56,12 +56,18 @@ let hubAgentId = listed?.find((a) => a.handle === handle)?.id;
 
 if (hubAgentId) {
   console.log(`@${handle} already exists: ${hubAgentId}`);
+  // It may predate the catalogue, so say what it is now.
+  await mgmt(`/agents/${hubAgentId}`, { listed: true }, "PATCH");
 } else {
   const created = (await mgmt("/agents", {
     handle,
     display_name: template.name,
     description: `${template.name}, run by Cuckoo.`,
     starters: template.starters,
+    // A ready-made agent is offered in the catalogue; that is what it is for.
+    // A custom one, made for one person, is private instead and gets neither
+    // a listing nor a code.
+    listed: true,
   })) as { agent: { id: string } };
   hubAgentId = created.agent.id;
   console.log(`created @${handle}: ${hubAgentId}`);

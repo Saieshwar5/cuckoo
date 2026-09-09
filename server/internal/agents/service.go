@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
@@ -83,6 +84,8 @@ func (s *Service) Create(ctx context.Context, ownerID uuid.UUID, in CreateInput)
 			Description:   desc,
 			AvatarMediaID: in.AvatarMediaID,
 			Starters:      startersJSON(starters),
+			Private:       in.Private,
+			Listed:        in.Listed,
 		})
 		if err != nil {
 			return err
@@ -173,7 +176,8 @@ func (s *Service) Update(ctx context.Context, callerID, id uuid.UUID, in UpdateI
 		starters = startersJSON(list)
 	}
 	params := gen.UpdateAgentParams{
-		Starters: starters, ID: id, AvatarMediaID: in.AvatarMediaID}
+		Starters: starters, ID: id, AvatarMediaID: in.AvatarMediaID,
+		Private: optionalBool(in.Private), Listed: optionalBool(in.Listed)}
 	if in.DisplayName != nil {
 		name, err := validateDisplayName(*in.DisplayName)
 		if err != nil {
@@ -278,4 +282,14 @@ func (s *Service) DeleteAllOwned(ctx context.Context, ownerID uuid.UUID) error {
 		}
 	}
 	return nil
+}
+
+// optionalBool carries "leave it alone" for a column that cannot itself be
+// null. sqlc maps a narg over a NOT NULL boolean to pgtype.Bool, where Valid
+// false means the COALESCE keeps what is already there.
+func optionalBool(v *bool) pgtype.Bool {
+	if v == nil {
+		return pgtype.Bool{}
+	}
+	return pgtype.Bool{Bool: *v, Valid: true}
 }

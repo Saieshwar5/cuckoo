@@ -23,7 +23,11 @@ type agentResponse struct {
 	// HasAvatar says a picture is published at /a/{id}/avatar.
 	HasAvatar bool `json:"has_avatar"`
 	// Starters are what an empty chat suggests saying first; up to four.
-	Starters  []string         `json:"starters"`
+	Starters []string `json:"starters"`
+	// Private: the agent cannot be handed out at all, and no code may be
+	// minted for it. Listed: it is offered in the app's catalogue.
+	Private   bool             `json:"private"`
+	Listed    bool             `json:"listed"`
 	CreatedAt time.Time        `json:"created_at"`
 	UpdatedAt time.Time        `json:"updated_at"`
 	Binding   *bindingResponse `json:"binding"`
@@ -46,6 +50,8 @@ func newAgentResponse(a agents.Agent, b *agents.Binding) agentResponse {
 		Description: a.Description,
 		HasAvatar:   a.AvatarMediaID != nil,
 		Starters:    a.Starters,
+		Private:     a.Private,
+		Listed:      a.Listed,
 		CreatedAt:   a.CreatedAt,
 		UpdatedAt:   a.UpdatedAt,
 	}
@@ -83,6 +89,11 @@ type createAgentRequest struct {
 	AvatarMediaID string `json:"avatar_media_id"`
 	// Up to four things to suggest saying first.
 	Starters []string `json:"starters"`
+	// Private refuses every code for this agent, which is what an agent
+	// answering for one person needs. Listed offers it in the catalogue.
+	// An agent cannot be both.
+	Private bool `json:"private"`
+	Listed  bool `json:"listed"`
 }
 
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
@@ -109,6 +120,8 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		Description:   req.Description,
 		AvatarMediaID: avatar,
 		Starters:      req.Starters,
+		Private:       req.Private,
+		Listed:        req.Listed,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)
@@ -176,6 +189,8 @@ type updateAgentRequest struct {
 	AvatarMediaID *string `json:"avatar_media_id"`
 	// Starters replaces the list when present; send [] to clear it.
 	Starters *[]string `json:"starters"`
+	Private  *bool     `json:"private"`
+	Listed   *bool     `json:"listed"`
 }
 
 // avatarIDOf parses the id of a picture a profile is being given.
@@ -221,6 +236,8 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 		Description:   req.Description,
 		AvatarMediaID: avatar,
 		Starters:      req.Starters,
+		Private:       req.Private,
+		Listed:        req.Listed,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)
