@@ -24,7 +24,10 @@ type agentCardResponse struct {
 	HasAvatar bool `json:"has_avatar"`
 	// What an empty chat suggests saying first.
 	Starters []string `json:"starters"`
-	Owner    struct {
+	// Private: this agent answers only for its owner and cannot be shared,
+	// so the app hides Share rather than offering a code the hub will refuse.
+	Private bool `json:"private"`
+	Owner   struct {
 		DisplayName string `json:"display_name"`
 	} `json:"owner"`
 	Status string `json:"status,omitempty"`
@@ -41,6 +44,7 @@ func newAgentCard(c pairing.Card) agentCardResponse {
 		Description: c.Agent.Description,
 		HasAvatar:   c.Agent.AvatarMediaID != nil,
 		Starters:    c.Agent.Starters,
+		Private:     c.Agent.Private,
 	}
 	resp.Owner.DisplayName = c.OwnerName
 	if c.Status != nil {
@@ -107,6 +111,39 @@ func (h *Handler) resolvePair(w http.ResponseWriter, r *http.Request) {
 		resp.ConversationID = &id
 	}
 	httpx.JSON(w, r, http.StatusOK, resp)
+}
+
+// catalogueResponse is the list the app's Agents tab offers. Each entry is the
+// same card a scanned code resolves to, so one screen's worth of drawing code
+// serves both.
+type catalogueResponse struct {
+	Agents []pairResponse `json:"agents"`
+}
+
+func (h *Handler) listCatalogue(w http.ResponseWriter, r *http.Request) {
+	userID, ok := principal.UserID(r.Context())
+	if !ok {
+		httpx.Error(w, r, domain.Unauthorized("unauthorized", "Sign in to continue."))
+		return
+	}
+	cards, err := h.pairing.Catalogue(r.Context(), userID, 0)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	out := catalogueResponse{Agents: make([]pairResponse, 0, len(cards))}
+	for _, card := range cards {
+		entry := pairResponse{
+			Kind: pairing.KindAddAgent, Agent: newAgentCard(card),
+			AlreadyAdded: card.AlreadyAdded, Blocked: card.Blocked,
+		}
+		if card.ConversationID != nil {
+			id := domain.FormatID(domain.PrefixConv, *card.ConversationID)
+			entry.ConversationID = &id
+		}
+		out.Agents = append(out.Agents, entry)
+	}
+	httpx.JSON(w, r, http.StatusOK, out)
 }
 
 func (h *Handler) acceptPair(w http.ResponseWriter, r *http.Request) {

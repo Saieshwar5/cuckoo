@@ -51,7 +51,15 @@ type Agent struct {
 	AvatarMediaID *uuid.UUID
 	// A few things it suggests saying first, shown as chips in an empty
 	// chat. Empty for most agents; a company's agent should have them.
-	Starters  []string
+	Starters []string
+	// Private means the agent may not be handed out at all: no code can be
+	// minted for it, and the app hides Share. What a person's own agent is,
+	// once something is running behind it that reads their mail (D51).
+	Private bool
+	// Listed means it belongs in the catalogue the app shows. Separate from
+	// having a code, because handing out a poster and wanting to appear in a
+	// directory are different wishes.
+	Listed    bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -77,6 +85,8 @@ func agentFromRow(r gen.Agent) Agent {
 		Description:   r.Description,
 		AvatarMediaID: r.AvatarMediaID,
 		Starters:      startersFromRow(r.Starters),
+		Private:       r.Private,
+		Listed:        r.Listed,
 		CreatedAt:     r.CreatedAt,
 		UpdatedAt:     r.UpdatedAt,
 	}
@@ -114,6 +124,10 @@ type CreateInput struct {
 	AvatarMediaID *uuid.UUID
 	// Up to four things to suggest saying first.
 	Starters []string
+	// Private refuses to hand the agent out at all (D51); Listed offers it in
+	// the app's catalogue. An agent cannot be both.
+	Private bool
+	Listed  bool
 }
 
 // UpdateInput is a partial update; nil leaves a field alone. The handle is
@@ -124,6 +138,8 @@ type UpdateInput struct {
 	AvatarMediaID *uuid.UUID
 	// Starters replaces the whole list when set; nil leaves it.
 	Starters *[]string
+	Private  *bool
+	Listed   *bool
 }
 
 // SetBindingInput describes the backend that will answer for an agent.

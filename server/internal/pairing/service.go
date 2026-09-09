@@ -49,8 +49,16 @@ func (s *Service) URL(plaintext string) string {
 // CreateToken mints a token for an agent. Owner only. The plaintext is
 // returned once.
 func (s *Service) CreateToken(ctx context.Context, callerID, agentID uuid.UUID, in CreateTokenInput) (Token, string, error) {
-	if _, err := s.agents.GetOwned(ctx, callerID, agentID); err != nil {
+	agent, err := s.agents.GetOwned(ctx, callerID, agentID)
+	if err != nil {
 		return Token{}, "", err
+	}
+	// A private agent has no door to open. Refused here rather than left to
+	// every caller to remember, because the caller that forgets is the one
+	// that hands somebody's mailbox to a stranger with a screenshot (D51).
+	if agent.Private {
+		return Token{}, "", domain.Forbidden("agent_is_private",
+			"This agent cannot be shared. It answers only for you.")
 	}
 	var payload []byte
 	if len(in.Payload) > 0 && string(in.Payload) != "null" {
@@ -323,6 +331,34 @@ func (s *Service) Accept(ctx context.Context, callerID uuid.UUID, plaintext stri
 }
 
 // Contacts lists the agents in a person's list, newest first.
+// Catalogue is the agents offered in the app: the ones Cuckoo runs today, and
+// whoever opts in later. Q6's directory in its first form.
+//
+// Each row is the same card a scanned code resolves to, so the app draws one
+// thing in two places and a person sees the same agent described the same way
+// whether they found it in a list or on a poster. It carries whether they have
+// it already, which is what turns Add into Open.
+func (s *Service) Catalogue(ctx context.Context, callerID uuid.UUID, limit int) ([]Card, error) {
+	if limit <= 0 || limit > catalogueMax {
+		limit = catalogueMax
+	}
+	rows, err := s.store.ListCatalogue(ctx, int32(limit)) //nolint:gosec // bounded above
+	if err != nil {
+		return nil, domain.Internal(fmt.Errorf("list catalogue: %w", err))
+	}
+	out := make([]Card, 0, len(rows))
+	for _, row := range rows {
+		card, err := s.card(ctx, callerID, row.ID)
+		if err != nil {
+			// One agent the caller cannot be shown — blocked, or gone between
+			// the two queries — is not a reason to show them nothing.
+			continue
+		}
+		out = append(out, card)
+	}
+	return out, nil
+}
+
 func (s *Service) Contacts(ctx context.Context, callerID uuid.UUID) ([]Contact, error) {
 	rows, err := s.store.ListContacts(ctx, callerID)
 	if err != nil {
