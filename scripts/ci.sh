@@ -75,6 +75,12 @@ if [ -d apps/mobile/node_modules ]; then
 else
   skip "mobile checks"          "apps/mobile/node_modules missing, run make mobile-install"
 fi
+if [ -d sdk/typescript/node_modules ]; then
+  step "ts sdk typecheck"       bash -c 'cd sdk/typescript && npx tsc --noEmit'
+  step "ts sdk tests"           bash -c 'cd sdk/typescript && npm test --silent'
+else
+  skip "ts sdk checks"          "sdk/typescript/node_modules missing, run make ts-sdk-install"
+fi
 if [ -d web/node_modules ]; then
   step "site typecheck"         bash -c 'cd web && npx astro check'
   step "site build"             bash -c 'cd web && npx astro build'

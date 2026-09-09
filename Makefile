@@ -131,6 +131,14 @@ deploy: ## Build, ship and start everything on the server (see deploy/README.md)
 site-install: ## Install the website's dependencies
 	cd web && npm install --no-audit --no-fund
 
+.PHONY: ts-sdk-install
+ts-sdk-install: ## Install the TypeScript SDK's dev dependencies
+	cd sdk/typescript && npm install --no-audit --no-fund
+
+.PHONY: ts-sdk-test
+ts-sdk-test: ## Typecheck and test the TypeScript SDK
+	cd sdk/typescript && npx tsc --noEmit && npm test
+
 .PHONY: site
 site: ## Serve the website at http://localhost:4321 with hot reload
 	cd web && npm run dev
