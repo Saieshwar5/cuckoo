@@ -135,6 +135,14 @@ site-install: ## Install the website's dependencies
 ts-sdk-install: ## Install the TypeScript SDK's dev dependencies
 	cd sdk/typescript && npm install --no-audit --no-fund
 
+.PHONY: runtime-install
+runtime-install: ## Install the runtime's dependencies
+	cd runtime && npm install --no-audit --no-fund
+
+.PHONY: runtime-test
+runtime-test: ## Typecheck and test the runtime (needs make up)
+	cd runtime && npx tsc --noEmit && npm test
+
 .PHONY: ts-sdk-test
 ts-sdk-test: ## Typecheck and test the TypeScript SDK
 	cd sdk/typescript && npx tsc --noEmit && npm test

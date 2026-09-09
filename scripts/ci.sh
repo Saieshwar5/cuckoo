@@ -81,6 +81,12 @@ if [ -d sdk/typescript/node_modules ]; then
 else
   skip "ts sdk checks"          "sdk/typescript/node_modules missing, run make ts-sdk-install"
 fi
+if [ -d runtime/node_modules ]; then
+  step "runtime typecheck"      bash -c 'cd runtime && npx tsc --noEmit'
+  step "runtime tests"          bash -c 'cd runtime && npm test --silent'
+else
+  skip "runtime checks"         "runtime/node_modules missing, run make runtime-install"
+fi
 if [ -d web/node_modules ]; then
   step "site typecheck"         bash -c 'cd web && npx astro check'
   step "site build"             bash -c 'cd web && npx astro build'

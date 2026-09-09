@@ -1,0 +1,27 @@
+{
+  "name": "cuckoo-runtime",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types 'test/*.test.ts'",
+    "start": "node --experimental-strip-types src/main.ts",
+    "pretypecheck": "npm --prefix ../sdk/typescript run build",
+    "pretest": "npm --prefix ../sdk/typescript run build"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "0.85.1",
+    "@earendil-works/pi-ai": "0.85.1",
+    "pg": "^8.13.1",
+    "@cuckoo/agent": "file:../sdk/typescript"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.7.2"
+  }
+}
