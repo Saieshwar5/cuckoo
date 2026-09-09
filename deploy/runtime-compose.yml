@@ -35,7 +35,14 @@ services:
       RUNTIME_PORT: "8081"
       RUNTIME_HUB_URL: ${RUNTIME_HUB_URL:?set RUNTIME_HUB_URL in .env}
       RUNTIME_PUBLIC_URL: https://${RUNTIME_DOMAIN:?set RUNTIME_DOMAIN in .env}
-      RUNTIME_DATABASE_URL: postgres://${DB_USER:-cuckoo}:${DB_PASSWORD:?set DB_PASSWORD in .env}@${DB_HOST:?set DB_HOST in .env}:${DB_PORT:-5432}/${DB_NAME:-cuckoo_runtime}?sslmode=${DB_SSLMODE:-require}
+      # uselibpqcompat is not decoration. Node's pg driver reads sslmode=require
+      # as verify-full — stricter than libpq, and stricter than the Go driver
+      # the hub uses — so without it the runtime refuses RDS's certificate,
+      # whose CA is not in the image. This asks for what the hub already
+      # settled on: encrypted, without checking who answered, which is what a
+      # private subnet decides for us. verify-full wants the RDS root
+      # certificate mounted here and named in the URL.
+      RUNTIME_DATABASE_URL: postgres://${DB_USER:-cuckoo}:${DB_PASSWORD:?set DB_PASSWORD in .env}@${DB_HOST:?set DB_HOST in .env}:${DB_PORT:-5432}/${DB_NAME:-cuckoo_runtime}?uselibpqcompat=true&sslmode=${DB_SSLMODE:-require}
       # Encrypts binding secrets, and later people's app tokens. Not in the
       # database, so a stolen dump is ciphertext. Losing it means every agent
       # must be registered again.
