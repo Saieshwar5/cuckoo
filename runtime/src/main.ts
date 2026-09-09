@@ -13,6 +13,7 @@
 
 import { HubClient } from "@cuckoo/agent";
 
+import { Actions } from "./actions.ts";
 import { Registry } from "./agents/registry.ts";
 import { answer } from "./answer.ts";
 import { createRuntimeServer } from "./api/server.ts";
@@ -21,6 +22,9 @@ import { migrate, openPool } from "./db/pool.ts";
 import type { Harness } from "./harness/harness.ts";
 import { selectHarness } from "./harness/select.ts";
 import { Jobs, Worker, type Job } from "./jobs.ts";
+import { Proactive } from "./proactive.ts";
+import { Routines } from "./routines.ts";
+import { Scheduler } from "./scheduler.ts";
 import { Turns } from "./memory/turns.ts";
 import { Usage } from "./usage.ts";
 import { TEMPLATES } from "./templates.ts";
@@ -38,7 +42,10 @@ export async function start(config: Config = loadConfig()) {
 
   const turns = new Turns(pool);
   const jobs = new Jobs(pool);
-  const tools = builtinTools();
+  const routines = new Routines(pool);
+  const actions = new Actions(pool);
+  const proactive = new Proactive(pool);
+  const tools = builtinTools({ routines, actions });
   const usage = new Usage(pool, config.dailyTokenLimit);
   const harness: Harness = selectHarness(config);
 
@@ -47,9 +54,22 @@ export async function start(config: Config = loadConfig()) {
   if (recovered) console.log(`runtime: ${recovered} job(s) recovered from a previous run`);
 
   const worker = new Worker(jobs, (job) =>
-    run(job, { registry, turns, harness, tools, usage, config }),
+    run(job, { registry, turns, harness, tools, usage, actions, routines, config }),
   );
   worker.start();
+
+  const scheduler = new Scheduler({
+    routines,
+    registry,
+    turns,
+    harness,
+    tools,
+    usage,
+    actions,
+    proactive,
+    hubUrl: config.hubUrl,
+  });
+  scheduler.start();
 
   const server = createRuntimeServer({ pool, registry, jobs, version: VERSION, hubUrl: config.hubUrl });
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
@@ -58,21 +78,24 @@ export async function start(config: Config = loadConfig()) {
   const stop = async () => {
     console.log("runtime: stopping");
     await worker.stop();
+    await scheduler.stop();
     server.close();
     await pool.end();
   };
   process.once("SIGINT", () => void stop().then(() => process.exit(0)));
   process.once("SIGTERM", () => void stop().then(() => process.exit(0)));
 
-  return { server, worker, pool, registry, jobs, turns, stop };
+  return { server, worker, scheduler, pool, registry, jobs, turns, routines, stop };
 }
 
 interface RunDeps {
   registry: Registry;
   turns: Turns;
   harness: Harness;
-  tools: Map<string, import("./harness/harness.ts").Tool>;
+  tools: Map<string, import("./harness/harness.ts").ToolFactory>;
   usage: Usage;
+  actions: Actions;
+  routines: Routines;
   config: Config;
 }
 
@@ -107,6 +130,17 @@ async function run(job: Job, deps: RunDeps): Promise<void> {
 
   const secret = await deps.registry.secretFor(agent.hubAgentId);
   if (!secret) return;
+  const client = new HubClient(secret, { hub: deps.config.hubUrl });
+
+  // A tap on a button the agent offered is carried out by this code, not by
+  // asking the model what the person probably meant. The model chose the
+  // words; it does not get to choose whether the thing happens.
+  const buttonId = (payload.message?.body as { action?: { button_id?: string } } | undefined)
+    ?.action?.button_id;
+  if (buttonId) {
+    const done = await carryOut(buttonId, agent.id, conversationId, deps, client);
+    if (done) return;
+  }
 
   await answer(
     { agent, conversationId, text, hubMessageId: message.id, userId },
@@ -115,7 +149,7 @@ async function run(job: Job, deps: RunDeps): Promise<void> {
       harness: deps.harness,
       tools: deps.tools,
       usage: deps.usage,
-      client: new HubClient(secret, { hub: deps.config.hubUrl }),
+      client,
     },
   );
 }
@@ -126,4 +160,52 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop()
     console.error("runtime: could not start", error);
     process.exit(1);
   });
+}
+
+/**
+ * Do what a tapped button said it would do.
+ *
+ * Returns whether the tap was ours: an unknown or expired id is not an error,
+ * it is just a message, and the model can say something about it. A tap that
+ * was ours never reaches the model at all — which is the point. What happens
+ * is what the row said, not what a sentence can be talked into.
+ */
+async function carryOut(
+  buttonId: string,
+  agentId: string,
+  conversationId: string,
+  deps: RunDeps,
+  client: HubClient,
+): Promise<boolean> {
+  const pending = await deps.actions.take(buttonId, agentId, conversationId);
+  if (!pending) return false;
+
+  const args = pending.arguments as Record<string, string>;
+  try {
+    if (pending.action === "create_routine") {
+      const routine = await deps.routines.create({
+        agentId,
+        conversationId,
+        userId: pending.userId,
+        instruction: args.instruction ?? "",
+        schedule: args.schedule ?? "",
+        timezone: args.timezone,
+      });
+      await client.send(
+        conversationId,
+        `Done. Next: ${new Date(routine.nextRun).toLocaleString("en-IN", { timeZone: routine.timezone })}.`,
+      );
+      return true;
+    }
+    if (pending.action === "delete_routine") {
+      await deps.routines.delete(args.id ?? "", agentId);
+      await client.send(conversationId, "Stopped.");
+      return true;
+    }
+  } catch (error) {
+    console.error("runtime: a confirmed action failed", error);
+    await client.send(conversationId, "That did not work. Nothing was changed.").catch(() => {});
+    return true;
+  }
+  return false;
 }

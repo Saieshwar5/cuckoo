@@ -14,10 +14,11 @@
     "pretest": "npm --prefix ../sdk/typescript run build"
   },
   "dependencies": {
+    "@cuckoo/agent": "file:../sdk/typescript",
     "@earendil-works/pi-agent-core": "0.85.1",
     "@earendil-works/pi-ai": "0.85.1",
-    "pg": "^8.13.1",
-    "@cuckoo/agent": "file:../sdk/typescript"
+    "cron-parser": "^5.10.0",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
