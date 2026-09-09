@@ -22,6 +22,7 @@ import type { Harness } from "./harness/harness.ts";
 import { selectHarness } from "./harness/select.ts";
 import { Jobs, Worker, type Job } from "./jobs.ts";
 import { Turns } from "./memory/turns.ts";
+import { Usage } from "./usage.ts";
 import { TEMPLATES } from "./templates.ts";
 import { builtinTools } from "./tools/index.ts";
 
@@ -38,6 +39,7 @@ export async function start(config: Config = loadConfig()) {
   const turns = new Turns(pool);
   const jobs = new Jobs(pool);
   const tools = builtinTools();
+  const usage = new Usage(pool, config.dailyTokenLimit);
   const harness: Harness = selectHarness(config);
 
   // Anything a previous process claimed and did not finish is due again.
@@ -45,11 +47,11 @@ export async function start(config: Config = loadConfig()) {
   if (recovered) console.log(`runtime: ${recovered} job(s) recovered from a previous run`);
 
   const worker = new Worker(jobs, (job) =>
-    run(job, { registry, turns, harness, tools, config }),
+    run(job, { registry, turns, harness, tools, usage, config }),
   );
   worker.start();
 
-  const server = createRuntimeServer({ pool, registry, jobs, version: VERSION });
+  const server = createRuntimeServer({ pool, registry, jobs, version: VERSION, hubUrl: config.hubUrl });
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   console.log(`runtime: listening on :${config.port}, hub ${config.hubUrl}`);
 
@@ -70,6 +72,7 @@ interface RunDeps {
   turns: Turns;
   harness: Harness;
   tools: Map<string, import("./harness/harness.ts").Tool>;
+  usage: Usage;
   config: Config;
 }
 
@@ -88,7 +91,7 @@ async function run(job: Job, deps: RunDeps): Promise<void> {
 
   const payload = job.payload as {
     conversation?: { id?: string };
-    message?: { id?: string; sender?: { kind?: string }; body?: { text?: string } };
+    message?: { id?: string; sender?: { kind?: string; id?: string }; body?: { text?: string } };
   };
   const conversationId = payload.conversation?.id;
   const message = payload.message;
@@ -97,6 +100,8 @@ async function run(job: Job, deps: RunDeps): Promise<void> {
   // Only a person's message is answered. An agent's own words coming back
   // would be a conversation with itself, and a costly one.
   if (message.sender?.kind !== "user") return;
+  const userId = message.sender.id ?? "";
+  if (!userId) return;
   const text = message.body?.text ?? "";
   if (!text.trim()) return;
 
@@ -104,11 +109,12 @@ async function run(job: Job, deps: RunDeps): Promise<void> {
   if (!secret) return;
 
   await answer(
-    { agent, conversationId, text, hubMessageId: message.id },
+    { agent, conversationId, text, hubMessageId: message.id, userId },
     {
       turns: deps.turns,
       harness: deps.harness,
       tools: deps.tools,
+      usage: deps.usage,
       client: new HubClient(secret, { hub: deps.config.hubUrl }),
     },
   );

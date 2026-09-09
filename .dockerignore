@@ -1,9 +1,24 @@
-# The build context for examples/welcome/Dockerfile, which is built from the
-# repository root because it needs the SDK. Everything else stays out, or the
-# context would carry two node_modules trees to the daemon on every build.
+# The build context for the two images built from the repository root, each
+# because it needs something beside its own directory:
+#
+#   examples/welcome/Dockerfile   the Python SDK
+#   runtime/Dockerfile            the TypeScript SDK
+#
+# Everything else stays out, or the context would carry several node_modules
+# trees to the daemon on every build.
 *
 !sdk/python
 !examples/welcome
+!sdk/typescript
+!runtime
+
 sdk/python/**/__pycache__
 sdk/python/*.egg-info
 examples/welcome/__pycache__
+
+# Built and installed things: the image installs its own.
+sdk/typescript/node_modules
+sdk/typescript/dist
+runtime/node_modules
+# Never the secrets, whatever else changes here.
+runtime/.env

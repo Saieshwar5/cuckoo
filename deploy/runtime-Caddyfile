@@ -1,0 +1,21 @@
+# One name, one job: terminate TLS for the runtime and pass everything through.
+#
+# The hub will not post to anything but HTTPS, and it checks the address it
+# resolves to, so this certificate is what makes the runtime reachable at all.
+# Caddy fetches and renews it itself.
+
+{$RUNTIME_DOMAIN} {
+	encode zstd gzip
+
+	# The hub posts events here. Nothing else in the world should.
+	handle {
+		reverse_proxy {$RUNTIME_UPSTREAM}
+
+		header {
+			# Nothing here is a page; there is nothing to embed or sniff.
+			X-Content-Type-Options "nosniff"
+			Strict-Transport-Security "max-age=31536000; includeSubDomains"
+			-Server
+		}
+	}
+}

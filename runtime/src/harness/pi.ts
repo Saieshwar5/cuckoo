@@ -14,40 +14,51 @@ import { Agent, type AgentTool } from "@earendil-works/pi-agent-core";
 import {
   createModels,
   type AssistantMessage,
+  type Api,
   type Message,
+  type Model,
   type Models,
   type TSchema,
 } from "@earendil-works/pi-ai";
-import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
+import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 
 import type { Harness, HarnessEvent, HarnessMessage, RunInput, Tool } from "./harness.ts";
 
-const PROVIDER = "anthropic";
-
 export interface PiHarnessOptions {
   apiKey: string;
-  /** Swapped in tests; defaults to a fresh Anthropic-backed collection. */
+  /**
+   * Which of pi's providers to ask. Its catalogue has Anthropic, Fireworks,
+   * OpenAI, Groq, Google and a few dozen more; a model id is that provider's
+   * own, so Fireworks wants `accounts/fireworks/models/…`.
+   */
+  provider: string;
+  /** Swapped in tests; defaults to pi's whole catalogue. */
   models?: Models;
 }
 
 export class PiHarness implements Harness {
   private readonly models: Models;
   private readonly apiKey: string;
+  private readonly provider: string;
 
   constructor(options: PiHarnessOptions) {
     this.apiKey = options.apiKey;
+    this.provider = options.provider;
     if (options.models) {
       this.models = options.models;
     } else {
+      // Every provider pi ships, so changing one is a setting rather than a
+      // deploy. This is the whole reason pi is worth the dependency: "the ten
+      // best models" (D68) becomes a list instead of ten integrations.
       const models = createModels();
-      models.setProvider(anthropicProvider());
+      for (const provider of builtinProviders()) models.setProvider(provider);
       this.models = models;
     }
   }
 
   async *run(input: RunInput): AsyncIterable<HarnessEvent> {
-    const model = this.models.getModel(PROVIDER, input.model);
-    if (!model) throw new Error(`no model called ${input.model} at ${PROVIDER}`);
+    const model = this.models.getModel(this.provider, input.model);
+    if (!model) throw new Error(`no model called ${input.model} at ${this.provider}`);
 
     // The last message is what we are answering; the rest is history. pi wants
     // them separately: history on the state, the new one passed to prompt().
@@ -62,8 +73,8 @@ export class PiHarness implements Harness {
     });
     agent.state.systemPrompt = input.system;
     agent.state.model = model;
-    agent.state.tools = input.tools.map((tool) => toAgentTool(tool, model.id));
-    agent.state.messages = history.map((message) => toPiMessage(message, model.id));
+    agent.state.tools = input.tools.map((tool) => toAgentTool(tool));
+    agent.state.messages = history.map((message) => toPiMessage(message, model));
 
     const queue = new EventQueue();
 
@@ -84,7 +95,11 @@ export class PiHarness implements Harness {
           });
           return;
         case "tool_execution_end":
-          queue.push({ type: "tool_result", name: event.toolName, result: event.result });
+          queue.push({
+            type: "tool_result",
+            name: event.toolName,
+            result: unwrapToolResult(event.result),
+          });
           return;
         case "message_end": {
           const message = event.message as AssistantMessage;
@@ -125,7 +140,7 @@ export class PiHarness implements Harness {
  * JSON Schema object at runtime — so ours passes through, and the cast is the
  * type system catching up with that rather than a claim about the value.
  */
-function toAgentTool(tool: Tool, modelId: string): AgentTool {
+function toAgentTool(tool: Tool): AgentTool {
   return {
     name: tool.name,
     label: tool.name,
@@ -135,10 +150,7 @@ function toAgentTool(tool: Tool, modelId: string): AgentTool {
       // pi wants a throw on failure, not an error in the content, and turns
       // one into a tool result the model can read and recover from.
       const result = await tool.execute((params ?? {}) as Record<string, unknown>);
-      return {
-        content: [{ type: "text", text: JSON.stringify(result) }],
-        details: { modelId },
-      };
+      return { content: [{ type: "text", text: JSON.stringify(result) }], details: {} };
     },
   };
 }
@@ -151,16 +163,18 @@ function toAgentTool(tool: Tool, modelId: string): AgentTool {
  * back from Postgres, so those are filled with what is true of it: nothing was
  * spent replaying it, and it ended by being finished.
  */
-function toPiMessage(message: HarnessMessage, modelId: string): Message {
+function toPiMessage(message: HarnessMessage, model: Model<Api>): Message {
   if (message.role === "user") {
     return { role: "user", content: message.content, timestamp: Date.now() };
   }
   return {
     role: "assistant",
     content: [{ type: "text", text: message.content }],
-    api: "anthropic-messages",
-    provider: PROVIDER,
-    model: modelId,
+    // The model that is about to answer, because a remembered turn has to
+    // look like one this provider produced.
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
     usage: {
       input: 0,
       output: 0,
@@ -172,6 +186,26 @@ function toPiMessage(message: HarnessMessage, modelId: string): Message {
     stopReason: "stop",
     timestamp: Date.now(),
   } as AssistantMessage;
+}
+
+/**
+ * The tool's own answer, out of the envelope pi wraps it in.
+ *
+ * pi hands a tool result back as `{ content: [{ type: "text", text }], … }`
+ * with our JSON re-encoded as a string inside it. Storing that shape would
+ * mean every later reader — compaction, recall, a person looking at a row —
+ * has to know pi's envelope. Unwrapping here keeps pi behind this file, which
+ * is the point of the file.
+ */
+function unwrapToolResult(result: unknown): unknown {
+  const wrapper = result as { content?: { type?: string; text?: string }[] } | null;
+  const text = wrapper?.content?.find((part) => part?.type === "text")?.text;
+  if (typeof text !== "string") return result;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
 }
 
 /** What the run cost, summed over the assistant messages it produced. */

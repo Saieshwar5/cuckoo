@@ -70,6 +70,7 @@ npm start
 | `RUNTIME_PUBLIC_URL` | Where the hub posts. Must be HTTPS: the hub refuses private and loopback addresses, so a laptop uses socket mode instead. |
 | `ANTHROPIC_API_KEY` | The model provider. One to begin with; pi-ai is what makes the rest cheap. |
 | `RUNTIME_DEFAULT_MODEL` | What a template does not name. Default `claude-sonnet-5`. |
+| `RUNTIME_DAILY_TOKEN_LIMIT` | Tokens one person may spend a day. Past it the agent says so and stops. 0 disables the ceiling — for a laptop, not a server. |
 | `RUNTIME_PORT` | Default 8081. |
 
 ## What is here, and what is not
@@ -77,6 +78,23 @@ npm start
 Built: the loop, streaming, typing, tool calls, the job queue with its retry
 ladder, the agent registry with encrypted secrets, turns kept in full, the
 weather tool and template, and the webhook door.
+
+## Deploying
+
+Its own EC2 instance, its own database, and a public HTTPS name.
+
+```bash
+RUNTIME_DEPLOY_HOST=admin@<ip> RUNTIME_DOMAIN=runtime.cuckoo.onl deploy/deploy-runtime.sh
+deploy/deploy-runtime.sh rollback <tag>
+```
+
+**Why a public address for a service the hub could reach privately.** The hub
+refuses to post webhooks to private, loopback or link-local addresses, so that
+nobody can point a binding at a metadata service or a database on the network.
+That rule applies to us too, deliberately: the moment there is an exception for
+our own service, the protocol stops being the thing everyone uses. What
+protects the open endpoint is the signature — `/hooks/{agentId}` verifies with
+the secret of the agent the URL names before it reads the body.
 
 Not yet, in the order `09` builds them: the catalogue and the `private` flag on
 the hub, compaction and recall, the create flow in the app, connections and

@@ -30,6 +30,8 @@ export interface AnswerInput {
   /** What the person said, already parsed out of the event. */
   text: string;
   hubMessageId: string;
+  /** Whose bill this run is. The hub's usr_… identifier. */
+  userId: string;
 }
 
 export interface AnswerDeps {
@@ -39,11 +41,36 @@ export interface AnswerDeps {
   tools: Map<string, Tool>;
   /** A client already authenticated as the agent being answered for. */
   client: HubClient;
+  /** The ceiling, and the counter a subscription will one day read. */
+  usage?: UsageLimit;
   windowSize?: number;
+}
+
+/** What `answer` needs of the usage store, so a test can stand one in. */
+export interface UsageLimit {
+  withinLimit(userId: string): Promise<boolean>;
+  record(
+    userId: string,
+    agentId: string,
+    tokens: { inputTokens: number; outputTokens: number },
+  ): Promise<void>;
 }
 
 export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void> {
   const { agent, conversationId } = input;
+
+  // Asked before anything is loaded or spent. A run refused here costs
+  // nothing; one cut off halfway has already been paid for and leaves half a
+  // sentence on somebody's screen.
+  if (deps.usage && !(await deps.usage.withinLimit(input.userId))) {
+    await deps.client
+      .send(
+        conversationId,
+        "You have reached today's limit for this agent. It will work again tomorrow.",
+      )
+      .catch(() => {});
+    return;
+  }
 
   // The window before this message is recorded, so the model is not handed
   // the thing it is about to be asked as though it were history.
@@ -89,6 +116,9 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
           });
           break;
         case "done":
+          if (deps.usage && event.usage) {
+            await deps.usage.record(input.userId, agent.id, event.usage);
+          }
           break;
       }
     }
@@ -122,19 +152,45 @@ function toolsFor(agent: AgentRecord, known: Map<string, Tool>): Tool[] {
   return tools;
 }
 
+/** How much of a remembered tool result the model is shown again. */
+const TOOL_RECALL_CHARS = 400;
+
 /**
- * The window as the model wants it. Tool rows are left out: what a tool
- * returned mattered to the answer that was given, and that answer is in the
- * transcript. Replaying every tool result would fill the window with
- * yesterday's weather.
+ * The window as the model wants it, tool calls included.
+ *
+ * Leaving tool rows out was the first design here, on the reasoning that what
+ * a tool returned had already been folded into the answer beside it. Running
+ * a real model against a real conversation showed what that actually teaches:
+ * a transcript where the assistant produces facts from nowhere, again and
+ * again, is a demonstration that facts do not need looking up. After a few
+ * turns the weather agent stopped calling the weather tool and began inventing
+ * plausible temperatures instead — which is worse than refusing, because it
+ * looks exactly like working.
+ *
+ * So the calls stay in, with their results trimmed. The model is shown a
+ * conversation in which every answer was preceded by a lookup, because that is
+ * what happened, and it is what should happen again.
  */
 function asMessages(history: Turn[]): HarnessMessage[] {
-  return history
-    .filter((turn) => turn.role !== "tool" && turn.text)
-    .map((turn) => ({
-      role: turn.role === "assistant" ? ("assistant" as const) : ("user" as const),
+  const out: HarnessMessage[] = [];
+  for (const turn of history) {
+    if (turn.role === "tool") {
+      const result = JSON.stringify(turn.toolResult ?? {});
+      out.push({
+        role: "assistant",
+        content:
+          `[called ${turn.toolName ?? "a tool"} and it returned ` +
+          `${result.slice(0, TOOL_RECALL_CHARS)}${result.length > TOOL_RECALL_CHARS ? "…" : ""}]`,
+      });
+      continue;
+    }
+    if (!turn.text) continue;
+    out.push({
+      role: turn.role === "assistant" ? "assistant" : "user",
       content: turn.text,
-    }));
+    });
+  }
+  return out;
 }
 
 /**

@@ -12,6 +12,7 @@ const FORECAST = "https://api.open-meteo.com/v1/forecast";
 interface Place {
   name: string;
   country: string;
+  countryCode: string;
   latitude: number;
   longitude: number;
   timezone: string;
@@ -57,8 +58,22 @@ export function weatherTool(fetchImpl: typeof fetch = fetch): Tool {
       const daily = data.daily ?? {};
 
       const dates = (daily.time ?? []) as string[];
+      // Some names have no match here at all — "Goa" is a state, and the
+      // geocoder holds populated places, so it offers Genoa and a town in the
+      // Philippines instead. Say so rather than answering confidently about
+      // the wrong continent: the model can then ask again with a city, or
+      // tell the person which place it used.
+      const elsewhere = found.countryCode !== HOME_COUNTRY;
       return {
         place: `${found.name}, ${found.country}`,
+        ...(elsewhere
+          ? {
+              note:
+                `No place called "${place}" was found in India. This is ` +
+                `${found.name}, ${found.country}. If that is not what was meant, ` +
+                `ask again with a nearby city.`,
+            }
+          : {}),
         // Flattened per day: a model reads this far better than four parallel
         // arrays, and it costs nothing to do here.
         forecast: dates.map((date, i) => ({
@@ -73,19 +88,45 @@ export function weatherTool(fetchImpl: typeof fetch = fetch): Tool {
   };
 }
 
+/**
+ * Where the agent's people are, when a name is ambiguous.
+ *
+ * Asking the geocoder for one result and taking it gives "Goa" → **Genoa,
+ * Italy** and "Panaji" → *Panajijay, Guatemala*: it ranks by population and
+ * fuzzy spelling, and the world is bigger than India. For an India-first
+ * product that is not a rounding error, it is the wrong answer delivered
+ * confidently.
+ */
+const HOME_COUNTRY = "IN";
+
 async function geocode(fetchImpl: typeof fetch, place: string): Promise<Place | undefined> {
-  const query = new URLSearchParams({ name: place, count: "1", language: "en", format: "json" });
+  // Ask for several and choose, rather than asking for one and hoping.
+  const query = new URLSearchParams({ name: place, count: "10", language: "en", format: "json" });
   const response = await fetchImpl(`${GEOCODE}?${query}`);
   if (!response.ok) return undefined;
   const data = (await response.json()) as { results?: Record<string, unknown>[] };
-  const first = data.results?.[0];
-  if (!first) return undefined;
+  const results = data.results ?? [];
+  if (results.length === 0) return undefined;
+
+  // An exact name in the home country wins; then anything in it; then an
+  // exact name anywhere; then whatever the geocoder ranked first. Someone
+  // asking for London still gets London.
+  const wanted = place.trim().toLowerCase();
+  const exactHere = results.find(
+    (r) => r.country_code === HOME_COUNTRY && String(r.name ?? "").toLowerCase() === wanted,
+  );
+  const anyHere = results.find((r) => r.country_code === HOME_COUNTRY);
+  const exactAnywhere = results.find((r) => String(r.name ?? "").toLowerCase() === wanted);
+  const chosen = exactHere ?? anyHere ?? exactAnywhere ?? results[0];
+  if (!chosen) return undefined;
+
   return {
-    name: String(first.name ?? place),
-    country: String(first.country ?? ""),
-    latitude: Number(first.latitude),
-    longitude: Number(first.longitude),
-    timezone: String(first.timezone ?? "auto"),
+    name: String(chosen.name ?? place),
+    country: String(chosen.country ?? ""),
+    countryCode: String(chosen.country_code ?? ""),
+    latitude: Number(chosen.latitude),
+    longitude: Number(chosen.longitude),
+    timezone: String(chosen.timezone ?? "auto"),
   };
 }
 

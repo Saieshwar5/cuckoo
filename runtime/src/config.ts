@@ -24,22 +24,65 @@ export interface Config {
    * ciphertext.
    */
   secretKey: Buffer;
-  /** The model provider's key. One provider to begin with. */
-  anthropicApiKey: string;
-  /** What a template does not name. */
+  /**
+   * Which of pi's providers to run models through: `anthropic`, `fireworks`,
+   * `openai`, `groq` and the rest of its catalogue. One provider at a time
+   * for now; the person picking a model per agent (D68) is a later step.
+   */
+  modelProvider: string;
+  /** That provider's key. Also read from the provider's own variable. */
+  modelApiKey: string;
+  /** What a template does not name. Ids are the provider's own. */
   defaultModel: string;
+  /**
+   * Tokens one person may spend in a day, across their agents. 0 means no
+   * ceiling, which is for a laptop and not for a server.
+   */
+  dailyTokenLimit: number;
   logLevel: "debug" | "info" | "warn" | "error";
 }
 
+/** The variable each provider reads its own key from. */
+export function keyVariable(provider: string): string {
+  return `${provider.replace(/-/g, "_").toUpperCase()}_API_KEY`;
+}
+
+/** A sensible model when none is named, per provider. */
+function defaultModelFor(provider: string): string {
+  if (provider === "fireworks") return "accounts/fireworks/models/deepseek-v4-flash-0731";
+  return "claude-sonnet-5";
+}
+
+/**
+ * Read a .env beside the package, if there is one.
+ *
+ * Here rather than in main, so a script that loads config — registering an
+ * agent, a one-off — is configured the same way the server is. A real
+ * deployment sets the environment itself and ships no file.
+ */
+function loadEnvFile(): void {
+  try {
+    process.loadEnvFile(new URL("../.env", import.meta.url));
+  } catch {
+    // No .env is the normal case in production.
+  }
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  if (env === process.env) loadEnvFile();
+  const provider = env.RUNTIME_MODEL_PROVIDER ?? "anthropic";
   return {
     port: Number(env.RUNTIME_PORT ?? 8081),
     databaseUrl: required(env, "RUNTIME_DATABASE_URL"),
     hubUrl: (env.RUNTIME_HUB_URL ?? "http://localhost:8080").replace(/\/+$/, ""),
     publicUrl: (env.RUNTIME_PUBLIC_URL ?? "").replace(/\/+$/, ""),
     secretKey: parseKey(required(env, "RUNTIME_SECRET_KEY")),
-    anthropicApiKey: env.ANTHROPIC_API_KEY ?? "",
-    defaultModel: env.RUNTIME_DEFAULT_MODEL ?? "claude-sonnet-5",
+    modelProvider: provider,
+    // RUNTIME_MODEL_API_KEY wins, then the variable the provider itself reads,
+    // so a machine already set up for one provider needs nothing new.
+    modelApiKey: env.RUNTIME_MODEL_API_KEY ?? env[keyVariable(provider)] ?? "",
+    defaultModel: env.RUNTIME_DEFAULT_MODEL ?? defaultModelFor(provider),
+    dailyTokenLimit: Number(env.RUNTIME_DAILY_TOKEN_LIMIT ?? 200_000),
     logLevel: (env.RUNTIME_LOG_LEVEL as Config["logLevel"]) ?? "info",
   };
 }
