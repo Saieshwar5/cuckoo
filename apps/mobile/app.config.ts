@@ -54,7 +54,13 @@ const config: ExpoConfig = {
       },
     ],
   ],
-  extra: { hubUrl },
+  // The Expo account this belongs to, and the project Expo mints push
+  // addresses against. Without the projectId a build cannot ask for one.
+  owner: 'saieshwar5',
+  extra: {
+    hubUrl,
+    eas: { projectId: 'b418db5c-f936-40b9-83a3-8ff81341612c' },
+  },
 };
 
 export default config;
