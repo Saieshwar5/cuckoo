@@ -45,7 +45,13 @@ describe("the webhook door", { skip: available ? false : "no postgres on :5433" 
       private: false,
     });
     jobs = new Jobs(pool);
-    server = createRuntimeServer({ pool, registry, jobs, version: "test" });
+    server = createRuntimeServer({
+      pool,
+      registry,
+      jobs,
+      version: "test",
+      hubUrl: "http://127.0.0.1:9",
+    });
     await new Promise<void>((resolve) => server.listen(0, resolve));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
@@ -89,10 +95,12 @@ describe("the webhook door", { skip: available ? false : "no postgres on :5433" 
   test("is alive, and says what it can reach", async () => {
     const response = await fetch(`${base}/healthz`);
     assert.equal(response.status, 200);
+    // The hub is not running in this test, so it reports down while the
+    // service itself is still up and answering — degraded, not dead.
     assert.deepEqual(await response.json(), {
-      status: "ok",
+      status: "degraded",
       version: "test",
-      components: { postgres: "ok" },
+      components: { postgres: "ok", hub: "down" },
     });
   });
 

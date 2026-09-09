@@ -23,6 +23,11 @@ class StubHub {
   readonly appended: string[] = [];
   private streams = 0;
 
+  async send(_conversationId: string, text: string): Promise<{ id: string }> {
+    this.calls.push("send");
+    this.appended.push(text);
+    return { id: "msg_sent" };
+  }
   async typing(_conversationId: string, state: string): Promise<void> {
     this.calls.push(`typing:${state}`);
   }
@@ -82,7 +87,13 @@ function setup(script: Script[], tools: Tool[] = []) {
   return { hub, turns, harness, deps };
 }
 
-const ASKED = { agent: AGENT, conversationId: "cnv_1", text: "will it rain?", hubMessageId: "msg_1" };
+const ASKED = {
+  agent: AGENT,
+  conversationId: "cnv_1",
+  text: "will it rain?",
+  hubMessageId: "msg_1",
+  userId: "usr_priya",
+};
 
 test("answers, streams the words, and writes down both sides", async () => {
   const { hub, turns, deps } = setup([{ say: "yes, tomorrow" }]);
@@ -187,4 +198,50 @@ test("a model that fails leaves nothing open, and the failure is passed up", asy
   // The job queue decides whether to retry; what matters here is that the
   // indicator was taken down rather than left spinning forever.
   assert.equal(hub.calls.at(-1), "typing:stop");
+});
+
+/** A ceiling a test can set, and a ledger it can read. */
+class Ledger {
+  allow = true;
+  readonly recorded: { userId: string; agentId: string; inputTokens: number; outputTokens: number }[] = [];
+
+  async withinLimit(): Promise<boolean> {
+    return this.allow;
+  }
+  async record(
+    userId: string,
+    agentId: string,
+    tokens: { inputTokens: number; outputTokens: number },
+  ): Promise<void> {
+    this.recorded.push({ userId, agentId, ...tokens });
+  }
+}
+
+test("what a run costs is recorded against the person", async () => {
+  const { deps, turns } = setup([{ say: "sunny" }]);
+  const ledger = new Ledger();
+
+  await answer(ASKED, { ...deps, usage: ledger });
+
+  assert.equal(ledger.recorded.length, 1);
+  assert.equal(ledger.recorded[0]!.userId, "usr_priya");
+  assert.equal(ledger.recorded[0]!.agentId, AGENT.id);
+  assert.equal(turns.rows.length, 2);
+});
+
+test("past the day's ceiling nothing is spent, and the person is told why", async () => {
+  const { hub, turns, harness, deps } = setup([{ say: "sunny" }]);
+  const ledger = new Ledger();
+  ledger.allow = false;
+
+  await answer(ASKED, { ...deps, usage: ledger });
+
+  // The model was never called, so nothing was spent — which is the point of
+  // checking before the run rather than during it.
+  assert.equal(harness.runs.length, 0);
+  assert.equal(ledger.recorded.length, 0);
+  // Nothing was written down either: there was no turn.
+  assert.equal(turns.rows.length, 0);
+  // And the person is not left staring at silence.
+  assert.match(hub.said() + hub.calls.join(" "), /reached today|send/i);
 });

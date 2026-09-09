@@ -30,6 +30,8 @@ export interface AnswerInput {
   /** What the person said, already parsed out of the event. */
   text: string;
   hubMessageId: string;
+  /** Whose bill this run is. The hub's usr_… identifier. */
+  userId: string;
 }
 
 export interface AnswerDeps {
@@ -39,11 +41,36 @@ export interface AnswerDeps {
   tools: Map<string, Tool>;
   /** A client already authenticated as the agent being answered for. */
   client: HubClient;
+  /** The ceiling, and the counter a subscription will one day read. */
+  usage?: UsageLimit;
   windowSize?: number;
+}
+
+/** What `answer` needs of the usage store, so a test can stand one in. */
+export interface UsageLimit {
+  withinLimit(userId: string): Promise<boolean>;
+  record(
+    userId: string,
+    agentId: string,
+    tokens: { inputTokens: number; outputTokens: number },
+  ): Promise<void>;
 }
 
 export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void> {
   const { agent, conversationId } = input;
+
+  // Asked before anything is loaded or spent. A run refused here costs
+  // nothing; one cut off halfway has already been paid for and leaves half a
+  // sentence on somebody's screen.
+  if (deps.usage && !(await deps.usage.withinLimit(input.userId))) {
+    await deps.client
+      .send(
+        conversationId,
+        "You have reached today's limit for this agent. It will work again tomorrow.",
+      )
+      .catch(() => {});
+    return;
+  }
 
   // The window before this message is recorded, so the model is not handed
   // the thing it is about to be asked as though it were history.
@@ -89,6 +116,9 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
           });
           break;
         case "done":
+          if (deps.usage && event.usage) {
+            await deps.usage.record(input.userId, agent.id, event.usage);
+          }
           break;
       }
     }

@@ -1,0 +1,72 @@
+# The runtime: one EC2 instance of its own, two containers.
+#
+#   the database   a second database on the hub's RDS instance. Its own
+#                  schema and its own credentials; nothing joins across.
+#   Caddy          TLS for runtime.cuckoo.onl, which the hub requires.
+#
+# Why a public address for a service the hub could reach privately: the hub
+# refuses to post webhooks to private, loopback or link-local addresses, so
+# that nobody can point a binding at a metadata service or a database
+# (delivery/webhook.go). That rule applies to us too — deliberately. The moment
+# there is an exception for our own service, the protocol stops being the
+# thing everyone uses.
+#
+# What protects the open endpoint is the signature: /hooks/{agentId} verifies
+# with the secret of the agent the URL names before it reads the body, and
+# refuses a body that claims to be a different agent.
+#
+# Every value comes from .env beside this file. The image is built on a laptop
+# and loaded here by deploy/deploy-runtime.sh; nothing is compiled here.
+
+name: cuckoo-runtime
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  runtime:
+    image: ${RUNTIME_IMAGE:?set RUNTIME_IMAGE in .env (deploy-runtime.sh writes it)}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      RUNTIME_PORT: "8081"
+      RUNTIME_HUB_URL: ${RUNTIME_HUB_URL:?set RUNTIME_HUB_URL in .env}
+      RUNTIME_PUBLIC_URL: https://${RUNTIME_DOMAIN:?set RUNTIME_DOMAIN in .env}
+      RUNTIME_DATABASE_URL: postgres://${DB_USER:-cuckoo}:${DB_PASSWORD:?set DB_PASSWORD in .env}@${DB_HOST:?set DB_HOST in .env}:${DB_PORT:-5432}/${DB_NAME:-cuckoo_runtime}?sslmode=${DB_SSLMODE:-require}
+      # Encrypts binding secrets, and later people's app tokens. Not in the
+      # database, so a stolen dump is ciphertext. Losing it means every agent
+      # must be registered again.
+      RUNTIME_SECRET_KEY: ${RUNTIME_SECRET_KEY:?set RUNTIME_SECRET_KEY in .env (openssl rand -hex 32)}
+      RUNTIME_MODEL_PROVIDER: ${RUNTIME_MODEL_PROVIDER:-fireworks}
+      RUNTIME_MODEL_API_KEY: ${RUNTIME_MODEL_API_KEY:?set RUNTIME_MODEL_API_KEY in .env}
+      RUNTIME_DEFAULT_MODEL: ${RUNTIME_DEFAULT_MODEL:-accounts/fireworks/models/deepseek-v4-flash-0731}
+      # What one person may spend a day. Past it the agent says so and stops;
+      # nothing here is worth an unbounded bill overnight.
+      RUNTIME_DAILY_TOKEN_LIMIT: "${RUNTIME_DAILY_TOKEN_LIMIT:-200000}"
+      RUNTIME_LOG_LEVEL: ${RUNTIME_LOG_LEVEL:-info}
+    expose:
+      - "8081"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *logging
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      RUNTIME_DOMAIN: ${RUNTIME_DOMAIN}
+      RUNTIME_UPSTREAM: runtime:8081
+    volumes:
+      - ./runtime-Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - runtime
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -34,6 +34,11 @@ export interface Config {
   modelApiKey: string;
   /** What a template does not name. Ids are the provider's own. */
   defaultModel: string;
+  /**
+   * Tokens one person may spend in a day, across their agents. 0 means no
+   * ceiling, which is for a laptop and not for a server.
+   */
+  dailyTokenLimit: number;
   logLevel: "debug" | "info" | "warn" | "error";
 }
 
@@ -77,6 +82,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // so a machine already set up for one provider needs nothing new.
     modelApiKey: env.RUNTIME_MODEL_API_KEY ?? env[keyVariable(provider)] ?? "",
     defaultModel: env.RUNTIME_DEFAULT_MODEL ?? defaultModelFor(provider),
+    dailyTokenLimit: Number(env.RUNTIME_DAILY_TOKEN_LIMIT ?? 200_000),
     logLevel: (env.RUNTIME_LOG_LEVEL as Config["logLevel"]) ?? "info",
   };
 }

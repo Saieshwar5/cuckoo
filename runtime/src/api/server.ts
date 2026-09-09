@@ -24,6 +24,8 @@ export interface ServerDeps {
   registry: Registry;
   jobs: Jobs;
   version: string;
+  /** The hub's base URL, so health can say whether it is reachable. */
+  hubUrl?: string;
 }
 
 export function createRuntimeServer(deps: ServerDeps): Server {
@@ -64,19 +66,37 @@ async function route(
 /**
  * Alive, and able to reach what it needs. Shaped like the hub's, so one thing
  * watches both.
+ *
+ * The hub is checked as well as the database, because a runtime that cannot
+ * reach the hub cannot do the only thing it exists for — and reporting healthy
+ * while silently answering nobody is the failure that goes unnoticed longest.
+ * It is reported but does not fail the check: a hub that is briefly away is
+ * not a reason to have this restarted underneath it.
  */
 async function health(res: ServerResponse, deps: ServerDeps): Promise<void> {
-  let postgres = "ok";
-  try {
-    await deps.pool.query("SELECT 1");
-  } catch {
-    postgres = "down";
-  }
+  const [postgres, hub] = await Promise.all([
+    deps.pool
+      .query("SELECT 1")
+      .then(() => "ok")
+      .catch(() => "down"),
+    reachable(deps.hubUrl),
+  ]);
+
   send(res, postgres === "ok" ? 200 : 503, {
-    status: postgres === "ok" ? "ok" : "degraded",
+    status: postgres === "ok" ? (hub === "ok" ? "ok" : "degraded") : "down",
     version: deps.version,
-    components: { postgres },
+    components: { postgres, hub },
   });
+}
+
+async function reachable(hubUrl?: string): Promise<string> {
+  if (!hubUrl) return "unknown";
+  try {
+    const response = await fetch(`${hubUrl}/healthz`, { signal: AbortSignal.timeout(2_000) });
+    return response.ok ? "ok" : "down";
+  } catch {
+    return "down";
+  }
 }
 
 /**
