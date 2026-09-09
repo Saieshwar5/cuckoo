@@ -8,7 +8,7 @@
  * "it works".
  */
 
-import type { Config } from "../config.ts";
+import { keyVariable, type Config } from "../config.ts";
 import { FakeHarness } from "./fake.ts";
 import type { Harness } from "./harness.ts";
 import { PiHarness } from "./pi.ts";
@@ -23,8 +23,11 @@ export function selectHarness(config: Config, env: NodeJS.ProcessEnv = process.e
       { say: "That is what the forecast says." },
     ]);
   }
-  if (!config.anthropicApiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not set (or set RUNTIME_HARNESS=fake)");
+  if (!config.modelApiKey) {
+    throw new Error(
+      `no key for ${config.modelProvider}: set RUNTIME_MODEL_API_KEY or ` +
+        `${keyVariable(config.modelProvider)} (or RUNTIME_HARNESS=fake)`,
+    );
   }
-  return new PiHarness({ apiKey: config.anthropicApiKey });
+  return new PiHarness({ apiKey: config.modelApiKey, provider: config.modelProvider });
 }

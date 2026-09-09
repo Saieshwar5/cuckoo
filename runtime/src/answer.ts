@@ -122,19 +122,45 @@ function toolsFor(agent: AgentRecord, known: Map<string, Tool>): Tool[] {
   return tools;
 }
 
+/** How much of a remembered tool result the model is shown again. */
+const TOOL_RECALL_CHARS = 400;
+
 /**
- * The window as the model wants it. Tool rows are left out: what a tool
- * returned mattered to the answer that was given, and that answer is in the
- * transcript. Replaying every tool result would fill the window with
- * yesterday's weather.
+ * The window as the model wants it, tool calls included.
+ *
+ * Leaving tool rows out was the first design here, on the reasoning that what
+ * a tool returned had already been folded into the answer beside it. Running
+ * a real model against a real conversation showed what that actually teaches:
+ * a transcript where the assistant produces facts from nowhere, again and
+ * again, is a demonstration that facts do not need looking up. After a few
+ * turns the weather agent stopped calling the weather tool and began inventing
+ * plausible temperatures instead — which is worse than refusing, because it
+ * looks exactly like working.
+ *
+ * So the calls stay in, with their results trimmed. The model is shown a
+ * conversation in which every answer was preceded by a lookup, because that is
+ * what happened, and it is what should happen again.
  */
 function asMessages(history: Turn[]): HarnessMessage[] {
-  return history
-    .filter((turn) => turn.role !== "tool" && turn.text)
-    .map((turn) => ({
-      role: turn.role === "assistant" ? ("assistant" as const) : ("user" as const),
+  const out: HarnessMessage[] = [];
+  for (const turn of history) {
+    if (turn.role === "tool") {
+      const result = JSON.stringify(turn.toolResult ?? {});
+      out.push({
+        role: "assistant",
+        content:
+          `[called ${turn.toolName ?? "a tool"} and it returned ` +
+          `${result.slice(0, TOOL_RECALL_CHARS)}${result.length > TOOL_RECALL_CHARS ? "…" : ""}]`,
+      });
+      continue;
+    }
+    if (!turn.text) continue;
+    out.push({
+      role: turn.role === "assistant" ? "assistant" : "user",
       content: turn.text,
-    }));
+    });
+  }
+  return out;
 }
 
 /**

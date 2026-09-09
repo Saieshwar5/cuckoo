@@ -102,14 +102,12 @@ test("answers, streams the words, and writes down both sides", async () => {
   assert.equal(turns.rows[1]!.text!.trim(), "yes, tomorrow");
 });
 
-test("the model is given the persona and the history, then the new message", async () => {
+test("the window keeps tool calls, so the model is shown that answers were looked up", async () => {
   const { harness, turns, deps } = setup([{ say: "ok" }]);
   turns.history = [
     { id: "1", role: "user", text: "hello", createdAt: "" },
     { id: "2", role: "assistant", text: "hi", createdAt: "" },
-    // A tool row is remembered but is not replayed to the model: the answer
-    // it produced is already in the transcript.
-    { id: "3", role: "tool", text: "", toolName: "weather", createdAt: "" },
+    { id: "3", role: "tool", text: "", toolName: "weather", toolResult: { highC: 31 }, createdAt: "" },
   ];
 
   await answer(ASKED, deps);
@@ -117,9 +115,15 @@ test("the model is given the persona and the history, then the new message", asy
   const run = harness.runs[0]!;
   assert.equal(run.system, "You are the weather.");
   assert.equal(run.model, "claude-sonnet-5");
+  // The tool call stays in. Leaving it out was the first design, and a real
+  // model against a real conversation showed what that teaches: a transcript
+  // where the assistant produces facts from nowhere is a demonstration that
+  // facts need no looking up. The weather agent stopped calling the weather
+  // tool and began inventing temperatures, which looks exactly like working.
   assert.deepEqual(run.messages, [
     { role: "user", content: "hello" },
     { role: "assistant", content: "hi" },
+    { role: "assistant", content: '[called weather and it returned {"highC":31}]' },
     { role: "user", content: "will it rain?" },
   ]);
 });
