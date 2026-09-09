@@ -19,8 +19,12 @@ const config: ExpoConfig = {
     // and everything Google knows about it hangs off this string.
     package: 'onl.cuckoo.app',
     // What tells the app which Firebase project delivers its notifications.
-    // Not in the repository: it identifies this app to Google.
-    googleServicesFile: './google-services.json',
+    //
+    // Not in the repository. EAS builds from git, so a gitignored file simply
+    // is not there — it is uploaded once as a file secret and arrives as a
+    // path in the environment. Locally the file itself is used, so a build on
+    // this machine needs nothing from Expo.
+    googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './google-services.json',
     adaptiveIcon: {
       backgroundColor: '#000000',
       foregroundImage: './assets/android-icon-foreground.png',
