@@ -45,6 +45,8 @@ export default function ChatScreen() {
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   // The message a long-press opened the menu for.
   const [menu, setMenu] = useState<ChatMessage | null>(null);
+  // The header's menu, which is about the agent rather than about a message.
+  const [chatMenu, setChatMenu] = useState(false);
   const memory = useMemory();
 
   // Drafts: what was typed here and not sent, kept on the device.
@@ -91,6 +93,45 @@ export default function ChatScreen() {
 
   // What can be done with one message. Copy needs words; delete-for-me
   // needs an id, which one of ours still waiting for the hub does not have.
+  // What somebody reaches for while they are in the conversation and mildly
+  // annoyed. Muting first, because a mute that is three screens away is a
+  // block: people do not go looking, they end it.
+  const agentActions = (): SheetAction[] => {
+    if (who?.kind !== 'agent') return [];
+    const agentId = who.id;
+    const muted = !!contact?.muted_until && new Date(contact.muted_until) > new Date();
+    return [
+      muted
+        ? {
+            label: t('chat.menu.unmute'),
+            icon: 'notifications-outline' as const,
+            onPress: () => void agentsController?.settings(agentId, { muted_until: null }),
+            testID: 'chat-unmute',
+          }
+        : {
+            label: t('chat.menu.mute'),
+            icon: 'notifications-off-outline' as const,
+            onPress: () =>
+              void agentsController?.settings(agentId, {
+                muted_until: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
+              }),
+            testID: 'chat-mute',
+          },
+      {
+        label: t('chat.menu.profile'),
+        icon: 'person-circle-outline' as const,
+        onPress: () => router.push({ pathname: '/agent/[id]', params: { id: agentId } }),
+        testID: 'chat-profile',
+      },
+      {
+        label: t('chat.menu.block'),
+        icon: 'ban-outline' as const,
+        onPress: () => void agentsController?.block(agentId),
+        testID: 'chat-block',
+      },
+    ];
+  };
+
   const actionsFor = (m: ChatMessage): SheetAction[] => [
     {
       icon: 'arrow-undo-outline',
@@ -133,6 +174,12 @@ export default function ChatScreen() {
         avatar={who?.kind === 'agent' ? agentAvatar(who.id, who.has_avatar) : null}
         typing={chat.typing}
         onBack={back}
+        onOpenProfile={
+          who?.kind === 'agent'
+            ? () => router.push({ pathname: '/agent/[id]', params: { id: who.id } })
+            : undefined
+        }
+        onMore={who?.kind === 'agent' ? () => setChatMenu(true) : undefined}
       />
       <View style={[styles.wall, { backgroundColor: colors.wallpaper }]}>
         {chat.loading ? (
@@ -255,6 +302,7 @@ export default function ChatScreen() {
             onClose={() => setMenu(null)}
             actions={menu ? actionsFor(menu) : []}
           />
+          <ActionSheet visible={chatMenu} onClose={() => setChatMenu(false)} actions={agentActions()} />
         </>
       )}
     </Screen>

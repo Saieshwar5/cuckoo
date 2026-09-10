@@ -7,11 +7,10 @@ import { useAgents } from '@/agents/AgentsProvider';
 import { isMuted } from '@/agents/store';
 import { arrange, filterConversations } from '@/chats/store';
 import { useChats } from '@/chats/useChats';
-import { ActionSheet } from '@/components/ActionSheet';
 import { ChatRow } from '@/components/ChatRow';
 import { EmptyState } from '@/components/EmptyState';
-import { Fab } from '@/components/Fab';
 import { Header } from '@/components/Header';
+import { IconButton } from '@/components/IconButton';
 import { Screen } from '@/components/Screen';
 import { SearchBar } from '@/components/SearchBar';
 import { t } from '@/i18n';
@@ -27,7 +26,6 @@ export default function ChatsScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const [query, setQuery] = useState('');
-  const [sheet, setSheet] = useState(false);
   const arranged = arrange(conversations, contacts);
   const shown = filterConversations(arranged.shown, query);
   const byAgent = new Map(contacts.map((c) => [c.agent.id, c]));
@@ -35,11 +33,32 @@ export default function ChatsScreen() {
     const agent = c.participants.find((p) => p.kind === 'agent');
     return agent ? byAgent.get(agent.id) : undefined;
   };
-  const goToAgents = () => router.push('/(tabs)/agents');
 
   return (
     <Screen padded={false}>
-      <Header title={t('app.name')} mark subtitle={!connected && !loading ? t('chats.connecting') : null} />
+      <Header
+        title={t('app.name')}
+        mark
+        subtitle={!connected && !loading ? t('chats.connecting') : null}
+        actions={
+          <>
+            {/* Scanning lives in the top bar, beside search, because that is
+                where UPI taught every thumb in India to look for it. */}
+            <IconButton
+              icon="qr-code-outline"
+              label={t('chats.new.scan')}
+              onPress={() => router.push('/scan')}
+              testID="chats-scan"
+            />
+            <IconButton
+              icon="sparkles-outline"
+              label={t('catalogue.title')}
+              onPress={() => router.push('/catalogue')}
+              testID="chats-catalogue"
+            />
+          </>
+        }
+      />
       <SearchBar
         value={query}
         onChangeText={setQuery}
@@ -93,37 +112,13 @@ export default function ChatsScreen() {
               icon="chatbubbles-outline"
               title={t('chats.empty.title')}
               subtitle={t('chats.empty.subtitle')}
-              action={{ title: t('chats.empty.scan'), onPress: () => router.push('/scan') }}
-              secondary={{ title: t('chats.empty.action'), onPress: goToAgents }}
+              action={{ title: t('agents.empty.browse'), onPress: () => router.push('/catalogue') }}
+              secondary={{ title: t('chats.empty.scan'), onPress: () => router.push('/scan') }}
             />
           )
         }
         contentContainerStyle={shown.length === 0 ? grow : padded}
         keyboardShouldPersistTaps="handled"
-      />
-      <Fab
-        icon="chatbubble-ellipses"
-        label={t('chats.new')}
-        onPress={() => setSheet(true)}
-        testID="new-chat"
-      />
-      <ActionSheet
-        visible={sheet}
-        onClose={() => setSheet(false)}
-        actions={[
-          {
-            icon: 'qr-code-outline',
-            label: t('chats.new.scan'),
-            onPress: () => router.push('/scan'),
-            testID: 'sheet-scan',
-          },
-          {
-            icon: 'sparkles-outline',
-            label: t('chats.new.create'),
-            onPress: () => router.push('/agent/new'),
-            testID: 'sheet-create',
-          },
-        ]}
       />
     </Screen>
   );
