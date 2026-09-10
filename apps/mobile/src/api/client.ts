@@ -142,6 +142,9 @@ export interface Api {
   // needs no code: being in the catalogue is the invitation.
   listCatalogue(): Promise<CatalogueEntry[]>;
   addFromCatalogue(agentId: string): Promise<PairAccepted>;
+  // Where this device can be reached when nobody is looking at it. Sent
+  // after signing in, and again whenever the token changes.
+  registerPush(token: string, platform: 'android' | 'ios'): Promise<void>;
   listContacts(): Promise<Contact[]>;
   // Mute, pin, archive: the person's own settings for an agent. The agent
   // is not told any of it.
@@ -315,6 +318,9 @@ export function createApi(opts: ApiOptions): Api {
       (await request<{ agents: CatalogueEntry[] }>('GET', '/v1/client/catalogue')).agents,
     addFromCatalogue: (agentId) =>
       request<PairAccepted>('POST', `/v1/client/catalogue/${encodeURIComponent(agentId)}/add`),
+    registerPush: async (token, platform) => {
+      await request<void>('PUT', '/v1/client/devices/push', { token, platform });
+    },
     listContacts: async () => (await request<{ contacts: Contact[] }>('GET', '/v1/client/contacts')).contacts,
     updateContact: (id, settings) => request('PATCH', `/v1/client/contacts/${id}`, settings),
     removeContact: (id) => request('DELETE', `/v1/client/contacts/${id}`),

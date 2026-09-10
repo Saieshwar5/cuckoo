@@ -15,6 +15,16 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'automatic',
   ios: { supportsTablet: false },
   android: {
+    // Permanent: an app's package name cannot change once it is published,
+    // and everything Google knows about it hangs off this string.
+    package: 'onl.cuckoo.app',
+    // What tells the app which Firebase project delivers its notifications.
+    //
+    // Not in the repository. EAS builds from git, so a gitignored file simply
+    // is not there — it is uploaded once as a file secret and arrives as a
+    // path in the environment. Locally the file itself is used, so a build on
+    // this machine needs nothing from Expo.
+    googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './google-services.json',
     adaptiveIcon: {
       backgroundColor: '#000000',
       foregroundImage: './assets/android-icon-foreground.png',
@@ -29,6 +39,16 @@ const config: ExpoConfig = {
     'expo-secure-store',
     ['expo-camera', { cameraPermission: 'Cuckoo uses the camera to scan agent codes.' }],
     [
+      'expo-notifications',
+      {
+        // Android tints the small icon itself, so it must be a silhouette on
+        // transparency — which is exactly what the monochrome adaptive icon
+        // already is. One drawing, two places it is right.
+        icon: './assets/android-icon-monochrome.png',
+        color: '#000000',
+      },
+    ],
+    [
       'expo-splash-screen',
       {
         image: './assets/splash-icon.png',
@@ -38,7 +58,13 @@ const config: ExpoConfig = {
       },
     ],
   ],
-  extra: { hubUrl },
+  // The Expo account this belongs to, and the project Expo mints push
+  // addresses against. Without the projectId a build cannot ask for one.
+  owner: 'saieshwar5',
+  extra: {
+    hubUrl,
+    eas: { projectId: 'b418db5c-f936-40b9-83a3-8ff81341612c' },
+  },
 };
 
 export default config;

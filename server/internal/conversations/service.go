@@ -24,6 +24,7 @@ type Service struct {
 	publisher realtime.Publisher
 	streams   *StreamStore
 	signer    *signing.Signer
+	push      Pusher
 }
 
 // Option configures a Service.
@@ -39,6 +40,13 @@ func WithLimiter(l ratelimit.Limiter) Option {
 // WithPublisher announces messages and delivery changes to the devices of
 // the people in the conversation. Without it nothing is announced; the
 // record is unaffected either way.
+// WithPush wakes the phones of people who are not looking. Without it the
+// hub delivers to whoever is connected and nothing more, which is what a
+// development hub and every test wants.
+func WithPush(p Pusher) Option {
+	return func(s *Service) { s.push = p }
+}
+
 func WithPublisher(p realtime.Publisher) Option {
 	return func(s *Service) { s.publisher = p }
 }

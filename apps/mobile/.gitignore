@@ -39,3 +39,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase, and the key that sends on our behalf. Neither is ours to publish:
+# google-services.json identifies this app to Google, and the service account
+# key can send notifications to every phone that has installed it.
+google-services.json
+firebase-service-account.json

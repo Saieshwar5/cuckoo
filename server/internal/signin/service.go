@@ -296,3 +296,42 @@ func errBadToken() error {
 	return domain.Unauthorized("invalid_credentials",
 		"That session is not valid. It may have expired, or been signed out from another device.")
 }
+
+// RegisterPush records where a device can be reached when nobody is looking
+// at it.
+//
+// The same token is cleared from any other session first. A reinstall, or a
+// second person signing in on the same phone, hands the same address to a new
+// session — and the old one must stop being reachable before this one starts,
+// or one phone receives another person's notifications.
+func (s *Service) RegisterPush(ctx context.Context, sessionID uuid.UUID, token, platform string) error {
+	token = strings.TrimSpace(token)
+	if token == "" || len(token) > pushTokenMax {
+		return domain.InvalidField("token", "invalid_push_token",
+			"That is not a notification token.")
+	}
+	switch platform {
+	case "", "android", "ios":
+	default:
+		return domain.InvalidField("platform", "invalid_platform",
+			"The platform must be android or ios.")
+	}
+
+	return s.store.WithTx(ctx, func(tx *store.Store) error {
+		if err := tx.SetSessionPushToken(ctx, gen.SetSessionPushTokenParams{
+			PushToken: &token, ID: sessionID,
+		}); err != nil {
+			return domain.Internal(fmt.Errorf("release push token: %w", err))
+		}
+		n, err := tx.RegisterSessionPush(ctx, gen.RegisterSessionPushParams{
+			PushToken: &token, PushPlatform: platform, ID: sessionID,
+		})
+		if err != nil {
+			return domain.Internal(fmt.Errorf("register push for %s: %w", sessionID, err))
+		}
+		if n == 0 {
+			return errBadToken()
+		}
+		return nil
+	})
+}

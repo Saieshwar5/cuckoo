@@ -29,6 +29,44 @@ type devicesEnvelope struct {
 }
 
 // listDevices serves GET /v1/client/devices.
+// registerPushRequest is where this device can be reached when nobody is
+// looking at it.
+type registerPushRequest struct {
+	// An Expo token, "ExponentPushToken[…]". Opaque to the hub.
+	Token string `json:"token"`
+	// "android" or "ios". Empty is accepted: the token is what matters.
+	Platform string `json:"platform"`
+}
+
+// registerPush records the address of the device this session belongs to.
+//
+// The app calls it after signing in and again whenever the token changes —
+// they rotate, and a stale one is a notification that silently goes nowhere.
+func (h *Handler) registerPush(w http.ResponseWriter, r *http.Request) {
+	if _, ok := principal.UserID(r.Context()); !ok {
+		httpx.Error(w, r, domain.Unauthorized("unauthorized", "Sign in to continue."))
+		return
+	}
+	sessionID, ok := principal.SessionID(r.Context())
+	if !ok {
+		// The development header has no session, and a notification address
+		// with no device to belong to is meaningless.
+		httpx.Error(w, r, domain.Forbidden("no_session",
+			"Notifications are registered by a signed-in device."))
+		return
+	}
+	var req registerPushRequest
+	if err := httpx.Decode(w, r, &req); err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	if err := h.signIn.RegisterPush(r.Context(), sessionID, req.Token, req.Platform); err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) listDevices(w http.ResponseWriter, r *http.Request) {
 	userID, ok := principal.UserID(r.Context())
 	if !ok {

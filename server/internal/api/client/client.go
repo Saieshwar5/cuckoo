@@ -31,17 +31,33 @@ type Handler struct {
 	media         *media.Service
 	retention     *retention.Service
 	signIn        *signin.Service
+	// presence records who is looking, so a notification is not sent about a
+	// message somebody is watching arrive. Optional: without it nobody is
+	// ever considered present, and everything notifies.
+	presence realtime.Presence
+}
+
+// Option configures the handler.
+type Option func(*Handler)
+
+// WithPresence shares who is connected, so push can tell.
+func WithPresence(p realtime.Presence) Option {
+	return func(h *Handler) { h.presence = p }
 }
 
 // New builds the client API handler.
 func New(userService *users.Service, agentService *agents.Service, conversationService *conversations.Service,
 	hub *realtime.Hub, pairingService *pairing.Service, apiKeyService *apikeys.Service, mediaService *media.Service,
-	retentionService *retention.Service, signInService *signin.Service) *Handler {
-	return &Handler{
+	retentionService *retention.Service, signInService *signin.Service, opts ...Option) *Handler {
+	h := &Handler{
 		users: userService, agents: agentService, conversations: conversationService, hub: hub,
 		pairing: pairingService, apiKeys: apiKeyService, media: mediaService, retention: retentionService,
 		signIn: signInService,
 	}
+	for _, o := range opts {
+		o(h)
+	}
+	return h
 }
 
 // Routes returns the client API routes, to be mounted behind authentication.
@@ -90,6 +106,8 @@ func (h *Handler) Routes() chi.Router {
 	// never mint another.
 	// The devices a person is signed in on, and ending one or all the others.
 	r.Get("/devices", h.listDevices)
+	// Where to reach this device when nobody is looking at it.
+	r.Put("/devices/push", h.registerPush)
 	r.Delete("/devices", h.signOutOtherDevices)
 	r.Delete("/devices/{id}", h.signOutDevice)
 

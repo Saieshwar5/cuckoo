@@ -32,6 +32,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/mail"
 	"github.com/Saieshwar5/cuckoo/server/internal/media"
 	"github.com/Saieshwar5/cuckoo/server/internal/pairing"
+	"github.com/Saieshwar5/cuckoo/server/internal/push"
 	"github.com/Saieshwar5/cuckoo/server/internal/ratelimit"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 	"github.com/Saieshwar5/cuckoo/server/internal/retention"
@@ -110,10 +111,15 @@ func run() error {
 	}
 
 	agentService := agents.New(db, agents.WithPublisher(bus))
+	// Who has the app open, shared across instances so a second one knows
+	// too, and the notifier that wakes everybody else.
+	presence := realtime.NewRedisPresence(redisClient, "cuckoo:presence")
+	notifier := push.New(db, presence, push.NewExpoSender(push.WithAccessToken(cfg.ExpoAccessToken)), log)
 	conversationService := conversations.New(db,
 		conversations.WithLimiter(limits),
 		conversations.WithPublisher(bus),
 		conversations.WithStreams(conversations.NewStreamStore(redisClient, "cuckoo:")),
+		conversations.WithPush(notifier),
 		conversations.WithSigner(signer))
 	deliveryService := delivery.New(db, conversationService)
 	userService := users.New(db)
@@ -157,6 +163,7 @@ func run() error {
 		Conversations: conversationService,
 		Delivery:      deliveryService,
 		Pairing:       pairingService,
+		Presence:      presence,
 		APIKeys:       apiKeyService,
 		Media:         mediaService,
 		PublicURL:     cfg.PublicURL,

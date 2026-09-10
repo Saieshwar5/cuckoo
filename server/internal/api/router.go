@@ -70,6 +70,9 @@ type Deps struct {
 	Health    map[string]HealthCheck
 	// Version is the build stamp shown on /healthz; empty reads as "dev".
 	Version string
+	// Presence records who has the app open, so a notification is not sent
+	// about a message somebody is watching arrive. Optional.
+	Presence realtime.Presence
 }
 
 // NewRouter builds the server's HTTP handler.
@@ -112,7 +115,8 @@ func NewRouter(d Deps) http.Handler {
 	// The app's API. Every route below requires a signed-in person.
 	r.Route("/v1/client", func(r chi.Router) {
 		r.Use(middleware.RequireUser(d.UserAuth))
-		r.Mount("/", client.New(d.Users, d.Agents, d.Conversations, d.Hub, d.Pairing, d.APIKeys, d.Media, d.Retention, d.SignIn).Routes())
+		r.Mount("/", client.New(d.Users, d.Agents, d.Conversations, d.Hub, d.Pairing, d.APIKeys, d.Media, d.Retention,
+			d.SignIn, client.WithPresence(d.Presence)).Routes())
 	})
 
 	// Agent management: owners creating agents, connecting backends and

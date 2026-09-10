@@ -23,6 +23,11 @@ const (
 	// codeAttemptsMax is how many guesses a code allows. The code space is a
 	// million; five guesses makes a guess worth nothing.
 	codeAttemptsMax = 5
+
+	// pushTokenMax bounds what a device may claim its address is. Expo's are
+	// far shorter; this is the column's limit, not a guess at the format,
+	// because the hub hands the token back to Expo and never reads inside it.
+	pushTokenMax = 256
 	// sessionTTL is how long a device stays signed in without signing in
 	// again. Generous, because there is no refresh yet and a phone that has
 	// to sign in monthly is a phone that gets uninstalled.
