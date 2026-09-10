@@ -304,5 +304,11 @@
   "catalogue.open": "Open",
   "catalogue.empty.title": "Nothing here yet",
   "catalogue.empty.subtitle": "Agents will appear here as they are published.",
-  "agents.empty.browse": "See what Cuckoo runs"
+  "agents.empty.browse": "See what Cuckoo runs",
+  "chat.openProfile": "About {name}",
+  "chat.more": "More",
+  "chat.menu.mute": "Mute for 8 hours",
+  "chat.menu.unmute": "Unmute",
+  "chat.menu.profile": "About this agent",
+  "chat.menu.block": "Block"
 }

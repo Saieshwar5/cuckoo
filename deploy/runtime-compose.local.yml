@@ -1,0 +1,33 @@
+# The runtime's database on its own machine, instead of RDS.
+#
+#   docker compose -f runtime-compose.yml -f runtime-compose.local.yml up -d
+#
+# The same overlay idea as the hub's: what a runtime with no managed database
+# behind it needs, and nothing more. Written when AWS had no db.t4g.micro left
+# in ap-south-1a and waiting for capacity meant waiting on other people.
+
+services:
+  runtime:
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    environment:
+      POSTGRES_USER: ${DB_USER:-cuckoo}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-cuckoo_runtime}
+    volumes:
+      - ${DATA_DIR:-/data}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cuckoo} -d ${DB_NAME:-cuckoo_runtime}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

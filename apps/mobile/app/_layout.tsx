@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
@@ -15,19 +16,23 @@ import { ThemeProvider, useTheme } from '@/theme';
 // out person can only reach sign-in; a signed-in one can never see it.
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <SessionProvider>
-        <RealtimeProvider>
-          <CacheProvider>
-            <ChatsProvider>
-              <AgentsProvider>
-                <Routes />
-              </AgentsProvider>
-            </ChatsProvider>
-          </CacheProvider>
-        </RealtimeProvider>
-      </SessionProvider>
-    </ThemeProvider>
+    // KeyboardProvider is outermost: it measures the keyboard for everything
+    // below it, and Screen leans on that measurement to lift the composer.
+    <KeyboardProvider>
+      <ThemeProvider>
+        <SessionProvider>
+          <RealtimeProvider>
+            <CacheProvider>
+              <ChatsProvider>
+                <AgentsProvider>
+                  <Routes />
+                </AgentsProvider>
+              </ChatsProvider>
+            </CacheProvider>
+          </RealtimeProvider>
+        </SessionProvider>
+      </ThemeProvider>
+    </KeyboardProvider>
   );
 }
 
