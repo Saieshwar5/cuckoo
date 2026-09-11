@@ -79,6 +79,10 @@ describe('ChatRow', () => {
       },
     };
     expect(rowActivity(writingNow, undefined)).toBe('writing…');
+    // A tool running in the middle of a reply is named, not called writing.
+    expect(
+      rowActivity(writingNow, { state: 'working', label: 'Checking the weather', until: now + 5000 }),
+    ).toBe('Checking the weather…');
     expect(rowActivity(dm, { state: 'working', label: 'Searching flights', until: now + 5000 })).toBe(
       'Searching flights…',
     );
