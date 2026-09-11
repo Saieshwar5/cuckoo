@@ -116,8 +116,10 @@ type messageResponse struct {
 	ReplyTo        *replyToResponse `json:"reply_to"`
 	Status         string           `json:"status"`
 	Truncated      bool             `json:"truncated"`
-	DeliveryStatus *string          `json:"delivery_status"`
-	CreatedAt      time.Time        `json:"created_at"`
+	// Stopped: the person pressed stop while the agent was writing this.
+	Stopped        bool      `json:"stopped"`
+	DeliveryStatus *string   `json:"delivery_status"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type messageEnvelope struct {
@@ -148,6 +150,7 @@ func newMessageResponse(m conversations.Message) messageResponse {
 		Body:      newBodyResponse(m.Body),
 		Status:    string(m.Status),
 		Truncated: m.Truncated,
+		Stopped:   m.Stopped,
 		CreatedAt: m.CreatedAt,
 	}
 	if m.DeliveryStatus != "" {

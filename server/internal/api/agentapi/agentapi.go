@@ -48,6 +48,8 @@ func (h *Handler) Routes() chi.Router {
 		r.Get("/", h.getConversation)
 		r.Get("/messages", h.listMessages)
 		r.Post("/messages", h.sendMessage)
+		r.Post("/activity", h.activity)
+		// The first version of /activity: start is thinking, stop is idle.
 		r.Post("/typing", h.typing)
 	})
 

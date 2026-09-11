@@ -81,6 +81,10 @@ func (h *Handler) Routes() chi.Router {
 		// view changes.
 		r.Delete("/messages/{mid}", h.deleteMessageForMe)
 		r.Post("/clear", h.clearConversation)
+		// Asking the agents here to stop what they are doing.
+		r.Post("/stop", h.stopConversation)
+		// How far the person has read, for the badge.
+		r.Post("/read", h.markRead)
 	})
 
 	// Files: uploaded before the message that carries them, and read back

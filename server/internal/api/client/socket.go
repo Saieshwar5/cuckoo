@@ -70,13 +70,22 @@ type messageDeltaFrame struct {
 	Text           string `json:"text"`
 }
 
-// typingFrame says an agent is working. The app shows the indicator until
-// ExpiresAt, a stop frame, or a message, whichever comes first.
-type typingFrame struct {
+// activityFrame says what an agent is doing: thinking, working at what the
+// label names, or idle. The app shows it until ExpiresAt, an idle frame, or
+// a message, whichever comes first.
+type activityFrame struct {
 	ConversationID string    `json:"conversation_id"`
 	AgentID        string    `json:"agent_id"`
 	State          string    `json:"state"`
+	Label          string    `json:"label,omitempty"`
 	ExpiresAt      time.Time `json:"expires_at"`
+}
+
+// readFrame says this person has read a conversation up to a message, on
+// this device or another: the badge goes.
+type readFrame struct {
+	ConversationID string `json:"conversation_id"`
+	ReadUpTo       string `json:"read_up_to"`
 }
 
 // socket holds a live connection for the signed-in person and pushes them
@@ -192,16 +201,27 @@ func frameOf(ev realtime.Event) (frame, error) {
 			Text:           p.Text,
 		}}, nil
 
-	case conversations.EventTyping:
-		var p conversations.TypingEvent
+	case conversations.EventActivity:
+		var p conversations.ActivityEvent
 		if err := json.Unmarshal(ev.Payload, &p); err != nil {
 			return frame{}, err
 		}
-		return frame{Type: ev.Type, Data: typingFrame{
+		return frame{Type: ev.Type, Data: activityFrame{
 			ConversationID: domain.FormatID(domain.PrefixConv, p.ConversationID),
 			AgentID:        domain.FormatID(domain.PrefixAgent, p.AgentID),
 			State:          p.State,
+			Label:          p.Label,
 			ExpiresAt:      p.ExpiresAt,
+		}}, nil
+
+	case conversations.EventConversationRead:
+		var p conversations.ReadEvent
+		if err := json.Unmarshal(ev.Payload, &p); err != nil {
+			return frame{}, err
+		}
+		return frame{Type: ev.Type, Data: readFrame{
+			ConversationID: domain.FormatID(domain.PrefixConv, p.ConversationID),
+			ReadUpTo:       domain.FormatID(domain.PrefixMessage, p.ReadUpTo),
 		}}, nil
 
 	case conversations.EventDeliveryUpdated:

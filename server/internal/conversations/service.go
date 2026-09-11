@@ -216,9 +216,13 @@ func (s *Service) hydrate(ctx context.Context, rows []gen.Conversation) ([]Conve
 // hydrateFor fills conversations in as one person sees them: a row never
 // previews a message they cleared or hid.
 func (s *Service) hydrateFor(ctx context.Context, viewer uuid.UUID, rows []gen.Conversation) ([]Conversation, error) {
-	return s.hydrateWith(ctx, rows, func(ctx context.Context, ids []uuid.UUID) ([]gen.Message, error) {
+	convs, err := s.hydrateWith(ctx, rows, func(ctx context.Context, ids []uuid.UUID) ([]gen.Message, error) {
 		return s.store.ListLatestVisibleMessages(ctx, gen.ListLatestVisibleMessagesParams{UserID: viewer, ConversationIds: ids})
 	})
+	if err != nil {
+		return nil, err
+	}
+	return convs, s.attachUnread(ctx, viewer, convs)
 }
 
 func (s *Service) hydrateWith(ctx context.Context, rows []gen.Conversation,

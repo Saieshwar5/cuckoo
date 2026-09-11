@@ -57,7 +57,10 @@ type Conversation struct {
 	Kind         Kind
 	Participants []Participant
 	LastMessage  *Message
-	CreatedAt    time.Time
+	// Unread is how many messages others sent after the viewer last read,
+	// counted to 100. Zero for a reader with no view of their own.
+	Unread    int
+	CreatedAt time.Time
 }
 
 // Event types. EventMessageCreated is both what an agent's backend receives
@@ -74,18 +77,10 @@ const (
 	EventMessageStarted   = "message.started"
 	EventMessageDelta     = "message.delta"
 	EventMessageCompleted = "message.completed"
-	// EventTyping: an agent is working on a reply, or has stopped.
-	EventTyping = "typing"
+	// EventActivity: what an agent is doing in a conversation — thinking,
+	// working at something it names, or nothing.
+	EventActivity = "activity"
 )
-
-// TypingEvent tells a device an agent is working. It expires on its own:
-// the device clears the indicator at ExpiresAt unless told again.
-type TypingEvent struct {
-	ConversationID uuid.UUID `json:"conversation_id"`
-	AgentID        uuid.UUID `json:"agent_id"`
-	State          string    `json:"state"`
-	ExpiresAt      time.Time `json:"expires_at"`
-}
 
 // MessageDeltaEvent is one piece of a streaming message's text.
 type MessageDeltaEvent struct {
@@ -197,7 +192,7 @@ const (
 )
 
 // Message is one thing said in a conversation. Truncated marks a stream the
-// hub had to finish because the agent stopped without finishing it.
+// hub finished rather than the agent; Stopped says the person asked it to.
 type Message struct {
 	ID             uuid.UUID
 	ConversationID uuid.UUID
@@ -206,6 +201,7 @@ type Message struct {
 	ReplyTo        *ReplyRef
 	Status         MessageStatus
 	Truncated      bool
+	Stopped        bool
 	DeliveryStatus DeliveryStatus
 	CreatedAt      time.Time
 	// Signature is the hub's mark over the content (see signature.go). Empty
@@ -310,6 +306,7 @@ func messageFromRow(r gen.Message) (Message, error) {
 		Body:           body,
 		Status:         MessageStatus(r.Status),
 		Truncated:      r.Truncated,
+		Stopped:        r.Stopped,
 		CreatedAt:      r.CreatedAt,
 		Signature:      r.Signature,
 	}

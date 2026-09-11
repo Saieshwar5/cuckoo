@@ -18,6 +18,7 @@ const (
 	opStreamDelta = "stream.delta"
 	opStreamEnd   = "stream.end"
 	opTyping      = "typing"
+	opActivity    = "activity"
 )
 
 // replyFrame answers an operation. Operations that create or finish a
@@ -96,10 +97,14 @@ func (s *agentSocket) handleOp(ctx context.Context, op inboundFrame) bool {
 		msg := events.MessageOf(finished, s.agentName)
 		return s.reply(ctx, replyFrame{ReplyToCID: op.CID, OK: true, Message: &msg})
 
-	case opTyping:
+	case opTyping, opActivity:
 		conversationID, err := domain.ParseID(domain.PrefixConv, op.ConversationID)
 		if err == nil {
-			err = s.h.conversations.Typing(ctx, s.agentID, conversationID, op.State)
+			if op.Op == opTyping {
+				err = s.h.conversations.Typing(ctx, s.agentID, conversationID, op.State)
+			} else {
+				err = s.h.conversations.Activity(ctx, s.agentID, conversationID, op.State, op.Label)
+			}
 		}
 		if err != nil {
 			return s.reply(ctx, replyFrame{ReplyToCID: op.CID, Error: errorOf(err)})

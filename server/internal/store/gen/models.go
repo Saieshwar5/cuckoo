@@ -100,6 +100,7 @@ type Message struct {
 	Truncated        bool
 	ReplyToMessageID *uuid.UUID
 	Signature        []byte
+	Stopped          bool
 }
 
 type MessageDelivery struct {
@@ -144,6 +145,7 @@ type Participant struct {
 	AgentID        *uuid.UUID
 	JoinedAt       time.Time
 	ClearedBefore  *uuid.UUID
+	ReadUpTo       *uuid.UUID
 }
 
 type Report struct {

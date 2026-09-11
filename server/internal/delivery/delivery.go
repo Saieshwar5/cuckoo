@@ -247,6 +247,12 @@ func envelopeOf(d Delivery, conv conversations.Conversation, byMessage map[uuid.
 			return events.Envelope{}, domain.Internal(fmt.Errorf("delivery %s payload: %w", d.ID, err))
 		}
 		return events.NewConversationLeft(d.ID, d.CreatedAt, d.AgentID, conv, p.Reason), nil
+	case conversations.EventStopRequested:
+		var p conversations.StopPayload
+		if err := json.Unmarshal(d.Payload, &p); err != nil {
+			return events.Envelope{}, domain.Internal(fmt.Errorf("delivery %s payload: %w", d.ID, err))
+		}
+		return events.NewStopRequested(d.ID, d.CreatedAt, d.AgentID, conv, p.MessageID), nil
 	default:
 		return events.Envelope{}, domain.Internal(fmt.Errorf("delivery %s has unknown type %q", d.ID, d.EventType))
 	}

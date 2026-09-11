@@ -110,9 +110,11 @@ type Pusher interface {
 // pushed hands a finished message to whatever notifies phones, if anything
 // does. Everything about whether it is welcome is decided there.
 func (s *Service) pushed(ctx context.Context, conversationID uuid.UUID, userIDs []uuid.UUID, msg Message) {
-	if s.push == nil || msg.Sender.Kind != ParticipantAgent {
+	if s.push == nil || msg.Sender.Kind != ParticipantAgent || msg.Stopped {
 		// Only an agent's words reach a person's lock screen. A person's own
-		// message is already on their screen, and nobody else is in a DM.
+		// message is already on their screen, and nobody else is in a DM. A
+		// reply the person stopped is one they were watching, and chose to
+		// end: announcing it would be the phone arguing with them.
 		return
 	}
 	s.push.MessageLanded(ctx, Landed{

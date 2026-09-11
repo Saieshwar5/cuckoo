@@ -34,6 +34,56 @@ func (q *Queries) AddParticipant(ctx context.Context, arg AddParticipantParams) 
 	return err
 }
 
+const countUnread = `-- name: CountUnread :many
+SELECT p.conversation_id,
+       (SELECT count(*) FROM (
+            SELECT 1 FROM messages m
+            WHERE m.conversation_id = p.conversation_id
+              AND m.sender_user_id IS DISTINCT FROM p.user_id
+              AND (p.read_up_to IS NULL OR m.id > p.read_up_to)
+              AND (p.cleared_before IS NULL OR m.id > p.cleared_before)
+              AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.user_id = p.user_id AND h.message_id = m.id)
+            LIMIT 100
+        ) unread)::int AS unread
+FROM participants p
+WHERE p.user_id = $1::uuid
+  AND p.conversation_id = ANY($2::uuid[])
+`
+
+type CountUnreadParams struct {
+	UserID          uuid.UUID
+	ConversationIds []uuid.UUID
+}
+
+type CountUnreadRow struct {
+	ConversationID uuid.UUID
+	Unread         int32
+}
+
+// The number on a chat-list row: what others said after the person last
+// read, leaving out anything they cleared or hid. Counted to 100 and no
+// further — "99+" is all a badge ever says, and a chat nobody has opened in
+// a year should cost the list the same as one read this morning.
+func (q *Queries) CountUnread(ctx context.Context, arg CountUnreadParams) ([]CountUnreadRow, error) {
+	rows, err := q.db.Query(ctx, countUnread, arg.UserID, arg.ConversationIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountUnreadRow{}
+	for rows.Next() {
+		var i CountUnreadRow
+		if err := rows.Scan(&i.ConversationID, &i.Unread); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createConversation = `-- name: CreateConversation :one
 INSERT INTO conversations (id, kind)
 VALUES ($1, $2)
@@ -351,4 +401,28 @@ func (q *Queries) ListUsersSharingAgent(ctx context.Context, dollar_1 uuid.UUID)
 		return nil, err
 	}
 	return items, nil
+}
+
+const markRead = `-- name: MarkRead :execrows
+UPDATE participants
+SET read_up_to = $1::uuid
+WHERE conversation_id = $2
+  AND user_id = $3::uuid
+  AND (read_up_to IS NULL OR read_up_to < $1::uuid)
+`
+
+type MarkReadParams struct {
+	MessageID      uuid.UUID
+	ConversationID uuid.UUID
+	UserID         uuid.UUID
+}
+
+// Moves how far a person has read, and only forward: a device that was
+// behind cannot unread what another device has seen.
+func (q *Queries) MarkRead(ctx context.Context, arg MarkReadParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markRead, arg.MessageID, arg.ConversationID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
