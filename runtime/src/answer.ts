@@ -273,6 +273,8 @@ class Writer {
   private lastFlush = 0;
   private text = "";
   private renew?: ReturnType<typeof setInterval>;
+  // Whether an activity is up on the person's screen right now.
+  private showing = false;
 
   constructor(client: HubClient, conversationId: string) {
     this.client = client;
@@ -284,16 +286,21 @@ class Writer {
    * than an activity lasts. Safe to call repeatedly.
    */
   async busy(state: Exclude<ActivityState, "idle">, label?: string): Promise<void> {
-    if (this.stream) return; // words appearing say it better
+    // Once a reply is open, only a named tool is worth saying over it: a
+    // model often writes a line, then stops to look something up, and the
+    // person should see what, not a reply that has gone quiet.
+    if (this.stream && !label) return;
     const say = () => this.client.activity(this.conversationId, state, label).catch(() => {});
     if (this.renew) clearInterval(this.renew);
     this.renew = setInterval(() => void say(), RENEW_MS);
+    this.showing = true;
     await say();
   }
 
   private quiet(): void {
     if (this.renew) clearInterval(this.renew);
     this.renew = undefined;
+    this.showing = false;
   }
 
   private async idle(): Promise<void> {
@@ -309,6 +316,8 @@ class Writer {
       text = text.replace(/^\s+/, "");
     }
     if (!text) return;
+    // Words again after a tool: its name comes down, and "writing…" is true.
+    if (this.stream && this.showing) await this.idle();
     this.text += text;
     this.buffer += text;
     if (!this.stream) {

@@ -236,6 +236,24 @@ test("blank space before a tool call opens no reply, so the person sees what the
   assert.equal(hub.said(), "31 degrees ");
 });
 
+test("a tool called mid-reply is still named, and the name comes down when words resume", async () => {
+  const weather: Tool = {
+    name: "weather",
+    activity: "Checking the weather",
+    description: "",
+    parameters: {},
+    execute: async () => ({ highC: 31 }),
+  };
+  const { hub, deps } = setup([{ say: "I'll look." }, { call: "weather" }, { say: "31 degrees" }], [weather]);
+
+  await answer(ASKED, deps);
+
+  const opened = hub.calls.indexOf("stream.start");
+  const named = hub.calls.indexOf("activity:working:Checking the weather");
+  assert.ok(opened >= 0 && named > opened, "the tool is named although a reply is open");
+  assert.equal(hub.calls[named + 1], "activity:idle", "and taken down when the words come back");
+});
+
 test("a stop ends the run where it stands: nothing more is said, and the cut is remembered", async () => {
   const stop = new AbortController();
   // The stop lands while a tool runs, after the first words were written.
