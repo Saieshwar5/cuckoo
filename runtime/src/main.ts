@@ -23,8 +23,10 @@ import type { Harness } from "./harness/harness.ts";
 import { selectHarness } from "./harness/select.ts";
 import { Jobs, Worker, type Job } from "./jobs.ts";
 import { Proactive } from "./proactive.ts";
+import { cadenceOf, cronOf, describe, type Cadence } from "./cadence.ts";
 import { Routines } from "./routines.ts";
 import { Scheduler } from "./scheduler.ts";
+import { handleScheduleJob, mirror, mirrorExisting } from "./schedules.ts";
 import { Turns } from "./memory/turns.ts";
 import { Usage } from "./usage.ts";
 import { TEMPLATES } from "./templates.ts";
@@ -54,6 +56,12 @@ export async function start(config: Config = loadConfig()) {
   // Anything a previous process claimed and did not finish is due again.
   const recovered = await jobs.recoverAbandoned();
   if (recovered) console.log(`runtime: ${recovered} job(s) recovered from a previous run`);
+
+  // Routines set before the app could show them are shown now. In the
+  // background: a hub that is slow to answer must not hold up the start.
+  void mirrorExisting(registry, routines, config.hubUrl)
+    .then((n) => n && console.log(`runtime: ${n} routine(s) now shown in the app`))
+    .catch((error: unknown) => console.warn("runtime: could not show older routines in the app", error));
 
   const worker = new Worker(jobs, (job) =>
     run(job, { registry, turns, harness, tools, usage, actions, routines, config, inflight }),
@@ -111,6 +119,10 @@ interface RunDeps {
  * is the last thing that happens and nothing is written before the model runs.
  */
 async function run(job: Job, deps: RunDeps): Promise<void> {
+  if (job.type.startsWith("schedule.")) {
+    await handleScheduleJob(job, { registry: deps.registry, routines: deps.routines, hubUrl: deps.config.hubUrl });
+    return;
+  }
   if (job.type !== "message.created") return;
 
   const agent = await deps.registry.findById(job.agentId);
@@ -190,25 +202,42 @@ async function carryOut(
   const pending = await deps.actions.take(buttonId, agentId, conversationId);
   if (!pending) return false;
 
-  const args = pending.arguments as Record<string, string>;
+  const args = pending.arguments as {
+    instruction?: string;
+    title?: string;
+    cadence?: Cadence;
+    id?: string;
+    // An offer made before routines were shown in the app.
+    schedule?: string;
+    timezone?: string;
+  };
   try {
     if (pending.action === "create_routine") {
+      const cadence = args.cadence ?? (args.schedule ? cadenceOf(args.schedule, args.timezone ?? "Asia/Kolkata") : undefined);
       const routine = await deps.routines.create({
         agentId,
         conversationId,
         userId: pending.userId,
         instruction: args.instruction ?? "",
-        schedule: args.schedule ?? "",
-        timezone: args.timezone,
+        schedule: cadence ? cronOf(cadence) : (args.schedule ?? ""),
+        timezone: cadence?.timezone ?? args.timezone,
+        title: args.title,
+        once: cadence?.repeat === "once",
       });
+      // Seen in the app from now on, where it can be paused or deleted.
+      if (cadence) await mirror(routine, cadence, client, deps.routines);
       await client.send(
         conversationId,
-        `Done. Next: ${new Date(routine.nextRun).toLocaleString("en-IN", { timeZone: routine.timezone })}.`,
+        cadence
+          ? `Done — ${describe(cadence)}. You can pause or change it from my profile.`
+          : `Done. Next: ${new Date(routine.nextRun).toLocaleString("en-IN", { timeZone: routine.timezone })}.`,
       );
       return true;
     }
     if (pending.action === "delete_routine") {
+      const routine = (await deps.routines.listFor(agentId, conversationId)).find((r) => r.id === args.id);
       await deps.routines.delete(args.id ?? "", agentId);
+      if (routine?.hubScheduleId) await client.deleteSchedule(conversationId, routine.hubScheduleId).catch(() => {});
       await client.send(conversationId, "Stopped.");
       return true;
     }

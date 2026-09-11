@@ -25,6 +25,9 @@ if (!token) throw new Error("set RUNTIME_HUB_TOKEN to a session or management to
 
 const config = loadConfig();
 const handle = process.env.RUNTIME_AGENT_HANDLE ?? templateId;
+// An agent whose template can keep routines holds schedules, and the app
+// offers them for it.
+const takesSchedules = template.tools.includes("create_routine");
 const publicUrl = config.publicUrl || `http://localhost:${config.port}`;
 
 const pool = openPool(config.databaseUrl);
@@ -56,8 +59,8 @@ let hubAgentId = listed?.find((a) => a.handle === handle)?.id;
 
 if (hubAgentId) {
   console.log(`@${handle} already exists: ${hubAgentId}`);
-  // It may predate the catalogue, so say what it is now.
-  await mgmt(`/agents/${hubAgentId}`, { listed: true }, "PATCH");
+  // It may predate the catalogue and schedules, so say what it is now.
+  await mgmt(`/agents/${hubAgentId}`, { listed: true, supports_schedules: takesSchedules }, "PATCH");
 } else {
   const created = (await mgmt("/agents", {
     handle,
@@ -68,6 +71,7 @@ if (hubAgentId) {
     // A custom one, made for one person, is private instead and gets neither
     // a listing nor a code.
     listed: true,
+    supports_schedules: takesSchedules,
   })) as { agent: { id: string } };
   hubAgentId = created.agent.id;
   console.log(`created @${handle}: ${hubAgentId}`);
