@@ -64,6 +64,8 @@ LIMIT 1;
 -- messages they sent still name them.
 SELECT p.conversation_id, p.kind, p.user_id, p.agent_id, p.joined_at,
        u.display_name AS user_display_name,
+       -- A person's time zone, so an agent's "7 in the morning" is theirs.
+       u.timezone     AS user_timezone,
        a.display_name AS agent_display_name,
        a.handle       AS agent_handle,
        -- Whether the agent has a published picture, so the app knows to

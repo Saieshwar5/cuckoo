@@ -49,7 +49,9 @@ type Participant struct {
 	Starters []string
 	// SupportsSchedules says an agent's backend holds schedules.
 	SupportsSchedules bool
-	JoinedAt          time.Time
+	// Timezone is a person's, as their phone last said; empty for agents.
+	Timezone string
+	JoinedAt time.Time
 }
 
 // Conversation is what the chat list shows: who is in it and what was said
@@ -278,6 +280,7 @@ func participantFromRow(r gen.ListParticipantsRow) Participant {
 	case ParticipantUser:
 		p.ID = derefID(r.UserID)
 		p.DisplayName = derefString(r.UserDisplayName)
+		p.Timezone = derefString(r.UserTimezone)
 	case ParticipantAgent:
 		p.ID = derefID(r.AgentID)
 		p.DisplayName = derefString(r.AgentDisplayName)

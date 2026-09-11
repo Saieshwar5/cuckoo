@@ -193,7 +193,11 @@ type Participant struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
 	Handle      string `json:"handle,omitempty"`
-	IsMe        bool   `json:"is_me"`
+	// Timezone is a person's, "Asia/Kolkata", as their phone last said: so
+	// "tomorrow at 7" means their seven. Absent until a phone has said, and
+	// for agents.
+	Timezone string `json:"timezone,omitempty"`
+	IsMe     bool   `json:"is_me"`
 }
 
 // NewMessageCreated builds the event agentID receives for msg in conv.
@@ -230,6 +234,7 @@ func ParticipantsOf(conv conversations.Conversation, me uuid.UUID) []Participant
 			ID:          formatParticipantID(p.Kind, p.ID),
 			DisplayName: p.DisplayName,
 			Handle:      p.Handle,
+			Timezone:    p.Timezone,
 			IsMe:        p.Kind == conversations.ParticipantAgent && p.ID == me,
 		})
 	}

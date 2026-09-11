@@ -399,3 +399,43 @@ func errScheduleNotFound() error {
 func errSchedulesNotSupported() error {
 	return domain.Conflict("schedules_not_supported", "This agent does not take schedules.")
 }
+
+// MoveSchedules moves a person's schedules from one time zone to another,
+// because their phone's clock did: "every morning at 7" stays 7 wherever
+// they wake up. Only schedules set to the zone they left move — one set
+// deliberately to New York's opening bell stays in New York.
+//
+// Each agent is told, as for any change of when, and a moved schedule is
+// pending until the agent confirms its new time. A paused one moves and
+// stays paused.
+func (s *Service) MoveSchedules(ctx context.Context, userID uuid.UUID, from, to string) error {
+	if from == to {
+		return nil
+	}
+	rows, err := s.store.ListPersonSchedulesInZone(ctx, gen.ListPersonSchedulesInZoneParams{UserID: userID, Timezone: from})
+	if err != nil {
+		return domain.Internal(fmt.Errorf("list schedules in %s for %s: %w", from, userID, err))
+	}
+	for _, row := range rows {
+		sch, err := scheduleFromRow(row)
+		if err != nil {
+			return err
+		}
+		sch.Cadence.Timezone = to
+		raw, err := json.Marshal(sch.Cadence)
+		if err != nil {
+			return domain.Internal(fmt.Errorf("encode cadence: %w", err))
+		}
+		status := sch.Status
+		if status != SchedulePaused {
+			status = SchedulePending
+		}
+		params := gen.UpdateScheduleParams{ID: sch.ID, Cadence: raw, Status: &status}
+		if _, err := s.writeSchedule(ctx, func(tx *store.Store) (gen.Schedule, error) {
+			return tx.UpdateSchedule(ctx, params)
+		}, EventScheduleUpdated); err != nil {
+			return err
+		}
+	}
+	return nil
+}

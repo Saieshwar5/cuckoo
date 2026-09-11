@@ -17,6 +17,7 @@ WHERE id = $1 AND deleted_at IS NULL;
 UPDATE users
 SET display_name    = COALESCE(sqlc.narg('display_name')::text, display_name),
     locale          = COALESCE(sqlc.narg('locale')::text, locale),
+    timezone        = COALESCE(sqlc.narg('timezone')::text, timezone),
     avatar_media_id = COALESCE(sqlc.narg('avatar_media_id')::uuid, avatar_media_id),
     updated_at      = now()
 WHERE id = sqlc.arg('id') AND deleted_at IS NULL

@@ -122,6 +122,53 @@ func (q *Queries) GetSchedule(ctx context.Context, id uuid.UUID) (Schedule, erro
 	return i, err
 }
 
+const listPersonSchedulesInZone = `-- name: ListPersonSchedulesInZone :many
+SELECT s.id, s.agent_id, s.conversation_id, s.title, s.instruction, s.cadence, s.status, s.created_by, s.last_run_at, s.created_at, s.updated_at, s.deleted_at FROM schedules s
+JOIN participants p ON p.conversation_id = s.conversation_id AND p.user_id = $1::uuid
+WHERE s.deleted_at IS NULL AND s.cadence->>'timezone' = $2::text
+ORDER BY s.created_at
+`
+
+type ListPersonSchedulesInZoneParams struct {
+	UserID   uuid.UUID
+	Timezone string
+}
+
+// A person's live schedules set to one time zone: the ones that move with
+// them when their phone's clock does.
+func (q *Queries) ListPersonSchedulesInZone(ctx context.Context, arg ListPersonSchedulesInZoneParams) ([]Schedule, error) {
+	rows, err := q.db.Query(ctx, listPersonSchedulesInZone, arg.UserID, arg.Timezone)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Schedule{}
+	for rows.Next() {
+		var i Schedule
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.ConversationID,
+			&i.Title,
+			&i.Instruction,
+			&i.Cadence,
+			&i.Status,
+			&i.CreatedBy,
+			&i.LastRunAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listScheduleTitles = `-- name: ListScheduleTitles :many
 SELECT id, title FROM schedules
 WHERE id = ANY($1::uuid[])

@@ -93,7 +93,15 @@ func (s *Service) UpdateProfile(ctx context.Context, id uuid.UUID, in UpdateProf
 		params.Locale = &locale
 	}
 
-	if params.DisplayName == nil && params.Locale == nil && params.AvatarMediaID == nil {
+	if in.Timezone != nil {
+		zone, err := validateTimezone(*in.Timezone)
+		if err != nil {
+			return User{}, err
+		}
+		params.Timezone = &zone
+	}
+
+	if params.DisplayName == nil && params.Locale == nil && params.AvatarMediaID == nil && params.Timezone == nil {
 		return User{}, domain.Invalid("no_changes", "Provide at least one field to update.")
 	}
 

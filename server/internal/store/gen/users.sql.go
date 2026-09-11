@@ -15,7 +15,7 @@ const createUser = `-- name: CreateUser :one
 
 INSERT INTO users (id, display_name, locale)
 VALUES ($1, $2, $3)
-RETURNING id, display_name, locale, created_at, updated_at, deleted_at, avatar_media_id
+RETURNING id, display_name, locale, created_at, updated_at, deleted_at, avatar_media_id, timezone
 `
 
 type CreateUserParams struct {
@@ -38,12 +38,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.AvatarMediaID,
+		&i.Timezone,
 	)
 	return i, err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, display_name, locale, created_at, updated_at, deleted_at, avatar_media_id FROM users
+SELECT id, display_name, locale, created_at, updated_at, deleted_at, avatar_media_id, timezone FROM users
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -58,6 +59,7 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.AvatarMediaID,
+		&i.Timezone,
 	)
 	return i, err
 }
@@ -82,15 +84,17 @@ const updateUserProfile = `-- name: UpdateUserProfile :one
 UPDATE users
 SET display_name    = COALESCE($1::text, display_name),
     locale          = COALESCE($2::text, locale),
-    avatar_media_id = COALESCE($3::uuid, avatar_media_id),
+    timezone        = COALESCE($3::text, timezone),
+    avatar_media_id = COALESCE($4::uuid, avatar_media_id),
     updated_at      = now()
-WHERE id = $4 AND deleted_at IS NULL
-RETURNING id, display_name, locale, created_at, updated_at, deleted_at, avatar_media_id
+WHERE id = $5 AND deleted_at IS NULL
+RETURNING id, display_name, locale, created_at, updated_at, deleted_at, avatar_media_id, timezone
 `
 
 type UpdateUserProfileParams struct {
 	DisplayName   *string
 	Locale        *string
+	Timezone      *string
 	AvatarMediaID *uuid.UUID
 	ID            uuid.UUID
 }
@@ -101,6 +105,7 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 	row := q.db.QueryRow(ctx, updateUserProfile,
 		arg.DisplayName,
 		arg.Locale,
+		arg.Timezone,
 		arg.AvatarMediaID,
 		arg.ID,
 	)
@@ -113,6 +118,7 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.AvatarMediaID,
+		&i.Timezone,
 	)
 	return i, err
 }
