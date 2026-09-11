@@ -31,6 +31,10 @@ export function createRealtime(opts: {
   const subs = new Set<Subscriber>();
   let socket: SocketHandle | null = null;
   let connected = false;
+  // Whether this session has been connected before. A connection opened
+  // again after a stop — the app coming back from the background — is a
+  // reconnect as far as anyone listening is concerned: they missed things.
+  let opened = false;
   return {
     get connected() {
       return connected;
@@ -51,8 +55,10 @@ export function createRealtime(opts: {
           for (const s of subs) s.onFrame(frame);
         },
         onOpen: (reconnect) => {
+          const again = reconnect || opened;
+          opened = true;
           connected = true;
-          for (const s of subs) s.onOpen?.(reconnect);
+          for (const s of subs) s.onOpen?.(again);
         },
         onClose: () => {
           connected = false;
@@ -63,7 +69,10 @@ export function createRealtime(opts: {
     stop() {
       socket?.close();
       socket = null;
-      connected = false;
+      if (connected) {
+        connected = false;
+        for (const s of subs) s.onClose?.();
+      }
     },
     retryNow() {
       socket?.retryNow();

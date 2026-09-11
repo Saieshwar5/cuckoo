@@ -49,4 +49,33 @@ describe('shared live connection', () => {
     expect(sockets[0]?.closed).toBe(true);
     expect(rt.connected).toBe(false);
   });
+
+  it('treats coming back from the background as a reconnect, so listeners catch up', () => {
+    const sockets: FakeSocket[] = [];
+    const rt = createRealtime({
+      url: 'ws://hub',
+      token: 't',
+      factory: () => {
+        const s = new FakeSocket();
+        sockets.push(s);
+        return s;
+      },
+    });
+    const opens: boolean[] = [];
+    let closes = 0;
+    rt.subscribe({ onFrame: () => {}, onOpen: (r) => opens.push(r), onClose: () => (closes += 1) });
+
+    rt.start();
+    sockets[0]?.onopen?.();
+    // Into the background: the hub must stop believing anyone is looking.
+    rt.stop();
+    expect(sockets[0]?.closed).toBe(true);
+    expect(closes).toBe(1);
+    // Back to the front: a new socket, and it counts as a reconnect.
+    rt.start();
+    sockets[1]?.onopen?.();
+    expect(opens).toEqual([false, true]);
+    rt.stop();
+  });
 });
+
