@@ -63,6 +63,7 @@ function Routes() {
           <Stack.Screen name="profile-setup" />
           <Stack.Screen name="chat/[id]" />
           <Stack.Screen name="agent" />
+          <Stack.Screen name="schedules" />
           <Stack.Screen name="scan" />
           <Stack.Screen name="api-keys" />
           <Stack.Screen name="devices" />

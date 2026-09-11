@@ -135,6 +135,16 @@ export default function ChatScreen() {
               }),
             testID: 'chat-mute',
           },
+      ...(who.supports_schedules
+        ? [
+            {
+              label: t('chat.menu.schedules'),
+              icon: 'alarm-outline' as const,
+              onPress: () => router.push({ pathname: '/schedules/[id]', params: { id } }),
+              testID: 'chat-schedules',
+            },
+          ]
+        : []),
       {
         label: t('chat.menu.profile'),
         icon: 'person-circle-outline' as const,

@@ -31,6 +31,8 @@ export interface Participant {
   has_avatar?: boolean;
   // What an agent suggests saying first, shown as chips in an empty chat.
   starters?: string[];
+  // The agent keeps schedules, and the app offers them.
+  supports_schedules?: boolean;
 }
 
 // A button is a choice or a link, never both. A choice has an id, which
@@ -103,6 +105,8 @@ export interface Message {
   // The person pressed stop while the agent was writing this. Absent from
   // messages remembered before stop existed.
   stopped?: boolean;
+  // Set on a message one of the agent's schedules sent: why it spoke first.
+  schedule?: { id: string; title: string } | null;
   delivery_status: DeliveryStatus | null;
   created_at: string;
 }
@@ -171,6 +175,42 @@ export interface AgentCard {
   owner: { display_name: string };
   status?: AgentStatus;
   verified: boolean;
+  supports_schedules?: boolean;
+}
+
+// When a schedule runs: a repeat and a time picked on the phone, never a
+// sentence. The agent interprets what to do, not when.
+export type Repeat = 'once' | 'daily' | 'weekdays' | 'weekly';
+export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+export interface Cadence {
+  repeat: Repeat;
+  // "07:00", 24-hour, in timezone.
+  time: string;
+  days?: Weekday[];
+  // Once only: "2026-09-12".
+  date?: string;
+  timezone: string;
+}
+
+// Something the person asked an agent to do at a time. The agent runs it;
+// the hub shows it and holds the person's word on it.
+export interface Schedule {
+  id: string;
+  conversation_id: string;
+  agent_id: string;
+  title: string;
+  instruction: string;
+  cadence: Cadence;
+  // pending: waiting for the agent to confirm. paused: only the person resumes.
+  status: 'pending' | 'active' | 'paused';
+  created_by: 'user' | 'agent';
+  next_run_at: string | null;
+  last_run_at: string | null;
+  // The last time it was due and nothing came.
+  missed_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // What a scanned code resolves to.
@@ -288,4 +328,5 @@ export type Frame =
       };
     }
   | { type: 'conversation.read'; data: { conversation_id: string; read_up_to: string } }
+  | { type: 'schedule.changed'; data: { conversation_id: string; schedule: Schedule; deleted: boolean } }
   | { type: 'agent.status'; data: { agent_id: string; status: AgentLiveStatus } };

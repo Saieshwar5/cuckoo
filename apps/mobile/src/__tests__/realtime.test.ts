@@ -78,4 +78,3 @@ describe('shared live connection', () => {
     rt.stop();
   });
 });
-

@@ -68,6 +68,15 @@ export function Bubble({ message: m, mine, first, agentName, onReply, onButton, 
             </View>
           </View>
         ) : null}
+        {m.schedule ? (
+          // Why the agent spoke first: a schedule the person made.
+          <View style={styles.scheduled} testID="scheduled">
+            <Ionicons name="alarm-outline" size={13} color={meta} />
+            <Text style={[styles.scheduledText, { color: meta }]} numberOfLines={1}>
+              {m.schedule.title}
+            </Text>
+          </View>
+        ) : null}
         {m.body.attachments?.length ? (
           <Attachments attachments={m.body.attachments} mine={mine} sending={!!m.localKey} />
         ) : null}
@@ -232,6 +241,8 @@ const styles = StyleSheet.create({
   meta: { fontSize: 11 },
   // A reply the hub had to end: said as a line of its own, not a whisper.
   truncated: { ...type.caption, fontStyle: 'italic', marginTop: spacing.xs },
+  scheduled: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2, marginTop: 1 },
+  scheduledText: { ...type.caption, fontWeight: '600' },
   // A reply the person ended: theirs to have done, so said plainly.
   stopped: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
   stoppedText: { marginTop: 0 },
