@@ -57,9 +57,14 @@ func (s *agentSocket) handleOp(ctx context.Context, op inboundFrame) bool {
 		if err != nil {
 			return s.reply(ctx, replyFrame{ReplyToCID: op.CID, Error: errorOf(err)})
 		}
+		scheduleID, err := scheduleIDOf(op.ScheduleID)
+		if err != nil {
+			return s.reply(ctx, replyFrame{ReplyToCID: op.CID, Error: errorOf(err)})
+		}
 		in := conversations.SendInput{
 			Text: op.Text, IdempotencyKey: op.IdempotencyKey, ReplyTo: replyTo,
 			Buttons: buttonsOf(op.Buttons), QuickReplies: quickRepliesOf(op.QuickReplies),
+			ScheduleID: scheduleID,
 		}
 		var res conversations.SendResult
 		if op.Op == opSend {

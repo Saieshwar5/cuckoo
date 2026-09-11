@@ -12,16 +12,17 @@ import (
 // thing it names, so a value pasted into a bug report or a log line is
 // self-describing and a mistyped ID is rejected before it reaches the database.
 const (
-	PrefixUser    = "usr"
-	PrefixSession = "ses"
-	PrefixAgent   = "agt"
-	PrefixBinding = "bnd"
-	PrefixConv    = "cnv"
-	PrefixMessage = "msg"
-	PrefixEvent   = "evt"
-	PrefixToken   = "tok"
-	PrefixMedia   = "med"
-	PrefixAPIKey  = "key"
+	PrefixUser     = "usr"
+	PrefixSession  = "ses"
+	PrefixAgent    = "agt"
+	PrefixBinding  = "bnd"
+	PrefixConv     = "cnv"
+	PrefixMessage  = "msg"
+	PrefixEvent    = "evt"
+	PrefixToken    = "tok"
+	PrefixMedia    = "med"
+	PrefixAPIKey   = "key"
+	PrefixSchedule = "sch"
 )
 
 // idEncoding is Crockford base32 in lowercase: no padding, and no characters

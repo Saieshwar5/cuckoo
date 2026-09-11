@@ -85,6 +85,12 @@ func (h *Handler) Routes() chi.Router {
 		r.Post("/stop", h.stopConversation)
 		// How far the person has read, for the badge.
 		r.Post("/read", h.markRead)
+		// Schedules: what the person asked the agent to do at a time. The
+		// agent runs them; these show them and pass the person's word on.
+		r.Get("/schedules", h.listSchedules)
+		r.Post("/schedules", h.requestSchedule)
+		r.Patch("/schedules/{sid}", h.updateSchedule)
+		r.Delete("/schedules/{sid}", h.deleteSchedule)
 	})
 
 	// Files: uploaded before the message that carries them, and read back

@@ -36,6 +36,8 @@ type sendMessageRequest struct {
 	ReplyTo        string            `json:"reply_to"`
 	Buttons        [][]buttonInput   `json:"buttons"`
 	QuickReplies   []quickReplyInput `json:"quick_replies"`
+	// ScheduleID says one of the agent's schedules sent this.
+	ScheduleID string `json:"schedule_id"`
 }
 
 // buttonInput is a button an agent offers: an id to get back when it is
@@ -118,9 +120,14 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, err)
 		return
 	}
+	scheduleID, err := scheduleIDOf(req.ScheduleID)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
 	in := conversations.SendInput{
 		Text: req.Text, Attachments: attachments, IdempotencyKey: req.IdempotencyKey, ReplyTo: replyTo,
-		Buttons: buttonsOf(req.Buttons), QuickReplies: quickRepliesOf(req.QuickReplies),
+		Buttons: buttonsOf(req.Buttons), QuickReplies: quickRepliesOf(req.QuickReplies), ScheduleID: scheduleID,
 	}
 	var res conversations.SendResult
 	if req.Stream {

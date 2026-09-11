@@ -117,9 +117,18 @@ type messageResponse struct {
 	Status         string           `json:"status"`
 	Truncated      bool             `json:"truncated"`
 	// Stopped: the person pressed stop while the agent was writing this.
-	Stopped        bool      `json:"stopped"`
-	DeliveryStatus *string   `json:"delivery_status"`
-	CreatedAt      time.Time `json:"created_at"`
+	Stopped bool `json:"stopped"`
+	// Schedule is set on a message one of the agent's schedules sent: the
+	// tag on the bubble that says why it spoke first.
+	Schedule       *scheduleTagResponse `json:"schedule"`
+	DeliveryStatus *string              `json:"delivery_status"`
+	CreatedAt      time.Time            `json:"created_at"`
+}
+
+// scheduleTagResponse names the schedule a message was sent for.
+type scheduleTagResponse struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
 }
 
 type messageEnvelope struct {
@@ -152,6 +161,11 @@ func newMessageResponse(m conversations.Message) messageResponse {
 		Truncated: m.Truncated,
 		Stopped:   m.Stopped,
 		CreatedAt: m.CreatedAt,
+	}
+	if m.ScheduleID != nil {
+		resp.Schedule = &scheduleTagResponse{
+			ID: domain.FormatID(domain.PrefixSchedule, *m.ScheduleID), Title: m.ScheduleTitle,
+		}
 	}
 	if m.DeliveryStatus != "" {
 		status := string(m.DeliveryStatus)

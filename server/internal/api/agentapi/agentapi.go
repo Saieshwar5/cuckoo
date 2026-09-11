@@ -49,6 +49,11 @@ func (h *Handler) Routes() chi.Router {
 		r.Get("/messages", h.listMessages)
 		r.Post("/messages", h.sendMessage)
 		r.Post("/activity", h.activity)
+		// Schedules the agent holds for the people in this conversation.
+		r.Get("/schedules", h.listSchedules)
+		r.Post("/schedules", h.createSchedule)
+		r.Patch("/schedules/{sid}", h.updateSchedule)
+		r.Delete("/schedules/{sid}", h.deleteSchedule)
 		// The first version of /activity: start is thinking, stop is idle.
 		r.Post("/typing", h.typing)
 	})

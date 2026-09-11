@@ -52,6 +52,7 @@ type inboundFrame struct {
 	QuickReplies   []quickReplyInput `json:"quick_replies"`
 	State          string            `json:"state"`
 	Label          string            `json:"label"`
+	ScheduleID     string            `json:"schedule_id"`
 }
 
 type openedPayload struct {

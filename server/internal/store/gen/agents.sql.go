@@ -14,21 +14,22 @@ import (
 
 const createAgent = `-- name: CreateAgent :one
 INSERT INTO agents (id, owner_user_id, handle, display_name, description, avatar_media_id,
-                    starters, private, listed)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters, private, listed
+                    starters, private, listed, supports_schedules)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters, private, listed, supports_schedules
 `
 
 type CreateAgentParams struct {
-	ID            uuid.UUID
-	OwnerUserID   uuid.UUID
-	Handle        string
-	DisplayName   string
-	Description   string
-	AvatarMediaID *uuid.UUID
-	Starters      []byte
-	Private       bool
-	Listed        bool
+	ID                uuid.UUID
+	OwnerUserID       uuid.UUID
+	Handle            string
+	DisplayName       string
+	Description       string
+	AvatarMediaID     *uuid.UUID
+	Starters          []byte
+	Private           bool
+	Listed            bool
+	SupportsSchedules bool
 }
 
 func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent, error) {
@@ -42,6 +43,7 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		arg.Starters,
 		arg.Private,
 		arg.Listed,
+		arg.SupportsSchedules,
 	)
 	var i Agent
 	err := row.Scan(
@@ -57,12 +59,13 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		&i.Starters,
 		&i.Private,
 		&i.Listed,
+		&i.SupportsSchedules,
 	)
 	return i, err
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters, private, listed FROM agents
+SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters, private, listed, supports_schedules FROM agents
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -82,12 +85,13 @@ func (q *Queries) GetAgent(ctx context.Context, id uuid.UUID) (Agent, error) {
 		&i.Starters,
 		&i.Private,
 		&i.Listed,
+		&i.SupportsSchedules,
 	)
 	return i, err
 }
 
 const getAgentByHandle = `-- name: GetAgentByHandle :one
-SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters, private, listed FROM agents
+SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters, private, listed, supports_schedules FROM agents
 WHERE handle = $1 AND deleted_at IS NULL
 `
 
@@ -107,12 +111,13 @@ func (q *Queries) GetAgentByHandle(ctx context.Context, handle string) (Agent, e
 		&i.Starters,
 		&i.Private,
 		&i.Listed,
+		&i.SupportsSchedules,
 	)
 	return i, err
 }
 
 const listAgentsByOwner = `-- name: ListAgentsByOwner :many
-SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters, private, listed FROM agents
+SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters, private, listed, supports_schedules FROM agents
 WHERE owner_user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at ASC, id ASC
 `
@@ -139,6 +144,7 @@ func (q *Queries) ListAgentsByOwner(ctx context.Context, ownerUserID uuid.UUID) 
 			&i.Starters,
 			&i.Private,
 			&i.Listed,
+			&i.SupportsSchedules,
 		); err != nil {
 			return nil, err
 		}
@@ -151,7 +157,7 @@ func (q *Queries) ListAgentsByOwner(ctx context.Context, ownerUserID uuid.UUID) 
 }
 
 const listCatalogue = `-- name: ListCatalogue :many
-SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters, private, listed FROM agents
+SELECT id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters, private, listed, supports_schedules FROM agents
 WHERE listed AND deleted_at IS NULL
 ORDER BY created_at ASC, id ASC
 LIMIT $1
@@ -181,6 +187,7 @@ func (q *Queries) ListCatalogue(ctx context.Context, limit int32) ([]Agent, erro
 			&i.Starters,
 			&i.Private,
 			&i.Listed,
+			&i.SupportsSchedules,
 		); err != nil {
 			return nil, err
 		}
@@ -214,19 +221,21 @@ SET display_name    = COALESCE($1::text, display_name),
     starters        = COALESCE($4::jsonb, starters),
     private         = COALESCE($5::boolean, private),
     listed          = COALESCE($6::boolean, listed),
+    supports_schedules = COALESCE($7::boolean, supports_schedules),
     updated_at      = now()
-WHERE id = $7 AND deleted_at IS NULL
-RETURNING id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters, private, listed
+WHERE id = $8 AND deleted_at IS NULL
+RETURNING id, owner_user_id, handle, display_name, description, created_at, updated_at, deleted_at, avatar_media_id, starters, private, listed, supports_schedules
 `
 
 type UpdateAgentParams struct {
-	DisplayName   *string
-	Description   *string
-	AvatarMediaID *uuid.UUID
-	Starters      []byte
-	Private       pgtype.Bool
-	Listed        pgtype.Bool
-	ID            uuid.UUID
+	DisplayName       *string
+	Description       *string
+	AvatarMediaID     *uuid.UUID
+	Starters          []byte
+	Private           pgtype.Bool
+	Listed            pgtype.Bool
+	SupportsSchedules pgtype.Bool
+	ID                uuid.UUID
 }
 
 // Partial update: a null argument leaves that column as it is.
@@ -238,6 +247,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Agent
 		arg.Starters,
 		arg.Private,
 		arg.Listed,
+		arg.SupportsSchedules,
 		arg.ID,
 	)
 	var i Agent
@@ -254,6 +264,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Agent
 		&i.Starters,
 		&i.Private,
 		&i.Listed,
+		&i.SupportsSchedules,
 	)
 	return i, err
 }

@@ -71,6 +71,8 @@ SELECT p.conversation_id, p.kind, p.user_id, p.agent_id, p.joined_at,
        (a.avatar_media_id IS NOT NULL)::bool AS agent_has_avatar,
        -- What the agent suggests saying first, for an empty chat.
        a.starters     AS agent_starters,
+       -- Whether the agent holds schedules, so the app knows to offer them.
+       COALESCE(a.supports_schedules, false)::bool AS agent_supports_schedules,
        -- The dot on the avatar: the agent's live binding's health, or
        -- nothing when no backend is connected.
        b.status       AS agent_status

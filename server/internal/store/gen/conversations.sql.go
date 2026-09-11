@@ -238,6 +238,8 @@ SELECT p.conversation_id, p.kind, p.user_id, p.agent_id, p.joined_at,
        (a.avatar_media_id IS NOT NULL)::bool AS agent_has_avatar,
        -- What the agent suggests saying first, for an empty chat.
        a.starters     AS agent_starters,
+       -- Whether the agent holds schedules, so the app knows to offer them.
+       COALESCE(a.supports_schedules, false)::bool AS agent_supports_schedules,
        -- The dot on the avatar: the agent's live binding's health, or
        -- nothing when no backend is connected.
        b.status       AS agent_status
@@ -250,17 +252,18 @@ ORDER BY p.conversation_id, p.joined_at, p.kind, p.user_id, p.agent_id
 `
 
 type ListParticipantsRow struct {
-	ConversationID   uuid.UUID
-	Kind             string
-	UserID           *uuid.UUID
-	AgentID          *uuid.UUID
-	JoinedAt         time.Time
-	UserDisplayName  *string
-	AgentDisplayName *string
-	AgentHandle      *string
-	AgentHasAvatar   bool
-	AgentStarters    []byte
-	AgentStatus      *string
+	ConversationID         uuid.UUID
+	Kind                   string
+	UserID                 *uuid.UUID
+	AgentID                *uuid.UUID
+	JoinedAt               time.Time
+	UserDisplayName        *string
+	AgentDisplayName       *string
+	AgentHandle            *string
+	AgentHasAvatar         bool
+	AgentStarters          []byte
+	AgentSupportsSchedules bool
+	AgentStatus            *string
 }
 
 // Members of a set of conversations with their current names. Deleted people
@@ -286,6 +289,7 @@ func (q *Queries) ListParticipants(ctx context.Context, conversationIds []uuid.U
 			&i.AgentHandle,
 			&i.AgentHasAvatar,
 			&i.AgentStarters,
+			&i.AgentSupportsSchedules,
 			&i.AgentStatus,
 		); err != nil {
 			return nil, err
