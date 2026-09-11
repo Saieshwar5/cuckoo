@@ -1,13 +1,19 @@
 import type { Contact, Conversation, Frame } from '../api/types';
+import { activityOf, type Activity } from '../chat/activity';
 
 // The chat list, and how live frames change it. Pure, so it is tested
 // without a screen: the same reducer runs on every frame the socket brings.
 
 export interface ChatsState {
   conversations: Conversation[];
+  // What each busy agent is doing, by conversation.
+  activity: Record<string, Activity>;
+  // The chat on screen, whose messages are read as they land and so never
+  // count as unread here.
+  open: string | null;
 }
 
-export const empty: ChatsState = { conversations: [] };
+export const empty: ChatsState = { conversations: [], activity: {}, open: null };
 
 function activity(c: Conversation): string {
   return c.last_message?.created_at ?? c.created_at;
@@ -17,8 +23,24 @@ function sorted(list: Conversation[]): Conversation[] {
   return [...list].sort((a, b) => (activity(a) < activity(b) ? 1 : activity(a) > activity(b) ? -1 : 0));
 }
 
-export function setConversations(_: ChatsState, list: Conversation[]): ChatsState {
-  return { conversations: sorted(list) };
+export function setConversations(state: ChatsState, list: Conversation[]): ChatsState {
+  const open = state.open;
+  return {
+    ...state,
+    conversations: sorted(open ? list.map((c) => (c.id === open ? { ...c, unread_count: 0 } : c)) : list),
+  };
+}
+
+// setOpen records which chat is on screen. Opening one is reading it.
+export function setOpen(state: ChatsState, id: string | null): ChatsState {
+  if (!id) return { ...state, open: null };
+  return {
+    ...state,
+    open: id,
+    conversations: state.conversations.map((c) =>
+      c.id === id && c.unread_count ? { ...c, unread_count: 0 } : c,
+    ),
+  };
 }
 
 function update(state: ChatsState, id: string, fn: (c: Conversation) => Conversation): ChatsState {
@@ -27,7 +49,14 @@ function update(state: ChatsState, id: string, fn: (c: Conversation) => Conversa
   if (!current) return state;
   const next = state.conversations.slice();
   next[i] = fn(current);
-  return { conversations: sorted(next) };
+  return { ...state, conversations: sorted(next) };
+}
+
+function withoutActivity(state: ChatsState, id: string): ChatsState {
+  if (!(id in state.activity)) return state;
+  const activity = { ...state.activity };
+  delete activity[id];
+  return { ...state, activity };
 }
 
 // concernsUnknown says whether a frame is about a conversation the list
@@ -45,11 +74,17 @@ export function applyFrame(state: ChatsState, frame: Frame): ChatsState {
     case 'message.started':
     case 'message.completed': {
       const { conversation_id, message } = frame.data;
-      return update(state, conversation_id, (c) => {
+      const theirs = message.sender.kind !== 'user';
+      const next = update(state, conversation_id, (c) => {
         const last = c.last_message;
         if (last && last.id !== message.id && last.created_at > message.created_at) return c;
-        return { ...c, last_message: message };
+        // A message new to this row, from the agent, in a chat not on
+        // screen: one more to read. A stream counts once, when it starts.
+        const fresh = !last || message.id > last.id;
+        const unread = (c.unread_count ?? 0) + (theirs && fresh && state.open !== c.id ? 1 : 0);
+        return { ...c, last_message: message, unread_count: unread };
       });
+      return theirs ? withoutActivity(next, conversation_id) : next;
     }
     case 'message.delta': {
       const { conversation_id, message_id, text } = frame.data;
@@ -70,6 +105,18 @@ export function applyFrame(state: ChatsState, frame: Frame): ChatsState {
         return { ...c, last_message: { ...last, delivery_status } };
       });
     }
+    case 'activity': {
+      const { conversation_id } = frame.data;
+      const a = activityOf(frame.data);
+      if (!a) return withoutActivity(state, conversation_id);
+      return { ...state, activity: { ...state.activity, [conversation_id]: a } };
+    }
+    case 'conversation.read': {
+      const { conversation_id, read_up_to } = frame.data;
+      return update(state, conversation_id, (c) =>
+        !c.last_message || c.last_message.id <= read_up_to ? { ...c, unread_count: 0 } : c,
+      );
+    }
     case 'agent.status': {
       const { agent_id, status } = frame.data;
       let changed = false;
@@ -85,7 +132,7 @@ export function applyFrame(state: ChatsState, frame: Frame): ChatsState {
           ),
         };
       });
-      return changed ? { conversations: next } : state;
+      return changed ? { ...state, conversations: next } : state;
     }
     default:
       return state;

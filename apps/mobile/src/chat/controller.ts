@@ -4,6 +4,7 @@ import { keys, MemoryCache, MESSAGES_KEPT, type Cache } from '../cache/cache';
 import type { PickedFile } from '../media/pick';
 import { Outbox, type OutboxEvent, type OutboxItem } from '../outbox/outbox';
 import type { Realtime } from '../realtime/realtime';
+import type { Activity } from './activity';
 import {
   addLocal,
   addOlder,
@@ -12,8 +13,11 @@ import {
   empty,
   failLocal,
   historyTrimmed,
-  isTyping,
+  lastWords,
+  liveActivity,
+  markStopped,
   newestServerId,
+  noReplyDue,
   quickReplies,
   removeMessage,
   retryLocal,
@@ -21,11 +25,22 @@ import {
   type ChatMessage,
   type ChatState,
   upsert,
+  writing,
 } from './store';
 
 export interface ChatSnapshot {
   messages: ChatMessage[];
-  typing: boolean;
+  // What the agent says it is doing, while it lasts.
+  activity: Activity | null;
+  // A reply is appearing word by word.
+  writing: boolean;
+  // Either: the agent is busy here, and there is something to stop.
+  busy: boolean;
+  // The person's last message reached the agent a while ago, and nothing
+  // has come back — not a word, not a sign of work.
+  noReply: boolean;
+  // What the person last said, if it can be said again as it was.
+  lastWords: string | null;
   loading: boolean;
   loadingOlder: boolean;
   hasOlder: boolean;
@@ -48,6 +63,10 @@ export interface SendRequest {
 }
 
 const PAGE = 50;
+
+// How long after the newest message arrives it is marked read. A stream
+// brings a message and then its words; one call for the message is enough.
+const READ_DELAY_MS = 500;
 
 // How long after the last change a chat's messages are written down. A
 // stream delivers a piece of text many times a second; writing five
@@ -80,7 +99,11 @@ export class ChatController {
   private state: ChatState = empty;
   private snapshot: ChatSnapshot = {
     messages: [],
-    typing: false,
+    activity: null,
+    writing: false,
+    busy: false,
+    noReply: false,
+    lastWords: null,
     loading: true,
     loadingOlder: false,
     hasOlder: false,
@@ -92,7 +115,14 @@ export class ChatController {
   private listeners = new Set<() => void>();
   private unsubscribe: (() => void) | null = null;
   private unsubscribeOutbox: (() => void) | null = null;
-  private typingTimer: ReturnType<typeof setTimeout> | null = null;
+  // Wakes the snapshot when something shown runs out on its own: an
+  // activity expiring, or the wait for a reply growing long.
+  private wakeTimer: ReturnType<typeof setTimeout> | null = null;
+  private readTimer: ReturnType<typeof setTimeout> | null = null;
+  // Whether this person can see the chat right now: on screen, and the app
+  // in front. Only then is anything marked read.
+  private visible = false;
+  private readUpTo: string | null = null;
   private writeTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
   private readonly cache: Cache;
@@ -144,7 +174,9 @@ export class ChatController {
     this.unsubscribe = null;
     this.unsubscribeOutbox?.();
     this.unsubscribeOutbox = null;
-    if (this.typingTimer) clearTimeout(this.typingTimer);
+    if (this.wakeTimer) clearTimeout(this.wakeTimer);
+    if (this.readTimer) clearTimeout(this.readTimer);
+    this.readTimer = null;
     if (this.writeTimer) {
       clearTimeout(this.writeTimer);
       this.writeTimer = null;
@@ -250,6 +282,53 @@ export class ChatController {
     await this.outbox.enqueue(key, this.conversationId, item.request);
   };
 
+  // stopAgent is the person pressing stop. The screen stops showing work at
+  // once; the hub ends whatever reply was being written and tells the agent,
+  // and the replies it ended come back as they now stand.
+  stopAgent = async (): Promise<void> => {
+    this.set(markStopped(this.state, this.now()));
+    try {
+      const ended = await this.api.stopConversation(this.conversationId);
+      if (this.stopped) return;
+      let state = this.state;
+      for (const m of ended) state = upsert(state, m);
+      this.set(state);
+    } catch (error) {
+      if (!this.stopped) this.patch({ error });
+    }
+  };
+
+  // sendAgain says the person's last words again, for an agent that never
+  // answered them.
+  sendAgain = async (): Promise<void> => {
+    const words = lastWords(this.state);
+    if (words) await this.send({ text: words });
+  };
+
+  // setVisible tells the chat whether the person can see it. While they
+  // can, whatever arrives is read.
+  setVisible = (visible: boolean): void => {
+    this.visible = visible;
+    if (visible) this.scheduleRead();
+  };
+
+  // scheduleRead marks the newest message read, a moment after it lands.
+  // A mark that fails is simply tried again with the next message.
+  private scheduleRead(): void {
+    if (!this.visible || this.readTimer) return;
+    const newest = newestServerId(this.state);
+    if (!newest || (this.readUpTo !== null && newest <= this.readUpTo)) return;
+    this.readTimer = setTimeout(() => {
+      this.readTimer = null;
+      const id = newestServerId(this.state);
+      if (!this.visible || !id || (this.readUpTo !== null && id <= this.readUpTo)) return;
+      this.readUpTo = id;
+      this.api.markRead(this.conversationId, id).catch(() => {
+        this.readUpTo = null;
+      });
+    }, READ_DELAY_MS);
+  }
+
   // deleteForMe takes a message out of this person's view, here and on the
   // hub. The hub is asked first: a delete that did not reach it would come
   // back on the next load, which is worse than a moment's wait.
@@ -321,15 +400,24 @@ export class ChatController {
 
   private set(state: ChatState, extra: Partial<ChatSnapshot> = {}): void {
     this.state = state;
-    this.armTyping();
+    this.armWake();
+    this.scheduleRead();
     if (this.writeTimer) clearTimeout(this.writeTimer);
     this.writeTimer = setTimeout(() => {
       this.writeTimer = null;
       this.remember();
     }, WRITE_DELAY_MS);
+    const now = this.now();
+    const activity = liveActivity(state, now);
+    const busy = !!activity || writing(state);
+    const due = noReplyDue(state);
     this.patch({
       messages: state.messages,
-      typing: isTyping(state, this.now()),
+      activity,
+      writing: writing(state),
+      busy,
+      noReply: due !== null && due <= now && !busy,
+      lastWords: lastWords(state),
       hasOlder: state.nextBefore !== null,
       trimmed: historyTrimmed(state),
       quickReplies: quickReplies(state),
@@ -337,14 +425,17 @@ export class ChatController {
     });
   }
 
-  // The typing indicator ends on its own; a timer re-reads the state when
-  // it is due to.
-  private armTyping(): void {
-    if (this.typingTimer) clearTimeout(this.typingTimer);
-    this.typingTimer = null;
-    const until = this.state.typingUntil;
-    if (until === null || until <= this.now()) return;
-    this.typingTimer = setTimeout(() => this.set(this.state), until - this.now() + 10);
+  // An activity ends on its own, and a wait turns into "no reply yet" on
+  // its own; a timer re-reads the state at the first of the two.
+  private armWake(): void {
+    if (this.wakeTimer) clearTimeout(this.wakeTimer);
+    this.wakeTimer = null;
+    const now = this.now();
+    const due = [this.state.activity?.until, noReplyDue(this.state)].filter(
+      (at): at is number => typeof at === 'number' && at > now,
+    );
+    if (!due.length) return;
+    this.wakeTimer = setTimeout(() => this.set(this.state), Math.min(...due) - now + 10);
   }
 
   private patch(extra: Partial<ChatSnapshot>): void {

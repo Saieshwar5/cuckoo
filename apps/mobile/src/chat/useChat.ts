@@ -7,7 +7,11 @@ import { ChatController, type ChatSnapshot } from './controller';
 
 const idle: ChatSnapshot = {
   messages: [],
-  typing: false,
+  activity: null,
+  writing: false,
+  busy: false,
+  noReply: false,
+  lastWords: null,
   loading: true,
   loadingOlder: false,
   hasOlder: false,
@@ -52,5 +56,8 @@ export function useChat(conversationId: string) {
     retry: controller?.retry ?? noop,
     loadOlder: controller?.loadOlder ?? noop,
     deleteForMe: controller?.deleteForMe ?? noop,
+    stopAgent: controller?.stopAgent ?? noop,
+    sendAgain: controller?.sendAgain ?? noop,
+    setVisible: controller?.setVisible ?? (() => {}),
   };
 }

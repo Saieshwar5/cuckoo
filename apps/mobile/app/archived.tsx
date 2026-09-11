@@ -4,6 +4,7 @@ import { FlatList } from 'react-native';
 
 import { useAgents } from '@/agents/AgentsProvider';
 import { isMuted } from '@/agents/store';
+import { rowActivity } from '@/chat/activity';
 import { arrange } from '@/chats/store';
 import { useChats } from '@/chats/useChats';
 import { ChatRow } from '@/components/ChatRow';
@@ -16,7 +17,7 @@ import { t } from '@/i18n';
 // step out of the way. Archiving is undone from the agent's profile, which
 // is also where it was done.
 export default function ArchivedScreen() {
-  const { conversations } = useChats();
+  const { conversations, activity } = useChats();
   const { contacts } = useAgents();
   const router = useRouter();
   const { archived } = arrange(conversations, contacts);
@@ -28,6 +29,7 @@ export default function ArchivedScreen() {
       <TopBar title={t('chats.archived')} onBack={back} />
       <FlatList
         data={archived}
+        extraData={activity}
         keyExtractor={(c) => c.id}
         renderItem={({ item }) => {
           const agent = item.participants.find((p) => p.kind === 'agent');
@@ -36,6 +38,7 @@ export default function ArchivedScreen() {
             <ChatRow
               conversation={item}
               muted={contact ? isMuted(contact) : false}
+              activity={rowActivity(item, activity[item.id])}
               onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id } })}
             />
           );

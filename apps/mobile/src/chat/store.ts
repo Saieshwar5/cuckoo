@@ -1,4 +1,5 @@
 import type { DeliveryStatus, Frame, Message, Page } from '../api/types';
+import { activityOf, isLive, type Activity } from './activity';
 
 // One conversation's messages, and how live frames and our own sends change
 // them. Pure, so it is tested without a screen.
@@ -18,11 +19,28 @@ export interface ChatState {
   nextBefore: string | null;
   // The hub said the conversation is older than what it still holds.
   trimmed: boolean;
-  // When the agent's typing indicator expires, or null.
-  typingUntil: number | null;
+  // What the agent last said it was doing, until when.
+  activity: Activity | null;
+  // The last moment the agent showed any sign of life short of a message:
+  // when its latest activity ran out, or was ended.
+  lastSignal: number;
+  // When this person last pressed stop here, on this device.
+  stoppedAt: number | null;
 }
 
-export const empty: ChatState = { messages: [], nextBefore: null, trimmed: false, typingUntil: null };
+export const empty: ChatState = {
+  messages: [],
+  nextBefore: null,
+  trimmed: false,
+  activity: null,
+  lastSignal: 0,
+  stoppedAt: null,
+};
+
+// How long a person's message may sit, received and unanswered, before the
+// chat says so. Long enough for any agent that is merely slow to have at
+// least said it is thinking.
+export const NO_REPLY_AFTER_MS = 30_000;
 
 // newer orders two messages. At the same instant, one of ours still waiting
 // for the hub is the newer: it was typed on this device just now.
@@ -73,18 +91,19 @@ export function historyTrimmed(state: ChatState): boolean {
 
 // upsert puts a message from the hub where it belongs. A message from us
 // that we sent from this device replaces the unconfirmed copy that was
-// waiting for it. Anything from the agent means it is no longer typing.
+// waiting for it. Anything from the agent means whatever it said it was
+// doing has come to this.
 export function upsert(state: ChatState, m: Message): ChatState {
-  const typingUntil = m.sender.kind === 'agent' ? null : state.typingUntil;
+  const activity = m.sender.kind === 'agent' ? null : state.activity;
   if (state.messages.some((x) => x.id === m.id)) {
-    return { ...state, typingUntil, messages: patch(state.messages, m.id, () => m) };
+    return { ...state, activity, messages: patch(state.messages, m.id, () => m) };
   }
   let list = state.messages;
   if (m.sender.kind === 'user') {
     const j = list.findIndex((x) => x.localKey && x.delivery_status !== 'failed' && sameSend(x, m));
     if (j >= 0) list = list.filter((_, k) => k !== j);
   }
-  return { ...state, typingUntil, messages: insert(list, m) };
+  return { ...state, activity, messages: insert(list, m) };
 }
 
 function sameSend(local: ChatMessage, m: Message): boolean {
@@ -108,8 +127,14 @@ export function setDelivery(state: ChatState, id: string, status: DeliveryStatus
   return { ...state, messages: patch(state.messages, id, (m) => ({ ...m, delivery_status: status })) };
 }
 
-export function setTyping(state: ChatState, on: boolean, expiresAt: string): ChatState {
-  return { ...state, typingUntil: on ? Date.parse(expiresAt) : null };
+export function setActivity(state: ChatState, data: Extract<Frame, { type: 'activity' }>['data']): ChatState {
+  return { ...state, activity: activityOf(data), lastSignal: Date.parse(data.expires_at) };
+}
+
+// markStopped is this person pressing stop: whatever the agent was doing is
+// over as far as this screen is concerned, before the hub has even said so.
+export function markStopped(state: ChatState, now: number): ChatState {
+  return { ...state, activity: null, stoppedAt: now };
 }
 
 // addLocal puts our own send on screen before the hub has answered.
@@ -158,8 +183,11 @@ export function applyFrame(state: ChatState, frame: Frame, conversationId: strin
       return appendDelta(state, frame.data.message_id, frame.data.text);
     case 'delivery.updated':
       return setDelivery(state, frame.data.message_id, frame.data.delivery_status);
-    case 'typing':
-      return setTyping(state, frame.data.state === 'start', frame.data.expires_at);
+    case 'activity':
+      return setActivity(state, frame.data);
+    case 'conversation.read':
+      // The badge is the chat list's; an open chat is being read already.
+      return state;
   }
 }
 
@@ -177,8 +205,36 @@ export function quickReplies(state: ChatState): string[] {
   return (last.body.quick_replies ?? []).map((q) => q.label);
 }
 
-export function isTyping(state: ChatState, now: number): boolean {
-  return state.typingUntil !== null && state.typingUntil > now;
+// liveActivity is what the agent is doing now, or null once it has run out.
+export function liveActivity(state: ChatState, now: number): Activity | null {
+  return isLive(state.activity, now) ? state.activity : null;
+}
+
+// writing says an agent's reply is appearing, word by word.
+export function writing(state: ChatState): boolean {
+  return state.messages.some((m) => m.status === 'streaming' && m.sender.kind === 'agent');
+}
+
+// noReplyDue is when "no reply yet" becomes true, or null when it cannot:
+// the person spoke last, the agent's backend has the message, and since
+// then there has been no word and no sign of work. A message still on its
+// way or refused has its own marks, and so does a stop the person pressed
+// after it.
+export function noReplyDue(state: ChatState): number | null {
+  const last = state.messages[0];
+  if (!last || last.sender.kind !== 'user' || last.localKey) return null;
+  if (last.delivery_status !== 'delivered') return null;
+  const said = Date.parse(last.created_at);
+  if (state.stoppedAt !== null && state.stoppedAt >= said) return null;
+  return Math.max(said, state.lastSignal) + NO_REPLY_AFTER_MS;
+}
+
+// lastWords is what the person last said, when it can simply be said
+// again: plain words, not a tap or a file.
+export function lastWords(state: ChatState): string | null {
+  const last = state.messages[0];
+  if (!last || last.sender.kind !== 'user' || last.body.action || last.body.attachments?.length) return null;
+  return last.body.text?.trim() || null;
 }
 
 // removeMessage takes one message off the screen: the person deleted it

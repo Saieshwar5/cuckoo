@@ -79,7 +79,12 @@ export function Bubble({ message: m, mine, first, agentName, onReply, onButton, 
             onLink={onOpen}
           />
         ) : null}
-        {m.truncated ? (
+        {m.stopped ? (
+          <View style={styles.stopped} testID="stopped">
+            <Ionicons name="stop-circle-outline" size={14} color={meta} />
+            <Text style={[styles.truncated, styles.stoppedText, { color: meta }]}>{t('chat.stopped')}</Text>
+          </View>
+        ) : m.truncated ? (
           <Text style={[styles.truncated, { color: meta }]} testID="truncated">
             {t('chat.truncated')}
           </Text>
@@ -227,6 +232,9 @@ const styles = StyleSheet.create({
   meta: { fontSize: 11 },
   // A reply the hub had to end: said as a line of its own, not a whisper.
   truncated: { ...type.caption, fontStyle: 'italic', marginTop: spacing.xs },
+  // A reply the person ended: theirs to have done, so said plainly.
+  stopped: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
+  stoppedText: { marginTop: 0 },
   buttons: {
     borderTopWidth: StyleSheet.hairlineWidth,
     marginTop: spacing.sm,

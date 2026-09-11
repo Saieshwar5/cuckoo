@@ -112,6 +112,11 @@ export interface Api {
   // view changes.
   deleteMessageForMe(conversationId: string, messageId: string): Promise<void>;
   clearConversation(conversationId: string): Promise<void>;
+  // Ask the agents here to stop. The hub ends what they were writing at
+  // once and hands the ended replies back.
+  stopConversation(conversationId: string): Promise<Message[]>;
+  // How far this person has read, for the badge on every device.
+  markRead(conversationId: string, messageId: string): Promise<void>;
   // Files. Uploading is its own step, so a slow photo does not hold a
   // message open; the send that follows names what came back.
   uploadMedia(file: UploadInput): Promise<Media>;
@@ -238,6 +243,10 @@ export function createApi(opts: ApiOptions): Api {
     deleteMessageForMe: (id, messageId) =>
       request('DELETE', `/v1/client/conversations/${id}/messages/${messageId}`),
     clearConversation: (id) => request('POST', `/v1/client/conversations/${id}/clear`),
+    stopConversation: async (id) =>
+      (await request<{ stopped: Message[] }>('POST', `/v1/client/conversations/${id}/stop`)).stopped,
+    markRead: (id, messageId) =>
+      request('POST', `/v1/client/conversations/${id}/read`, { message_id: messageId }),
     sendMessage: async (id, input, idempotencyKey = newIdempotencyKey()) =>
       (
         await request<{ message: Message }>('POST', `/v1/client/conversations/${id}/messages`, {
