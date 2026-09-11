@@ -9,6 +9,7 @@ import { CacheProvider } from '@/cache/CacheProvider';
 import { ChatsProvider } from '@/chats/ChatsProvider';
 import { RealtimeProvider } from '@/realtime/RealtimeProvider';
 import { usePush } from '@/notifications/usePush';
+import { useTimezone } from '@/session/useTimezone';
 import { SessionProvider, useSession } from '@/session/SessionProvider';
 import { ThemeProvider, useTheme } from '@/theme';
 
@@ -41,6 +42,7 @@ function Routes() {
   // Registers this device once signed in, and opens the chat a notification
   // was about when one is tapped.
   usePush();
+  useTimezone();
   const { scheme, colors } = useTheme();
   const bar = <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />;
   if (status === 'loading') {

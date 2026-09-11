@@ -339,7 +339,7 @@
   "schedules.repeat.once": "Once",
   "schedules.date": "Date",
   "schedules.time": "Time",
-  "schedules.zone": "Times are in {zone}.",
+  "schedules.zone": "On your phone's clock ({zone} time). If you travel, it moves with you.",
   "schedules.save": "Save",
   "schedules.delete": "Delete schedule",
   "schedules.delete.title": "Delete this schedule?",
@@ -377,5 +377,7 @@
   "schedules.month.9": "Sep",
   "schedules.month.10": "Oct",
   "schedules.month.11": "Nov",
-  "schedules.month.12": "Dec"
+  "schedules.month.12": "Dec",
+  "schedules.zone.kept": "Runs on {zone} time, not your phone's.",
+  "schedules.zone.other": "{zone} time"
 }

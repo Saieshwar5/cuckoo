@@ -100,7 +100,7 @@ export interface Api {
   // Close the account. The token is dead when this returns.
   deleteMe(): Promise<void>;
   me(): Promise<User>;
-  updateMe(input: { display_name?: string; avatar_media_id?: string }): Promise<User>;
+  updateMe(input: { display_name?: string; avatar_media_id?: string; timezone?: string }): Promise<User>;
   // How much of the hub this person is using, and how long it keeps things.
   storage(): Promise<StorageUsage>;
   listConversations(): Promise<Conversation[]>;

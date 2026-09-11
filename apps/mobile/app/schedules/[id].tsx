@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
 import { TopBar } from '@/components/TopBar';
 import { t } from '@/i18n';
-import { cadenceLabel, statusLine } from '@/schedules/format';
+import { cadenceLabel, deviceZone, elsewhere, statusLine } from '@/schedules/format';
 import { useSchedules } from '@/schedules/useSchedules';
 import { radius, spacing, type, useTheme } from '@/theme';
 
@@ -31,6 +31,7 @@ export default function SchedulesScreen() {
   const { schedules, loading, update } = useSchedules(id);
   const [busyId, setBusyId] = useState<string | null>(null);
   const now = new Date();
+  const phoneZone = deviceZone();
 
   const back = () =>
     router.canGoBack() ? router.back() : router.replace({ pathname: '/chat/[id]', params: { id } });
@@ -83,7 +84,7 @@ export default function SchedulesScreen() {
                     {s.title}
                   </Text>
                   <Text style={[styles.when, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {cadenceLabel(s.cadence)}
+                    {[cadenceLabel(s.cadence), elsewhere(s.cadence, phoneZone)].filter(Boolean).join(' · ')}
                   </Text>
                   <Text
                     style={[

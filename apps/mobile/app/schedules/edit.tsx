@@ -12,7 +12,7 @@ import { Screen } from '@/components/Screen';
 import { TextField } from '@/components/TextField';
 import { TopBar } from '@/components/TopBar';
 import { t } from '@/i18n';
-import { clock, dateLabel, deviceZone, WEEKDAYS } from '@/schedules/format';
+import { clock, dateLabel, deviceZone, WEEKDAYS, zoneName } from '@/schedules/format';
 import { pickDate, pickTime } from '@/schedules/pick';
 import { useSchedules } from '@/schedules/useSchedules';
 import { radius, spacing, type, useTheme } from '@/theme';
@@ -174,7 +174,9 @@ export default function EditScheduleScreen() {
           </Pressable>
         </View>
         <Text style={[styles.zone, { color: colors.textSecondary }]}>
-          {t('schedules.zone', { zone: when.timezone })}
+          {when.timezone === deviceZone()
+            ? t('schedules.zone', { zone: zoneName(when.timezone) })
+            : t('schedules.zone.kept', { zone: zoneName(when.timezone) })}
         </Text>
 
         {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
