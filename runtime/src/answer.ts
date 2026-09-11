@@ -302,6 +302,12 @@ class Writer {
   }
 
   async write(text: string): Promise<void> {
+    if (!this.stream) {
+      // Blank space is not something to say. Models often send a line break
+      // or two before calling a tool; opening a reply for it would put an
+      // empty bubble on screen and hide what the agent is actually doing.
+      text = text.replace(/^\s+/, "");
+    }
     if (!text) return;
     this.text += text;
     this.buffer += text;

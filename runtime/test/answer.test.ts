@@ -218,6 +218,24 @@ test("a tool that names what it does is what the person sees while it runs", asy
   assert.deepEqual(hub.calls.slice(0, 2), ["activity:thinking", "activity:working:Checking the weather"]);
 });
 
+test("blank space before a tool call opens no reply, so the person sees what the tool is doing", async () => {
+  const weather: Tool = {
+    name: "weather",
+    activity: "Checking the weather",
+    description: "",
+    parameters: {},
+    execute: async () => ({ highC: 31 }),
+  };
+  const { hub, deps } = setup([{ say: "\n\n" }, { call: "weather" }, { say: "31 degrees" }], [weather]);
+
+  await answer(ASKED, deps);
+
+  const working = hub.calls.indexOf("activity:working:Checking the weather");
+  assert.ok(working > 0, "the tool's label was shown");
+  assert.ok(hub.calls.indexOf("stream.start") > working, "the reply opened only once there were words");
+  assert.equal(hub.said(), "31 degrees ");
+});
+
 test("a stop ends the run where it stands: nothing more is said, and the cut is remembered", async () => {
   const stop = new AbortController();
   // The stop lands while a tool runs, after the first words were written.

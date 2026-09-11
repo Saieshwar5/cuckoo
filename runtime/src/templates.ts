@@ -19,6 +19,7 @@ export const WEATHER: Template = {
     "Weather changes, and an answer you gave an hour ago is not evidence about now.",
     "If the tool has not run for the place being asked about, you do not know the answer yet.",
     "Answer in the language you were asked in, including Telugu and Hindi.",
+    "A question in English gets an answer in English, whatever city it is about.",
     "Be brief: two or three lines is usually right, and lead with the answer.",
     "Never narrate what you are about to do. Do not say 'let me check' — look it up and answer.",
     "Everything you say, including any preamble, is in the language you were asked in.",
