@@ -6,6 +6,7 @@ import {
   empty,
   filterConversations,
   setConversations,
+  setOpen,
 } from '@/chats/store';
 
 function msg(over: Partial<Message> & { id: string; conversation_id: string; created_at: string }): Message {
@@ -116,6 +117,65 @@ describe('chat list', () => {
       },
     });
     expect(s2.conversations[0]?.last_message?.id).toBe('m2');
+  });
+});
+
+describe('unread and activity', () => {
+  const agentMsg = (id: string, over: Partial<Message> = {}) =>
+    msg({
+      id,
+      conversation_id: 'a',
+      created_at: `2026-09-05T00:00:${id.slice(-2)}Z`,
+      ...over,
+      sender: { kind: 'agent', id: 'agt_1' },
+    });
+  const arrived = (
+    m: Message,
+    type: 'message.created' | 'message.started' | 'message.completed' = 'message.created',
+  ) => ({ type, data: { conversation_id: 'a', message: m } }) as const;
+
+  it('counts what the agent says in a chat not on screen, a stream once', () => {
+    let s = setConversations(empty, [{ ...conv('a', '2026-09-01T00:00:00Z'), unread_count: 1 }]);
+    s = applyFrame(s, arrived(agentMsg('m11')));
+    expect(s.conversations[0]?.unread_count).toBe(2);
+    s = applyFrame(s, arrived(agentMsg('m12', { status: 'streaming', body: {} }), 'message.started'));
+    s = applyFrame(s, arrived(agentMsg('m12'), 'message.completed'));
+    expect(s.conversations[0]?.unread_count).toBe(3);
+    // The person's own words never count.
+    s = applyFrame(s, arrived(msg({ id: 'm13', conversation_id: 'a', created_at: '2026-09-05T00:00:13Z' })));
+    expect(s.conversations[0]?.unread_count).toBe(3);
+  });
+
+  it('keeps no badge for the chat on screen, and clears one when read anywhere', () => {
+    let s = setConversations(empty, [{ ...conv('a', '2026-09-01T00:00:00Z'), unread_count: 4 }]);
+    s = setOpen(s, 'a');
+    expect(s.conversations[0]?.unread_count).toBe(0);
+    s = applyFrame(s, arrived(agentMsg('m11')));
+    expect(s.conversations[0]?.unread_count).toBe(0);
+    s = setOpen(s, null);
+    s = applyFrame(s, arrived(agentMsg('m12')));
+    expect(s.conversations[0]?.unread_count).toBe(1);
+    // Read on another device up to an older message: this one still waits.
+    s = applyFrame(s, { type: 'conversation.read', data: { conversation_id: 'a', read_up_to: 'm11' } });
+    expect(s.conversations[0]?.unread_count).toBe(1);
+    s = applyFrame(s, { type: 'conversation.read', data: { conversation_id: 'a', read_up_to: 'm12' } });
+    expect(s.conversations[0]?.unread_count).toBe(0);
+  });
+
+  it('shows what a busy agent is doing until it speaks or goes idle', () => {
+    let s = setConversations(empty, [conv('a', '2026-09-01T00:00:00Z')]);
+    const busy = (state: 'thinking' | 'working' | 'idle', label?: string) =>
+      ({
+        type: 'activity',
+        data: { conversation_id: 'a', agent_id: 'agt_1', state, label, expires_at: '2026-09-05T00:00:30Z' },
+      }) as const;
+    s = applyFrame(s, busy('working', 'Searching flights'));
+    expect(s.activity.a).toMatchObject({ state: 'working', label: 'Searching flights' });
+    s = applyFrame(s, arrived(agentMsg('m11')));
+    expect(s.activity.a).toBeUndefined();
+    s = applyFrame(s, busy('thinking'));
+    s = applyFrame(s, busy('idle'));
+    expect(s.activity.a).toBeUndefined();
   });
 });
 

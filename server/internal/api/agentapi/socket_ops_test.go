@@ -55,6 +55,7 @@ type phoneFrame struct {
 		MessageID string `json:"message_id"`
 		Text      string `json:"text"`
 		State     string `json:"state"`
+		Label     string `json:"label"`
 		Message   struct {
 			ID     string `json:"id"`
 			Status string `json:"status"`
@@ -134,8 +135,24 @@ func TestStreamOverSocket(t *testing.T) {
 		if r := readReply(t, agent); !r.OK || r.ReplyToCID != "t1" {
 			t.Errorf("typing reply = %+v", r)
 		}
-		if fr := readPhone(t, phone); fr.Type != "typing" || fr.Data.State != "start" {
-			t.Errorf("phone got %+v, want a typing frame", fr)
+		if fr := readPhone(t, phone); fr.Type != "activity" || fr.Data.State != "thinking" {
+			t.Errorf("phone got %+v, want thinking", fr)
+		}
+	})
+
+	t.Run("activity reaches the phone with its label", func(t *testing.T) {
+		send(t, agent, map[string]any{
+			"op": "activity", "cid": "a1", "conversation_id": f.dmID, "state": "working", "label": "Checking the weather",
+		})
+		if r := readReply(t, agent); !r.OK || r.ReplyToCID != "a1" {
+			t.Errorf("activity reply = %+v", r)
+		}
+		if fr := readPhone(t, phone); fr.Type != "activity" || fr.Data.State != "working" || fr.Data.Label != "Checking the weather" {
+			t.Errorf("phone got %+v, want working with the label", fr)
+		}
+		send(t, agent, map[string]any{"op": "activity", "cid": "a2", "conversation_id": f.dmID, "state": "working", "label": "see https://x.example"})
+		if r := readReply(t, agent); r.OK || r.Error == nil || r.Error.Code != "invalid_label" {
+			t.Errorf("link label reply = %+v, want invalid_label", r)
 		}
 	})
 

@@ -65,7 +65,7 @@ describe('chat controller', () => {
     c.stop();
   });
 
-  it('catches up after a reconnect from the newest message it has, and clears typing on time', async () => {
+  it('catches up after a reconnect from the newest message it has, and clears activity on time', async () => {
     const asked: unknown[] = [];
     const api = {
       listMessages: async (_id: string, q: unknown) => {
@@ -86,18 +86,21 @@ describe('chat controller', () => {
 
     jest.useFakeTimers();
     realtime.emit({
-      type: 'typing',
+      type: 'activity',
       data: {
         conversation_id: 'cnv_1',
         agent_id: 'agt_1',
-        state: 'start',
+        state: 'working',
+        label: 'Checking the weather',
         expires_at: '2026-09-05T10:00:12Z',
       },
     });
-    expect(c.getSnapshot().typing).toBe(true);
+    expect(c.getSnapshot().activity?.label).toBe('Checking the weather');
+    expect(c.getSnapshot().busy).toBe(true);
     now += 3_000;
     jest.advanceTimersByTime(3_000);
-    expect(c.getSnapshot().typing).toBe(false);
+    expect(c.getSnapshot().activity).toBeNull();
+    expect(c.getSnapshot().busy).toBe(false);
     jest.useRealTimers();
     c.stop();
   });
@@ -119,6 +122,93 @@ describe('chat controller', () => {
     await c.loadOlder();
     expect(c.getSnapshot().hasOlder).toBe(false);
     expect(c.getSnapshot().trimmed).toBe(true);
+    c.stop();
+  });
+
+  it('stops the agent: the screen stops showing work at once, and the ended reply comes back stopped', async () => {
+    const streaming: Message = { ...msg('m03', 'It is 31 and'), status: 'streaming' };
+    let stops = 0;
+    const api = {
+      listMessages: async () => page([streaming, msg('m02', 'Weather?', 'user')]),
+      stopConversation: async () => {
+        stops += 1;
+        return [{ ...streaming, status: 'complete', stopped: true, truncated: true }];
+      },
+    } as unknown as Api;
+    const c = new ChatController(api, new FakeRealtime(), 'cnv_1', 'usr_1', () =>
+      Date.parse('2026-09-05T10:00:04Z'),
+    );
+    c.start();
+    await flush();
+    expect(c.getSnapshot().writing).toBe(true);
+    expect(c.getSnapshot().busy).toBe(true);
+
+    await c.stopAgent();
+    expect(stops).toBe(1);
+    expect(c.getSnapshot().busy).toBe(false);
+    expect(c.getSnapshot().messages[0]).toMatchObject({ id: 'm03', status: 'complete', stopped: true });
+    c.stop();
+  });
+
+  it('marks the newest message read only while the person can see the chat', async () => {
+    const reads: string[] = [];
+    const api = {
+      listMessages: async () => page([msg('m02', 'hello')]),
+      markRead: async (_id: string, messageId: string) => {
+        reads.push(messageId);
+      },
+    } as unknown as Api;
+    const realtime = new FakeRealtime();
+    const c = new ChatController(api, realtime, 'cnv_1', 'usr_1');
+    jest.useFakeTimers();
+    c.start();
+    await jest.runAllTimersAsync();
+    expect(reads).toEqual([]);
+
+    c.setVisible(true);
+    await jest.advanceTimersByTimeAsync(600);
+    expect(reads).toEqual(['m02']);
+
+    c.setVisible(false);
+    realtime.emit({
+      type: 'message.created',
+      data: { conversation_id: 'cnv_1', message: msg('m04', 'later') },
+    });
+    await jest.advanceTimersByTimeAsync(600);
+    expect(reads).toEqual(['m02']);
+
+    c.setVisible(true);
+    await jest.advanceTimersByTimeAsync(600);
+    expect(reads).toEqual(['m02', 'm04']);
+    jest.useRealTimers();
+    c.stop();
+  });
+
+  it('offers to say it again once a received message has met thirty seconds of silence', async () => {
+    let now = Date.parse('2026-09-05T10:00:05Z');
+    const sent: unknown[] = [];
+    const api = {
+      listMessages: async () =>
+        page([{ ...msg('m05', 'Weather in Goa?', 'user'), delivery_status: 'delivered' }]),
+      sendMessage: async (_id: string, input: unknown) => {
+        sent.push(input);
+        return { ...msg('m09', 'Weather in Goa?', 'user') };
+      },
+    } as unknown as Api;
+    jest.useFakeTimers();
+    const c = new ChatController(api, new FakeRealtime(), 'cnv_1', 'usr_1', () => now);
+    c.start();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(c.getSnapshot().noReply).toBe(false);
+    now += 31_000;
+    await jest.advanceTimersByTimeAsync(31_000);
+    expect(c.getSnapshot().noReply).toBe(true);
+    expect(c.getSnapshot().lastWords).toBe('Weather in Goa?');
+
+    await c.sendAgain();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(sent).toEqual([expect.objectContaining({ text: 'Weather in Goa?' })]);
+    jest.useRealTimers();
     c.stop();
   });
 });

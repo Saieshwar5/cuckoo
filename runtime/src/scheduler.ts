@@ -12,7 +12,7 @@
  * whether the agent still exists.
  */
 
-import { HubClient } from "@cuckoo/agent";
+import { HubClient, type InFlight } from "@cuckoo/agent";
 
 import type { Actions } from "./actions.ts";
 import type { Registry } from "./agents/registry.ts";
@@ -32,6 +32,8 @@ export interface SchedulerDeps {
   usage: Usage;
   actions: Actions;
   proactive: Proactive;
+  /** Runs in progress, so a person can stop a routine mid-reply too. */
+  inflight?: InFlight;
   hubUrl: string;
   /** How often to look for due routines. A minute is the resolution of cron. */
   intervalMs?: number;
@@ -95,33 +97,39 @@ export class Scheduler {
     const secret = await this.deps.registry.secretFor(agent.hubAgentId);
     if (!secret) return;
 
-    await answer(
-      {
-        agent,
-        conversationId: routine.conversationId,
-        // The run says plainly that it is one.
-        //
-        // The first version of this replayed the instruction as though the
-        // person had just said it, on the reasoning that nothing about the
-        // answer should be different. That was wrong, and a real run showed
-        // why: "remind me to take my tablets" means *set this up* the first
-        // time and *tell me now* when it fires. Handed the same words with no
-        // frame, the agent offered to set the routine it was already running.
-        text:
-          `[Your routine is running now. The person did not just say this — ` +
-          `do the thing itself, briefly, and do not offer to set anything up.] ` +
-          routine.instruction,
-        hubMessageId: "",
-        userId: routine.userId,
-      },
-      {
-        turns: this.deps.turns,
-        harness: this.deps.harness,
-        tools: this.deps.tools,
-        usage: this.deps.usage,
-        client: new HubClient(secret, { hub: this.deps.hubUrl }),
-      },
-    );
+    const running = this.deps.inflight?.start(routine.conversationId);
+    try {
+      await answer(
+        {
+          agent,
+          conversationId: routine.conversationId,
+          // The run says plainly that it is one.
+          //
+          // The first version of this replayed the instruction as though the
+          // person had just said it, on the reasoning that nothing about the
+          // answer should be different. That was wrong, and a real run showed
+          // why: "remind me to take my tablets" means *set this up* the first
+          // time and *tell me now* when it fires. Handed the same words with no
+          // frame, the agent offered to set the routine it was already running.
+          text:
+            `[Your routine is running now. The person did not just say this — ` +
+            `do the thing itself, briefly, and do not offer to set anything up.] ` +
+            routine.instruction,
+          hubMessageId: "",
+          userId: routine.userId,
+        },
+        {
+          turns: this.deps.turns,
+          harness: this.deps.harness,
+          tools: this.deps.tools,
+          usage: this.deps.usage,
+          client: new HubClient(secret, { hub: this.deps.hubUrl }),
+          signal: running?.signal,
+        },
+      );
+    } finally {
+      if (running) this.deps.inflight?.end(routine.conversationId, running);
+    }
 
     await this.deps.proactive.record({
       userId: routine.userId,

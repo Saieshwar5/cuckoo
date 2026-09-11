@@ -8,7 +8,7 @@
  * agent, and what lets it be restarted in the middle of a busy afternoon.
  */
 
-import type { Buttons, HubClient } from "@cuckoo/agent";
+import { StoppedError, type ActivityState, type Buttons, type HubClient } from "@cuckoo/agent";
 
 import type { AgentRecord } from "./agents/registry.ts";
 import {
@@ -30,6 +30,9 @@ import type { Turn, TurnStore } from "./memory/turns.ts";
  */
 const FLUSH_MS = 250;
 const FLUSH_CHARS = 120;
+
+/** An activity lasts ten seconds on the hub; it is said again well before. */
+const RENEW_MS = 7_000;
 
 export interface AnswerInput {
   agent: AgentRecord;
@@ -55,6 +58,8 @@ export interface AnswerDeps {
   /** The ceiling, and the counter a subscription will one day read. */
   usage?: UsageLimit;
   windowSize?: number;
+  /** Fires when the person presses stop: the model call ends with it. */
+  signal?: AbortSignal;
 }
 
 /** What `answer` needs of the usage store, so a test can stand one in. */
@@ -102,10 +107,11 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
   // What the reply will end with, if a tool asked for a tap.
   let confirmation: Confirmation | undefined;
   const writer = new Writer(deps.client, conversationId);
+  const labels = new Map(tools.map((t) => [t.name, t.activity]));
 
   // The model may think for a while before it says anything, and a tool call
   // is silence too. The indicator is what says the agent is not simply broken.
-  await writer.thinking();
+  await writer.busy("thinking");
 
   try {
     const events = deps.harness.run({
@@ -113,16 +119,22 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
       messages: [...asMessages(history), { role: "user", content: input.text }],
       tools,
       model: agent.model,
+      signal: deps.signal,
     });
 
     for await (const event of events) {
+      if (deps.signal?.aborted) break;
       switch (event.type) {
         case "text_delta":
           await writer.write(event.text);
           break;
-        case "tool_start":
-          await writer.thinking();
+        case "tool_start": {
+          // The person is told what, in the tool's own words, rather than
+          // just that something is happening.
+          const label = labels.get(event.name);
+          await writer.busy(label ? "working" : "thinking", label);
           break;
+        }
         case "tool_result":
           // A tool that would change something returns an offer instead of
           // doing it. The buttons go on the end of the reply; the tap is
@@ -144,6 +156,10 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
       }
     }
 
+    if (deps.signal?.aborted) {
+      await stoppedHere(input, deps, writer);
+      return;
+    }
     const said = await writer.close(confirmation);
     if (said) {
       await deps.turns.record({
@@ -155,12 +171,34 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
       });
     }
   } catch (error) {
+    // The person pressed stop — here, or on another process, which the hub
+    // reports on our next write. Not a failure: nothing to retry.
+    if (deps.signal?.aborted || error instanceof StoppedError) {
+      await stoppedHere(input, deps, writer);
+      return;
+    }
     // Whatever went wrong, the person is sitting in front of a chat that says
     // nothing. Close what was opened and say so in the one place they are
     // looking; the job's own retry decides whether to try again.
     await writer.fail();
     throw error;
   }
+}
+
+/**
+ * The person pressed stop. The hub has already ended the reply and cleared
+ * the indicator; what is left is to remember what was said before the stop,
+ * so the next turn knows it was cut short rather than finished.
+ */
+async function stoppedHere(input: AnswerInput, deps: AnswerDeps, writer: Writer): Promise<void> {
+  const said = writer.abandon();
+  await deps.turns.record({
+    agentId: input.agent.id,
+    conversationId: input.conversationId,
+    role: "assistant",
+    text: `${said.text.trim()}${said.text.trim() ? " " : ""}[the person stopped this reply]`,
+    hubMessageId: said.messageId,
+  });
 }
 
 /** The tools an agent may use: what its template names, and nothing else. */
@@ -219,9 +257,9 @@ function asMessages(history: Turn[]): HarnessMessage[] {
 }
 
 /**
- * Writes the reply to the hub: holds the typing indicator, opens the stream
- * when there is finally something to say, and buffers so a token does not
- * become a request.
+ * Writes the reply to the hub: keeps the person told what the agent is doing,
+ * opens the stream when there is finally something to say, and buffers so a
+ * token does not become a request.
  *
  * The stream is opened lazily on purpose. The hub finishes a stream left idle
  * for thirty seconds and marks it truncated, so opening one before the model
@@ -234,16 +272,33 @@ class Writer {
   private buffer = "";
   private lastFlush = 0;
   private text = "";
+  private renew?: ReturnType<typeof setInterval>;
 
   constructor(client: HubClient, conversationId: string) {
     this.client = client;
     this.conversationId = conversationId;
   }
 
-  /** Say that something is happening. Safe to call repeatedly. */
-  async thinking(): Promise<void> {
-    if (this.stream) return; // a stream shows the indicator by itself
-    await this.client.typing(this.conversationId, "start").catch(() => {});
+  /**
+   * Say what is happening, and keep saying it: a model can think for longer
+   * than an activity lasts. Safe to call repeatedly.
+   */
+  async busy(state: Exclude<ActivityState, "idle">, label?: string): Promise<void> {
+    if (this.stream) return; // words appearing say it better
+    const say = () => this.client.activity(this.conversationId, state, label).catch(() => {});
+    if (this.renew) clearInterval(this.renew);
+    this.renew = setInterval(() => void say(), RENEW_MS);
+    await say();
+  }
+
+  private quiet(): void {
+    if (this.renew) clearInterval(this.renew);
+    this.renew = undefined;
+  }
+
+  private async idle(): Promise<void> {
+    this.quiet();
+    await this.client.activity(this.conversationId, "idle").catch(() => {});
   }
 
   async write(text: string): Promise<void> {
@@ -251,6 +306,7 @@ class Writer {
     this.text += text;
     this.buffer += text;
     if (!this.stream) {
+      this.quiet();
       const started = await this.client.startStream(this.conversationId);
       this.stream = new StreamHandle(this.client, this.conversationId, started.id);
       this.lastFlush = Date.now();
@@ -270,7 +326,7 @@ class Writer {
   /** Finish the message. Returns what was said, or undefined if nothing was. */
   async close(confirmation?: Confirmation): Promise<{ messageId: string; text: string } | undefined> {
     if (!this.stream) {
-      await this.client.typing(this.conversationId, "stop").catch(() => {});
+      await this.idle();
       // A tool asked for a tap and the model said nothing at all. The question
       // still has to reach the person, or the offer is lost.
       if (confirmation) {
@@ -286,6 +342,18 @@ class Writer {
     return { messageId: this.stream.messageId, text: this.text };
   }
 
+  /**
+   * Let go after a stop, sending nothing: the hub has ended the reply where
+   * the person saw it and cleared the indicator. Returns what reached them.
+   */
+  abandon(): { messageId: string; text: string } {
+    this.quiet();
+    // What was still in the buffer never reached the screen.
+    const shown = this.text.slice(0, this.text.length - this.buffer.length);
+    this.buffer = "";
+    return { messageId: this.stream?.messageId ?? "", text: shown };
+  }
+
   /** Close down after a failure, leaving nothing half-open. */
   async fail(): Promise<void> {
     try {
@@ -293,7 +361,7 @@ class Writer {
         await this.flush().catch(() => {});
         await this.stream.finish().catch(() => {});
       } else {
-        await this.client.typing(this.conversationId, "stop").catch(() => {});
+        await this.idle();
       }
     } catch {
       // The hub being unreachable is what put us here; nothing more to do.

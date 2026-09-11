@@ -51,6 +51,7 @@ type inboundFrame struct {
 	Buttons        [][]buttonInput   `json:"buttons"`
 	QuickReplies   []quickReplyInput `json:"quick_replies"`
 	State          string            `json:"state"`
+	Label          string            `json:"label"`
 }
 
 type openedPayload struct {

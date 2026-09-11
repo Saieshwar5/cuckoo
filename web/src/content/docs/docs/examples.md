@@ -63,7 +63,7 @@ after the last word, marked truncated. The app says the reply was cut short.
 ## buttons — asking before acting
 
 The one to copy when your agent needs a decision. It greets a person using the
-payload from their code, shows a typing indicator, offers two styled buttons
+payload from their code, says it is thinking, offers two styled buttons
 and two quick replies, and dispatches on which button was tapped.
 
 ```python

@@ -38,7 +38,10 @@ type conversationResponse struct {
 	Kind         string                `json:"kind"`
 	Participants []participantResponse `json:"participants"`
 	LastMessage  *messageResponse      `json:"last_message"`
-	CreatedAt    time.Time             `json:"created_at"`
+	// UnreadCount is what others said since the person last read, counted
+	// to 100: the badge on the row.
+	UnreadCount int       `json:"unread_count"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type conversationEnvelope struct {
@@ -54,6 +57,7 @@ func newConversationResponse(c conversations.Conversation) conversationResponse 
 		ID:           domain.FormatID(domain.PrefixConv, c.ID),
 		Kind:         string(c.Kind),
 		Participants: make([]participantResponse, 0, len(c.Participants)),
+		UnreadCount:  c.Unread,
 		CreatedAt:    c.CreatedAt,
 	}
 	for _, p := range c.Participants {

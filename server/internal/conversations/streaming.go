@@ -81,8 +81,7 @@ func (s *Service) AppendStream(ctx context.Context, agentID, messageID uuid.UUID
 	conversationID, userIDs, err := s.streams.append(ctx, ref, text)
 	switch {
 	case errors.Is(err, errNotStreaming):
-		return domain.Conflict("not_streaming",
-			"That message is not streaming. It may have finished, been cut off, or belong to another agent.")
+		return s.whyNotStreaming(ctx, agentID, messageID)
 	case errors.Is(err, errStreamTooLong):
 		return domain.Invalid("stream_too_long",
 			fmt.Sprintf("The message has reached %d characters; finish it.", textMaxLen))
@@ -110,12 +109,25 @@ func (s *Service) FinishStream(ctx context.Context, agentID, messageID uuid.UUID
 	if err != nil {
 		return Message{}, err
 	}
-	return s.finishStream(ctx, agentID, messageID, FinishInput{Buttons: buttons, QuickReplies: quick}, false)
+	return s.finishStream(ctx, agentID, messageID, FinishInput{Buttons: buttons, QuickReplies: quick}, endedByAgent)
 }
 
 var errAlreadyFinished = errors.New("stream: already finished")
 
-func (s *Service) finishStream(ctx context.Context, agentID, messageID uuid.UUID, in FinishInput, cutOff bool) (Message, error) {
+// ending is who finished a stream. Anyone but the agent leaves it
+// truncated — its text is not what the agent meant to finish — and a
+// person's stop says so.
+type ending int
+
+const (
+	endedByAgent ending = iota
+	// endedByHub: the agent went quiet and the sweeper finished it.
+	endedByHub
+	// endedByPerson: the person pressed stop.
+	endedByPerson
+)
+
+func (s *Service) finishStream(ctx context.Context, agentID, messageID uuid.UUID, in FinishInput, end ending) (Message, error) {
 	if s.streams == nil {
 		return Message{}, domain.Internal(errors.New("streaming is not configured"))
 	}
@@ -136,7 +148,8 @@ func (s *Service) finishStream(ctx context.Context, agentID, messageID uuid.UUID
 	)
 	err = s.store.WithTx(ctx, func(tx *store.Store) error {
 		row, err := tx.FinishMessage(ctx, gen.FinishMessageParams{
-			ID: messageID, SenderAgentID: agentID, Body: body, Truncated: cutOff || clamped,
+			ID: messageID, SenderAgentID: agentID, Body: body,
+			Truncated: end != endedByAgent || clamped, Stopped: end == endedByPerson,
 		})
 		if err != nil {
 			if store.IsNoRows(err) {
@@ -229,7 +242,7 @@ func (s *Service) SweepStreams(ctx context.Context, idleFor time.Duration) (int,
 
 	finished := 0
 	for _, ref := range refs {
-		if _, err := s.finishStream(ctx, ref.AgentID, ref.MessageID, FinishInput{}, true); err != nil {
+		if _, err := s.finishStream(ctx, ref.AgentID, ref.MessageID, FinishInput{}, endedByHub); err != nil {
 			// Already finished by the agent between listing and now, or by
 			// another instance's sweep: forget the bookkeeping and move on.
 			_ = s.streams.remove(ctx, ref)

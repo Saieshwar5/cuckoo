@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .errors import StoppedError
+
 if TYPE_CHECKING:
-    from .agent import Agent, Attachable, Buttons, Stream
+    from .agent import Agent
+    from .stream import Stream
+    from .wire import Attachable, Buttons
+
+# An activity lasts ten seconds on the hub; it is said again well before.
+_RENEW_SECONDS = 7.0
 
 
 # The public hub, and the default everywhere in this package. A development
@@ -162,6 +172,8 @@ class Message:
     created_at: str
     status: str = "complete"
     truncated: bool = False
+    # The person pressed stop while this was being written.
+    stopped: bool = False
     action: Action | None = None
     reply_to: ReplyRef | None = None
     # Opaque; absent on messages from before the hub signed them.
@@ -197,6 +209,7 @@ class Message:
             created_at=data.get("created_at", ""),
             status=data.get("status", "complete"),
             truncated=bool(data.get("truncated")),
+            stopped=bool(data.get("stopped")),
             action=Action(action["button_id"], action["source_message_id"]) if action else None,
             reply_to=ReplyRef(
                 reply["id"], reply.get("sender_kind", ""), reply.get("text_preview", "")
@@ -209,6 +222,15 @@ class Message:
                 Attachment.from_wire(a, agent) for a in (body.get("attachments") or [])
             ),
         )
+
+
+@dataclass(frozen=True)
+class StopRequest:
+    """A person pressing stop. ``message_id`` is the reply the hub ended, if
+    the agent had started writing one."""
+
+    conversation_id: str
+    message_id: str | None = None
 
 
 @dataclass
@@ -235,6 +257,9 @@ class Conversation:
     kind: str
     participants: list[Participant] = field(default_factory=list)
     _agent: Agent | None = field(default=None, repr=False, compare=False)
+    # Set when the person presses stop while a handler works on this
+    # conversation. Every write from here on raises StoppedError.
+    stopped: bool = field(default=False, compare=False)
 
     @classmethod
     def from_wire(
@@ -275,7 +300,7 @@ class Conversation:
         whose ``action.button_id`` is the id. ``quick_replies`` are suggested
         answers sent as plain text.
         """
-        return await self._attached().send(
+        return await self._writable().send(
             self.id,
             text,
             attachments=attachments,
@@ -300,15 +325,67 @@ class Conversation:
 
         Buttons and quick replies are attached when the stream finishes.
         """
-        return self._attached().stream(
+        return self._writable().stream(
             self.id, reply_to=reply_to, buttons=buttons, quick_replies=quick_replies
         )
 
+    @asynccontextmanager
+    async def working(self, label: str | None = None) -> AsyncIterator[None]:
+        """Keep the person told what you are doing while the block runs::
+
+            async with conv.working("Checking the weather"):
+                forecast = await weather(city)
+
+        The label shows under the agent's name, in the chat and in the chat
+        list — one line, at most 40 characters, no links. With no label the
+        person sees "thinking…". It is renewed while the block runs and
+        cleared when it ends, however it ends. If the person presses stop,
+        the handler's task is cancelled and the block ends with it.
+        """
+        agent = self._writable()
+        state = "working" if label else "thinking"
+
+        async def say() -> None:
+            # Saying what you are doing is a courtesy, never a reason to fail.
+            with suppress(Exception):
+                await agent.activity(self.id, state, label)
+
+        async def renew() -> None:
+            while True:
+                await asyncio.sleep(_RENEW_SECONDS)
+                await say()
+
+        await say()
+        renewing = asyncio.create_task(renew())
+        try:
+            yield
+        finally:
+            renewing.cancel()
+            # After a stop the hub has already cleared it on every screen.
+            if not self.stopped:
+                with suppress(Exception):
+                    await agent.activity(self.id, "idle")
+
+    def thinking(self) -> Any:
+        """``working`` with nothing to name: the person sees "thinking…"."""
+        return self.working(None)
+
+    async def activity(self, state: str, label: str | None = None) -> None:
+        """Say once what you are doing — ``thinking``, ``working`` with a
+        label, or ``idle``. It shows for ten seconds."""
+        await self._writable().activity(self.id, state, label)
+
     async def typing(self, state: str = "start") -> None:
-        """Show, or hide, the "working" indicator. A stream shows it by itself."""
-        await self._attached().typing(self.id, state)
+        """Show, or hide, the "working" indicator. The first version of
+        ``activity``; a stream shows it by itself."""
+        await self._writable().typing(self.id, state)
 
     def _attached(self) -> Agent:
         if self._agent is None:
             raise RuntimeError("this conversation is not attached to an agent")
         return self._agent
+
+    def _writable(self) -> Agent:
+        if self.stopped:
+            raise StoppedError()
+        return self._attached()

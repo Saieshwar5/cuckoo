@@ -4,6 +4,12 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAgents } from '@/agents/AgentsProvider';
+import { isMuted } from '@/agents/store';
+import { unreadChats } from '@/chat/activity';
+import { arrange } from '@/chats/store';
+import { useChats } from '@/chats/useChats';
+import { badge } from '@/components/ChatRow';
 import { t } from '@/i18n';
 import { radius, type, useTheme } from '@/theme';
 
@@ -28,6 +34,17 @@ function TabIcon({ name, focused }: { name: TabIconName; focused: boolean }) {
 export default function TabsLayout() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { conversations } = useChats();
+  const { contacts } = useAgents();
+  // The tab counts chats waiting to be read, not messages, and leaves out
+  // what the person muted or set aside: a number that is always there is a
+  // number nobody reads.
+  const byAgent = new Map(contacts.map((c) => [c.agent.id, c]));
+  const waiting = unreadChats(arrange(conversations, contacts).shown, (c) => {
+    const agent = c.participants.find((p) => p.kind === 'agent');
+    const contact = agent ? byAgent.get(agent.id) : undefined;
+    return contact ? isMuted(contact) : false;
+  });
   return (
     <Tabs
       screenOptions={{
@@ -49,6 +66,8 @@ export default function TabsLayout() {
         options={{
           title: t('tabs.chats'),
           tabBarIcon: ({ focused }) => <TabIcon name="chatbubbles" focused={focused} />,
+          tabBarBadge: waiting ? badge(waiting) : undefined,
+          tabBarBadgeStyle: { backgroundColor: colors.accent, color: colors.onAccent, fontSize: 11 },
         }}
       />
       <Tabs.Screen

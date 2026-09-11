@@ -36,7 +36,7 @@ func (q *Queries) ClearConversation(ctx context.Context, arg ClearConversationPa
 const createMessage = `-- name: CreateMessage :one
 INSERT INTO messages (id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, idempotency_key, status, reply_to_message_id, signature)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature
+RETURNING id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature, stopped
 `
 
 type CreateMessageParams struct {
@@ -79,22 +79,24 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		&i.Truncated,
 		&i.ReplyToMessageID,
 		&i.Signature,
+		&i.Stopped,
 	)
 	return i, err
 }
 
 const finishMessage = `-- name: FinishMessage :one
 UPDATE messages
-SET body = $1, status = 'complete', truncated = $2
-WHERE id = $3
-  AND sender_agent_id = $4::uuid
+SET body = $1, status = 'complete', truncated = $2, stopped = $3
+WHERE id = $4
+  AND sender_agent_id = $5::uuid
   AND status = 'streaming'
-RETURNING id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature
+RETURNING id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature, stopped
 `
 
 type FinishMessageParams struct {
 	Body          []byte
 	Truncated     bool
+	Stopped       bool
 	ID            uuid.UUID
 	SenderAgentID uuid.UUID
 }
@@ -106,6 +108,7 @@ func (q *Queries) FinishMessage(ctx context.Context, arg FinishMessageParams) (M
 	row := q.db.QueryRow(ctx, finishMessage,
 		arg.Body,
 		arg.Truncated,
+		arg.Stopped,
 		arg.ID,
 		arg.SenderAgentID,
 	)
@@ -123,12 +126,13 @@ func (q *Queries) FinishMessage(ctx context.Context, arg FinishMessageParams) (M
 		&i.Truncated,
 		&i.ReplyToMessageID,
 		&i.Signature,
+		&i.Stopped,
 	)
 	return i, err
 }
 
 const getMessage = `-- name: GetMessage :one
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature FROM messages
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature, stopped FROM messages
 WHERE id = $1
 `
 
@@ -148,12 +152,13 @@ func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (Message, error)
 		&i.Truncated,
 		&i.ReplyToMessageID,
 		&i.Signature,
+		&i.Stopped,
 	)
 	return i, err
 }
 
 const getMessageByAgentKey = `-- name: GetMessageByAgentKey :one
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature FROM messages
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature, stopped FROM messages
 WHERE sender_agent_id = $1::uuid AND idempotency_key = $2::text
 `
 
@@ -178,12 +183,13 @@ func (q *Queries) GetMessageByAgentKey(ctx context.Context, arg GetMessageByAgen
 		&i.Truncated,
 		&i.ReplyToMessageID,
 		&i.Signature,
+		&i.Stopped,
 	)
 	return i, err
 }
 
 const getMessageByUserKey = `-- name: GetMessageByUserKey :one
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature FROM messages
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature, stopped FROM messages
 WHERE sender_user_id = $1::uuid AND idempotency_key = $2::text
 `
 
@@ -208,6 +214,7 @@ func (q *Queries) GetMessageByUserKey(ctx context.Context, arg GetMessageByUserK
 		&i.Truncated,
 		&i.ReplyToMessageID,
 		&i.Signature,
+		&i.Stopped,
 	)
 	return i, err
 }
@@ -228,7 +235,7 @@ func (q *Queries) HideMessage(ctx context.Context, arg HideMessageParams) error 
 }
 
 const listLatestMessages = `-- name: ListLatestMessages :many
-SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature
+SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature, stopped
 FROM messages
 WHERE conversation_id = ANY($1::uuid[])
 ORDER BY conversation_id, id DESC
@@ -257,6 +264,7 @@ func (q *Queries) ListLatestMessages(ctx context.Context, conversationIds []uuid
 			&i.Truncated,
 			&i.ReplyToMessageID,
 			&i.Signature,
+			&i.Stopped,
 		); err != nil {
 			return nil, err
 		}
@@ -269,7 +277,7 @@ func (q *Queries) ListLatestMessages(ctx context.Context, conversationIds []uuid
 }
 
 const listLatestVisibleMessages = `-- name: ListLatestVisibleMessages :many
-SELECT DISTINCT ON (m.conversation_id) m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key, m.status, m.truncated, m.reply_to_message_id, m.signature
+SELECT DISTINCT ON (m.conversation_id) m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key, m.status, m.truncated, m.reply_to_message_id, m.signature, m.stopped
 FROM messages m
 JOIN participants p ON p.conversation_id = m.conversation_id AND p.user_id = $1::uuid
 WHERE m.conversation_id = ANY($2::uuid[])
@@ -308,6 +316,7 @@ func (q *Queries) ListLatestVisibleMessages(ctx context.Context, arg ListLatestV
 			&i.Truncated,
 			&i.ReplyToMessageID,
 			&i.Signature,
+			&i.Stopped,
 		); err != nil {
 			return nil, err
 		}
@@ -320,7 +329,7 @@ func (q *Queries) ListLatestVisibleMessages(ctx context.Context, arg ListLatestV
 }
 
 const listMessagesAfter = `-- name: ListMessagesAfter :many
-SELECT m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key, m.status, m.truncated, m.reply_to_message_id, m.signature FROM messages m
+SELECT m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key, m.status, m.truncated, m.reply_to_message_id, m.signature, m.stopped FROM messages m
 JOIN participants p ON p.conversation_id = m.conversation_id AND p.user_id = $1::uuid
 WHERE m.conversation_id = $2
   AND (p.cleared_before IS NULL OR m.id > p.cleared_before)
@@ -367,6 +376,7 @@ func (q *Queries) ListMessagesAfter(ctx context.Context, arg ListMessagesAfterPa
 			&i.Truncated,
 			&i.ReplyToMessageID,
 			&i.Signature,
+			&i.Stopped,
 		); err != nil {
 			return nil, err
 		}
@@ -379,7 +389,7 @@ func (q *Queries) ListMessagesAfter(ctx context.Context, arg ListMessagesAfterPa
 }
 
 const listMessagesBefore = `-- name: ListMessagesBefore :many
-SELECT m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key, m.status, m.truncated, m.reply_to_message_id, m.signature FROM messages m
+SELECT m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key, m.status, m.truncated, m.reply_to_message_id, m.signature, m.stopped FROM messages m
 JOIN participants p ON p.conversation_id = m.conversation_id AND p.user_id = $1::uuid
 WHERE m.conversation_id = $2
   AND (p.cleared_before IS NULL OR m.id > p.cleared_before)
@@ -427,6 +437,7 @@ func (q *Queries) ListMessagesBefore(ctx context.Context, arg ListMessagesBefore
 			&i.Truncated,
 			&i.ReplyToMessageID,
 			&i.Signature,
+			&i.Stopped,
 		); err != nil {
 			return nil, err
 		}
@@ -439,7 +450,7 @@ func (q *Queries) ListMessagesBefore(ctx context.Context, arg ListMessagesBefore
 }
 
 const listMessagesBeforeForAgent = `-- name: ListMessagesBeforeForAgent :many
-SELECT m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key, m.status, m.truncated, m.reply_to_message_id, m.signature FROM messages m
+SELECT m.id, m.conversation_id, m.sender_kind, m.sender_user_id, m.sender_agent_id, m.body, m.created_at, m.idempotency_key, m.status, m.truncated, m.reply_to_message_id, m.signature, m.stopped FROM messages m
 JOIN participants p ON p.conversation_id = m.conversation_id AND p.agent_id = $1::uuid
 WHERE m.conversation_id = $2
   AND m.created_at >= p.joined_at
@@ -484,6 +495,7 @@ func (q *Queries) ListMessagesBeforeForAgent(ctx context.Context, arg ListMessag
 			&i.Truncated,
 			&i.ReplyToMessageID,
 			&i.Signature,
+			&i.Stopped,
 		); err != nil {
 			return nil, err
 		}
@@ -496,7 +508,7 @@ func (q *Queries) ListMessagesBeforeForAgent(ctx context.Context, arg ListMessag
 }
 
 const listMessagesByIDs = `-- name: ListMessagesByIDs :many
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature FROM messages
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature, stopped FROM messages
 WHERE id = ANY($1::uuid[])
 `
 
@@ -522,6 +534,7 @@ func (q *Queries) ListMessagesByIDs(ctx context.Context, ids []uuid.UUID) ([]Mes
 			&i.Truncated,
 			&i.ReplyToMessageID,
 			&i.Signature,
+			&i.Stopped,
 		); err != nil {
 			return nil, err
 		}
@@ -534,7 +547,7 @@ func (q *Queries) ListMessagesByIDs(ctx context.Context, ids []uuid.UUID) ([]Mes
 }
 
 const listStaleStreamingMessages = `-- name: ListStaleStreamingMessages :many
-SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature FROM messages
+SELECT id, conversation_id, sender_kind, sender_user_id, sender_agent_id, body, created_at, idempotency_key, status, truncated, reply_to_message_id, signature, stopped FROM messages
 WHERE status = 'streaming' AND created_at < $1::timestamptz
 ORDER BY created_at
 LIMIT 100
@@ -564,7 +577,41 @@ func (q *Queries) ListStaleStreamingMessages(ctx context.Context, startedBefore 
 			&i.Truncated,
 			&i.ReplyToMessageID,
 			&i.Signature,
+			&i.Stopped,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStreamingInConversation = `-- name: ListStreamingInConversation :many
+SELECT id, sender_agent_id::uuid AS sender_agent_id FROM messages
+WHERE conversation_id = $1 AND status = 'streaming' AND sender_kind = 'agent'
+ORDER BY id
+`
+
+type ListStreamingInConversationRow struct {
+	ID            uuid.UUID
+	SenderAgentID uuid.UUID
+}
+
+// The replies being written in a conversation right now: what a person's
+// stop ends.
+func (q *Queries) ListStreamingInConversation(ctx context.Context, conversationID uuid.UUID) ([]ListStreamingInConversationRow, error) {
+	rows, err := q.db.Query(ctx, listStreamingInConversation, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStreamingInConversationRow{}
+	for rows.Next() {
+		var i ListStreamingInConversationRow
+		if err := rows.Scan(&i.ID, &i.SenderAgentID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

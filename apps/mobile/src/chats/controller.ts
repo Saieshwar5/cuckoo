@@ -2,10 +2,13 @@ import type { Api } from '../api/client';
 import type { Conversation } from '../api/types';
 import { keys, MemoryCache, type Cache } from '../cache/cache';
 import type { Realtime } from '../realtime/realtime';
-import { applyFrame, concernsUnknown, empty, setConversations, type ChatsState } from './store';
+import { isLive, type Activity } from '../chat/activity';
+import { applyFrame, concernsUnknown, empty, setConversations, setOpen, type ChatsState } from './store';
 
 export interface ChatsSnapshot {
   conversations: Conversation[];
+  // What each busy agent is doing, by conversation: only what is still live.
+  activity: Record<string, Activity>;
   loading: boolean;
   error: unknown;
   connected: boolean;
@@ -18,7 +21,14 @@ export interface ChatsSnapshot {
 // A screen subscribes to snapshots; nothing here knows about screens.
 export class ChatsController {
   private state: ChatsState = empty;
-  private snapshot: ChatsSnapshot = { conversations: [], loading: true, error: null, connected: false };
+  private snapshot: ChatsSnapshot = {
+    conversations: [],
+    activity: {},
+    loading: true,
+    error: null,
+    connected: false,
+  };
+  private wakeTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<() => void>();
   private unsubscribe: (() => void) | null = null;
   private stopped = false;
@@ -68,7 +78,15 @@ export class ChatsController {
     this.stopped = true;
     this.unsubscribe?.();
     this.unsubscribe = null;
+    if (this.wakeTimer) clearTimeout(this.wakeTimer);
+    this.wakeTimer = null;
   }
+
+  // open tells the list which chat is on screen, or that none is. What
+  // lands in the open chat is being read, and adds nothing to its badge.
+  open = (conversationId: string | null): void => {
+    this.set(setOpen(this.state, conversationId));
+  };
 
   refresh = async (): Promise<void> => {
     try {
@@ -90,9 +108,30 @@ export class ChatsController {
   }
 
   private set(state: ChatsState, extra: Partial<ChatsSnapshot> = {}): void {
+    const changed = state.conversations !== this.state.conversations;
     this.state = state;
-    this.patch({ conversations: state.conversations, ...extra });
-    void this.cache.set(this.cacheKey, state.conversations);
+    this.patch({ conversations: state.conversations, activity: this.liveActivity(), ...extra });
+    if (changed) void this.cache.set(this.cacheKey, state.conversations);
+  }
+
+  // liveActivity is the activity still showing, with a timer set for the
+  // moment the first of it runs out, so a row stops saying "thinking" on
+  // its own when the agent stops saying so.
+  private liveActivity(): Record<string, Activity> {
+    if (this.wakeTimer) clearTimeout(this.wakeTimer);
+    this.wakeTimer = null;
+    const now = Date.now();
+    const live: Record<string, Activity> = {};
+    let next = Infinity;
+    for (const [id, a] of Object.entries(this.state.activity)) {
+      if (!isLive(a, now)) continue;
+      live[id] = a;
+      next = Math.min(next, a.until);
+    }
+    if (next !== Infinity && !this.stopped) {
+      this.wakeTimer = setTimeout(() => this.patch({ activity: this.liveActivity() }), next - now + 10);
+    }
+    return live;
   }
 
   private patch(extra: Partial<ChatsSnapshot>): void {

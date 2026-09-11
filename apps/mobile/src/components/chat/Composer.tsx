@@ -23,12 +23,16 @@ interface Props {
   // change, so they can be kept for next time.
   draft?: string | null;
   onDraft?: (text: string) => void;
+  // The agent is busy here — thinking, working, writing — and pressing
+  // stop would end it.
+  busy?: boolean;
+  onStop?: () => void;
 }
 
 // Composer is the bar at the bottom: what is being quoted, the words, and
 // the one button. Enter sends in a browser, where a keyboard has a shift
 // key for a new line; on a phone the button sends.
-export function Composer({ replyTo, agentName, onCancelReply, onSend, draft, onDraft }: Props) {
+export function Composer({ replyTo, agentName, onCancelReply, onSend, draft, onDraft, busy, onStop }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [text, setTextState] = useState('');
@@ -205,6 +209,23 @@ export function Composer({ replyTo, agentName, onCancelReply, onSend, draft, onD
               ]}
             >
               <Ionicons name="send" size={20} color={colors.onAccent} />
+            </Pressable>
+          ) : busy && onStop ? (
+            // Nothing written while the agent is busy: the one button is
+            // stop. It is where the thumb already is, and it needs no menu
+            // and no confirmation — stopping is never the dangerous choice.
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('chat.stop', { name: agentName })}
+              onPress={onStop}
+              testID="stop"
+              style={({ pressed }) => [
+                styles.send,
+                { backgroundColor: colors.text },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons name="stop" size={18} color={colors.ground} />
             </Pressable>
           ) : (
             // Nothing written: the button is a microphone, because the thing

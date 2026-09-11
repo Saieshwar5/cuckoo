@@ -2,7 +2,8 @@ import { render } from '@testing-library/react-native';
 import React from 'react';
 
 import type { Conversation } from '@/api/types';
-import { ChatRow, preview } from '@/components/ChatRow';
+import { rowActivity } from '@/chat/activity';
+import { badge, ChatRow, preview } from '@/components/ChatRow';
 
 const dm: Conversation = {
   id: 'cnv_1',
@@ -46,5 +47,43 @@ describe('ChatRow', () => {
   it('previews a stream in progress as typing', () => {
     expect(preview({ ...dm.last_message!, status: 'streaming', body: {} })).toBe('Typing…');
     expect(preview(null)).toBe('No messages yet');
+  });
+
+  it('says what a busy agent is doing in place of the last message', async () => {
+    const view = await render(
+      <ChatRow conversation={dm} onPress={() => {}} activity="Checking the weather…" />,
+    );
+    expect(view.getByText('Checking the weather…')).toBeTruthy();
+    expect(view.getByTestId('working-dots')).toBeTruthy();
+    expect(view.queryByText('my payment failed')).toBeNull();
+    expect(view.queryByTestId('ticks-delivered')).toBeNull();
+  });
+
+  it('carries an unread badge, written short past 99', async () => {
+    const view = await render(<ChatRow conversation={{ ...dm, unread_count: 3 }} onPress={() => {}} />);
+    expect(view.getByTestId('row-unread-cnv_1')).toBeTruthy();
+    expect(view.getByText('3')).toBeTruthy();
+    expect(badge(100)).toBe('99+');
+    const none = await render(<ChatRow conversation={dm} onPress={() => {}} />);
+    expect(none.queryByTestId('row-unread-cnv_1')).toBeNull();
+  });
+
+  it('reads a busy line from a reply being written, then from what the agent said it was doing', () => {
+    const now = Date.parse('2026-09-05T00:00:00Z');
+    const writingNow = {
+      ...dm,
+      last_message: {
+        ...dm.last_message!,
+        sender: { kind: 'agent' as const, id: 'agt_1' },
+        status: 'streaming' as const,
+      },
+    };
+    expect(rowActivity(writingNow, undefined)).toBe('writing…');
+    expect(rowActivity(dm, { state: 'working', label: 'Searching flights', until: now + 5000 })).toBe(
+      'Searching flights…',
+    );
+    expect(rowActivity(dm, { state: 'working', label: null, until: now + 5000 })).toBe('working…');
+    expect(rowActivity(dm, { state: 'thinking', label: null, until: now + 5000 })).toBe('thinking…');
+    expect(rowActivity(dm, undefined)).toBeNull();
   });
 });

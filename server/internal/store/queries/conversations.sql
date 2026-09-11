@@ -108,3 +108,31 @@ SELECT user_id::uuid AS user_id
 FROM participants
 WHERE conversation_id = $1 AND user_id IS NOT NULL
 ORDER BY joined_at, user_id;
+
+-- name: MarkRead :execrows
+-- Moves how far a person has read, and only forward: a device that was
+-- behind cannot unread what another device has seen.
+UPDATE participants
+SET read_up_to = sqlc.arg('message_id')::uuid
+WHERE conversation_id = sqlc.arg('conversation_id')
+  AND user_id = sqlc.arg('user_id')::uuid
+  AND (read_up_to IS NULL OR read_up_to < sqlc.arg('message_id')::uuid);
+
+-- name: CountUnread :many
+-- The number on a chat-list row: what others said after the person last
+-- read, leaving out anything they cleared or hid. Counted to 100 and no
+-- further — "99+" is all a badge ever says, and a chat nobody has opened in
+-- a year should cost the list the same as one read this morning.
+SELECT p.conversation_id,
+       (SELECT count(*) FROM (
+            SELECT 1 FROM messages m
+            WHERE m.conversation_id = p.conversation_id
+              AND m.sender_user_id IS DISTINCT FROM p.user_id
+              AND (p.read_up_to IS NULL OR m.id > p.read_up_to)
+              AND (p.cleared_before IS NULL OR m.id > p.cleared_before)
+              AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.user_id = p.user_id AND h.message_id = m.id)
+            LIMIT 100
+        ) unread)::int AS unread
+FROM participants p
+WHERE p.user_id = sqlc.arg('user_id')::uuid
+  AND p.conversation_id = ANY(sqlc.arg('conversation_ids')::uuid[]);

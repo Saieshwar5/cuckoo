@@ -19,7 +19,7 @@ WHERE id = $1;
 -- that started it, and to a message still streaming, so a second finish or
 -- another agent's finish changes nothing.
 UPDATE messages
-SET body = sqlc.arg('body'), status = 'complete', truncated = sqlc.arg('truncated')
+SET body = sqlc.arg('body'), status = 'complete', truncated = sqlc.arg('truncated'), stopped = sqlc.arg('stopped')
 WHERE id = sqlc.arg('id')
   AND sender_agent_id = sqlc.arg('sender_agent_id')::uuid
   AND status = 'streaming'
@@ -36,6 +36,13 @@ SELECT * FROM messages
 WHERE status = 'streaming' AND created_at < sqlc.arg('started_before')::timestamptz
 ORDER BY created_at
 LIMIT 100;
+
+-- name: ListStreamingInConversation :many
+-- The replies being written in a conversation right now: what a person's
+-- stop ends.
+SELECT id, sender_agent_id::uuid AS sender_agent_id FROM messages
+WHERE conversation_id = $1 AND status = 'streaming' AND sender_kind = 'agent'
+ORDER BY id;
 
 -- name: GetMessageByUserKey :one
 SELECT * FROM messages

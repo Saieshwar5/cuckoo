@@ -14,10 +14,12 @@
 import { HubClient, type ClientOptions } from "./client.ts";
 import {
   type Handlers,
+  InFlight,
   type JoinHandler,
   type LeaveHandler,
   type MessageHandler,
   SeenEvents,
+  type StopHandler,
   dispatch,
   parseEnvelope,
 } from "./events.ts";
@@ -36,6 +38,7 @@ export class Agent {
   private readonly options: AgentOptions;
   private readonly handlers: Handlers = {};
   private readonly seen = new SeenEvents();
+  private readonly inflight = new InFlight();
   private session?: SocketSession;
   private stopped = false;
 
@@ -59,6 +62,16 @@ export class Agent {
   /** Register what runs when the agent is removed or blocked. */
   onLeave(fn: LeaveHandler): this {
     this.handlers.onLeave = fn;
+    return this;
+  }
+
+  /**
+   * Register what runs when the person presses stop. Without one, stopping
+   * still works: the handler for that conversation is cancelled, and its
+   * next write throws `StoppedError`, which ends it quietly.
+   */
+  onStop(fn: StopHandler): this {
+    this.handlers.onStop = fn;
     return this;
   }
 
@@ -131,7 +144,7 @@ export class Agent {
       return;
     }
     try {
-      await dispatch(envelope, this.client, this.handlers);
+      await dispatch(envelope, this.client, this.handlers, this.inflight);
     } catch (error) {
       console.error(`cuckoo: handler failed for ${envelope.id}; the hub will send it again`, error);
       return;

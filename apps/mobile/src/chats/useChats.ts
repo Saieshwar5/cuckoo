@@ -4,7 +4,7 @@ import type { Conversation } from '../api/types';
 import { useChatsController } from './ChatsProvider';
 import type { ChatsSnapshot } from './controller';
 
-const idle: ChatsSnapshot = { conversations: [], loading: true, error: null, connected: false };
+const idle: ChatsSnapshot = { conversations: [], activity: {}, loading: true, error: null, connected: false };
 const never = () => () => {};
 const idleSnapshot = () => idle;
 
@@ -16,7 +16,11 @@ export function useChats() {
     controller?.getSnapshot ?? idleSnapshot,
     controller?.getSnapshot ?? idleSnapshot,
   );
-  return { ...snapshot, refresh: controller?.refresh ?? (async () => {}) };
+  return {
+    ...snapshot,
+    refresh: controller?.refresh ?? (async () => {}),
+    open: controller?.open ?? (() => {}),
+  };
 }
 
 // useConversation is one entry of the list, by id: null until the list has

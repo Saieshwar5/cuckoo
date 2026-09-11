@@ -1,6 +1,6 @@
 """Cuckoo Agent Protocol client: connect a backend to a hub and talk."""
 
-from .agent import Agent, Attachable, Buttons, ProtocolError, Stream
+from .agent import Agent, Attachable, Buttons, ProtocolError, Stream, StoppedError
 from .management import AgentInfo, Code, Management
 from .models import (
     Action,
@@ -12,6 +12,7 @@ from .models import (
     Participant,
     ReplyRef,
     Sender,
+    StopRequest,
 )
 
 __all__ = [
@@ -31,5 +32,7 @@ __all__ = [
     "ProtocolError",
     "ReplyRef",
     "Sender",
+    "StopRequest",
+    "StoppedError",
     "Stream",
 ]

@@ -66,6 +66,8 @@ export interface Message {
   createdAt: string;
   status: string;
   truncated: boolean;
+  /** The person pressed stop while this was being written. */
+  stopped: boolean;
   /** Set when the person tapped one of your buttons; `text` is then its label. */
   action?: Action;
   replyTo?: ReplyRef;
@@ -165,6 +167,7 @@ export function parseMessage(data: unknown, conversationId: string, eventId?: st
     createdAt: str(w.created_at),
     status: str(w.status) || "complete",
     truncated: Boolean(w.truncated),
+    stopped: Boolean(w.stopped),
     ...(action.button_id
       ? { action: { buttonId: str(action.button_id), sourceMessageId: str(action.source_message_id) } }
       : {}),

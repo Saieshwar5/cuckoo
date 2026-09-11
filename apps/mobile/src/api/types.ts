@@ -100,6 +100,9 @@ export interface Message {
   reply_to: { id: string; sender_kind: ParticipantKind; text_preview: string } | null;
   status: 'streaming' | 'complete';
   truncated: boolean;
+  // The person pressed stop while the agent was writing this. Absent from
+  // messages remembered before stop existed.
+  stopped?: boolean;
   delivery_status: DeliveryStatus | null;
   created_at: string;
 }
@@ -109,6 +112,9 @@ export interface Conversation {
   kind: 'dm' | 'group';
   participants: Participant[];
   last_message: Message | null;
+  // What others said since this person last read, counted to 100: the
+  // badge. Absent from lists remembered before it existed.
+  unread_count?: number;
   created_at: string;
 }
 
@@ -272,7 +278,14 @@ export type Frame =
       data: { conversation_id: string; message_id: string; delivery_status: DeliveryStatus };
     }
   | {
-      type: 'typing';
-      data: { conversation_id: string; agent_id: string; state: 'start' | 'stop'; expires_at: string };
+      type: 'activity';
+      data: {
+        conversation_id: string;
+        agent_id: string;
+        state: 'thinking' | 'working' | 'idle';
+        label?: string;
+        expires_at: string;
+      };
     }
+  | { type: 'conversation.read'; data: { conversation_id: string; read_up_to: string } }
   | { type: 'agent.status'; data: { agent_id: string; status: AgentLiveStatus } };

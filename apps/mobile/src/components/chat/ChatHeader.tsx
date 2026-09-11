@@ -8,11 +8,14 @@ import { sizes, spacing, type, useTheme } from '@/theme';
 
 import { Avatar } from '../Avatar';
 import { IconButton } from '../IconButton';
+import { WorkingDots } from '../WorkingDots';
 
 interface Props {
   name: string;
   status: AgentStatus | null | undefined;
-  typing: boolean;
+  // What the agent is doing, in words — "thinking…", "checking the
+  // weather…" — or null when it is not busy.
+  activity: string | null;
   avatar?: MediaSource | null;
   onBack: () => void;
   /** Opens the agent's profile. Ten years of messengers have trained the
@@ -23,16 +26,16 @@ interface Props {
 }
 
 // ChatHeader names who the conversation is with and what they are doing:
-// online, typing, or out of reach.
+// online, busy at something it names, or out of reach.
 //
 // The name and picture are a button, because that is where everybody looks
 // for "who is this". Beside them is a menu holding the two or three things
 // somebody reaches for while they are annoyed — muting, most of all. If mute
 // is three screens away nobody mutes; they block, and a block is permanent.
-export function ChatHeader({ name, status, typing, avatar, onBack, onOpenProfile, onMore }: Props) {
+export function ChatHeader({ name, status, activity, avatar, onBack, onOpenProfile, onMore }: Props) {
   const { colors } = useTheme();
-  const line = typing
-    ? t('chat.typing')
+  const line = activity
+    ? activity
     : status === undefined
       ? ''
       : status
@@ -55,13 +58,16 @@ export function ChatHeader({ name, status, typing, avatar, onBack, onOpenProfile
             {name}
           </Text>
           {line ? (
-            <Text
-              style={[styles.status, { color: typing ? colors.accentStrong : colors.textSecondary }]}
-              numberOfLines={1}
-              testID="chat-status"
-            >
-              {line}
-            </Text>
+            <View style={styles.statusRow}>
+              {activity ? <WorkingDots color={colors.accentStrong} size={4} /> : null}
+              <Text
+                style={[styles.status, { color: activity ? colors.accentStrong : colors.textSecondary }]}
+                numberOfLines={1}
+                testID="chat-status"
+              >
+                {line}
+              </Text>
+            </View>
           ) : null}
         </View>
       </Pressable>
@@ -87,5 +93,6 @@ const styles = StyleSheet.create({
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   titles: { flex: 1, marginLeft: spacing.xs },
   name: type.headline,
-  status: { ...type.caption, marginTop: 1 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: 1 },
+  status: { ...type.caption, flexShrink: 1 },
 });

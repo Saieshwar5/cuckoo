@@ -2,10 +2,8 @@ package conversations_test
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
@@ -240,44 +238,6 @@ func TestReplyTo(t *testing.T) {
 	missing := domain.NewID()
 	if _, err := f.svc.SendAsUser(ctx, f.owner.ID, f.dm.ID, conversations.SendInput{Text: "x", ReplyTo: &missing}); domain.CodeOf(err) != "invalid_reply_to" {
 		t.Errorf("reply to nothing got %v, want invalid_reply_to", err)
-	}
-}
-
-func TestTyping(t *testing.T) {
-	ctx := context.Background()
-	f := setup(t)
-	rec := &recorder{}
-	svc := conversations.New(f.db, conversations.WithPublisher(rec))
-
-	if err := svc.Typing(ctx, f.agent.ID, f.dm.ID, "start"); err != nil {
-		t.Fatalf("Typing start: %v", err)
-	}
-	ev := rec.last(t, conversations.EventTyping)
-	var p conversations.TypingEvent
-	if err := json.Unmarshal(ev.Payload, &p); err != nil {
-		t.Fatal(err)
-	}
-	if len(ev.Recipients) != 1 || ev.Recipients[0] != f.owner.ID || p.State != "start" || p.AgentID != f.agent.ID {
-		t.Errorf("typing event = %+v to %v", p, ev.Recipients)
-	}
-	if until := time.Until(p.ExpiresAt); until < 8*time.Second || until > 11*time.Second {
-		t.Errorf("start expires in %v, want about ten seconds", until)
-	}
-
-	if err := svc.Typing(ctx, f.agent.ID, f.dm.ID, "stop"); err != nil {
-		t.Fatal(err)
-	}
-	_ = json.Unmarshal(rec.last(t, conversations.EventTyping).Payload, &p)
-	if p.State != "stop" || p.ExpiresAt.After(time.Now()) {
-		t.Errorf("stop event = %+v, want expired at once", p)
-	}
-
-	if err := svc.Typing(ctx, f.agent.ID, f.dm.ID, "thinking"); domain.CodeOf(err) != "invalid_state" {
-		t.Errorf("bad state got %v", err)
-	}
-	stranger := testutil.CreateAgent(t, f.db, f.other)
-	if err := svc.Typing(ctx, stranger.ID, f.dm.ID, "start"); domain.CodeOf(err) != "not_participant" {
-		t.Errorf("stranger typing got %v", err)
 	}
 }
 

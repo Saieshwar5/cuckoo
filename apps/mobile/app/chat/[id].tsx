@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import type { Button as ButtonSpec } from '@/api/types';
@@ -9,9 +9,10 @@ import type { ChatMessage } from '@/chat/store';
 import { useAgents, useContact } from '@/agents/AgentsProvider';
 import { keys } from '@/cache/cache';
 import { useMemory } from '@/cache/CacheProvider';
+import { activityLine } from '@/chat/activity';
 import { unseenSince } from '@/chat/store';
 import { useChat } from '@/chat/useChat';
-import { useConversation } from '@/chats/useChats';
+import { useChats, useConversation } from '@/chats/useChats';
 import { counterpart } from '@/components/ChatRow';
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
@@ -42,6 +43,7 @@ export default function ChatScreen() {
   const contact = useContact(who?.kind === 'agent' ? who.id : '');
   const { controller: agentsController } = useAgents();
   const chat = useChat(id);
+  const { open } = useChats();
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   // The message a long-press opened the menu for.
   const [menu, setMenu] = useState<ChatMessage | null>(null);
@@ -70,6 +72,22 @@ export default function ChatScreen() {
       void (text.trim() ? memory.cache.set(draftKey, text) : memory.cache.remove(draftKey));
     }, 300);
   };
+
+  // On screen and the app in front: the person can see this chat, so what
+  // lands in it is read, and the list keeps no badge for it.
+  const { setVisible } = chat;
+  useFocusEffect(
+    useCallback(() => {
+      open(id);
+      setVisible(AppState.currentState === 'active');
+      const sub = AppState.addEventListener('change', (next) => setVisible(next === 'active'));
+      return () => {
+        sub.remove();
+        setVisible(false);
+        open(null);
+      };
+    }, [id, open, setVisible]),
+  );
 
   // Scrolled away from the newest: a way back, with how much arrived since.
   const list = useRef<FlatList<ChatMessage>>(null);
@@ -166,13 +184,14 @@ export default function ChatScreen() {
   // The agent's backend, as the hub last saw it. A person sending into
   // silence deserves to be told the silence is not theirs.
   const offline = who?.kind === 'agent' && who.status !== 'connected' && !contact?.blocked;
+  const busyLine = activityLine(chat.activity, chat.writing);
   return (
     <Screen padded={false}>
       <ChatHeader
         name={name}
         status={who?.kind === 'agent' ? (who.status ?? null) : undefined}
         avatar={who?.kind === 'agent' ? agentAvatar(who.id, who.has_avatar) : null}
-        typing={chat.typing}
+        activity={busyLine}
         onBack={back}
         onOpenProfile={
           who?.kind === 'agent'
@@ -184,7 +203,7 @@ export default function ChatScreen() {
       <View style={[styles.wall, { backgroundColor: colors.wallpaper }]}>
         {chat.loading ? (
           <ActivityIndicator color={colors.accent} style={styles.center} />
-        ) : messages.length === 0 && !chat.typing ? (
+        ) : messages.length === 0 && !chat.activity ? (
           <View style={styles.center}>
             <Text style={[styles.empty, { color: colors.textSecondary }]}>
               {chat.trimmed ? t('chat.history.trimmed') : t('chat.empty', { name })}
@@ -230,7 +249,7 @@ export default function ChatScreen() {
                 </View>
               );
             }}
-            ListHeaderComponent={chat.typing ? <TypingBubble /> : null}
+            ListHeaderComponent={chat.activity && !chat.writing ? <TypingBubble /> : null}
             ListFooterComponent={
               chat.loadingOlder ? (
                 <ActivityIndicator color={colors.accent} style={styles.older} />
@@ -272,6 +291,24 @@ export default function ChatScreen() {
         >
           {t('chat.offline', { name })}
         </Text>
+      ) : chat.noReply && !contact?.blocked ? (
+        // Silence after a message the agent did receive. Said once, quietly,
+        // with the one thing worth doing about it.
+        <View style={[styles.noReply, { backgroundColor: colors.surface }]} testID="no-reply">
+          <Text style={[styles.noReplyText, { color: colors.textSecondary }]}>{t('chat.noReply')}</Text>
+          {chat.lastWords ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void chat.sendAgain()}
+              hitSlop={8}
+              testID="send-again"
+            >
+              <Text style={[styles.noReplyText, styles.noReplyAction, { color: colors.accentStrong }]}>
+                {t('chat.noReply.again')}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
       {contact?.blocked ? (
         <View style={[styles.blocked, { backgroundColor: colors.surface }]} testID="blocked-banner">
@@ -296,6 +333,8 @@ export default function ChatScreen() {
             onSend={send}
             draft={draft}
             onDraft={keepDraft}
+            busy={chat.busy}
+            onStop={() => void chat.stopAgent()}
           />
           <ActionSheet
             visible={!!menu}
@@ -335,6 +374,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs + 2,
     paddingHorizontal: spacing.lg,
   },
+  noReply: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.lg,
+  },
+  noReplyText: type.caption,
+  noReplyAction: { fontWeight: '700' },
   toBottom: {
     position: 'absolute',
     right: spacing.md,

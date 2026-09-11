@@ -90,6 +90,38 @@ type typingRequest struct {
 	State string `json:"state"`
 }
 
+// activityRequest is an agent saying what it is doing: thinking, working at
+// what the label names, or idle.
+type activityRequest struct {
+	State string `json:"state"`
+	Label string `json:"label"`
+}
+
+// activity shows what the agent is doing on the person's device, or clears
+// it. It lasts ten seconds unless said again.
+func (h *Handler) activity(w http.ResponseWriter, r *http.Request) {
+	agentID, ok := principal.AgentID(r.Context())
+	if !ok {
+		httpx.Error(w, r, domain.Unauthorized("unauthorized", "Authenticate as an agent."))
+		return
+	}
+	conversationID, err := conversationIDParam(r)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	var req activityRequest
+	if err := httpx.Decode(w, r, &req); err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	if err := h.conversations.Activity(r.Context(), agentID, conversationID, req.State, req.Label); err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
+}
+
 // typing shows or hides the "working" indicator on the person's device.
 func (h *Handler) typing(w http.ResponseWriter, r *http.Request) {
 	agentID, ok := principal.AgentID(r.Context())

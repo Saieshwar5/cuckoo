@@ -9,8 +9,12 @@ import {
   empty,
   failLocal,
   historyTrimmed,
-  isTyping,
+  lastWords,
+  liveActivity,
+  markStopped,
   newestServerId,
+  noReplyDue,
+  NO_REPLY_AFTER_MS,
   quickReplies,
   removeMessage,
   setPage,
@@ -91,17 +95,17 @@ describe('chat store', () => {
     expect(s.messages[0]?.delivery_status).toBe('failed');
   });
 
-  it('streams text in, stops typing when the agent speaks, and offers quick replies', () => {
+  it('streams text in, stops thinking when the agent speaks, and offers quick replies', () => {
     let s = applyFrame(
       empty,
       {
-        type: 'typing',
-        data: { conversation_id: 'cnv_1', agent_id: 'agt_1', state: 'start', expires_at: t(30) },
+        type: 'activity',
+        data: { conversation_id: 'cnv_1', agent_id: 'agt_1', state: 'thinking', expires_at: t(30) },
       },
       'cnv_1',
     );
-    expect(isTyping(s, Date.parse(t(20)))).toBe(true);
-    expect(isTyping(s, Date.parse(t(31)))).toBe(false);
+    expect(liveActivity(s, Date.parse(t(20)))?.state).toBe('thinking');
+    expect(liveActivity(s, Date.parse(t(31)))).toBeNull();
     s = applyFrame(
       s,
       {
@@ -113,7 +117,7 @@ describe('chat store', () => {
       },
       'cnv_1',
     );
-    expect(isTyping(s, Date.parse(t(20)))).toBe(false);
+    expect(liveActivity(s, Date.parse(t(20)))).toBeNull();
     s = applyFrame(
       s,
       { type: 'message.delta', data: { conversation_id: 'cnv_1', message_id: 'm1', text: 'Hel' } },
@@ -253,5 +257,76 @@ describe('scrolled away', () => {
     expect(unseenSince(list, 'b')).toBe(2);
     expect(unseenSince(list, 'e')).toBe(0);
     expect(unseenSince(list, null)).toBe(0);
+  });
+
+  it('keeps what the agent says it is working at, and idle clears it', () => {
+    const working = applyFrame(
+      empty,
+      {
+        type: 'activity',
+        data: {
+          conversation_id: 'cnv_1',
+          agent_id: 'agt_1',
+          state: 'working',
+          label: ' Checking the weather ',
+          expires_at: t(30),
+        },
+      },
+      'cnv_1',
+    );
+    expect(liveActivity(working, Date.parse(t(20)))).toEqual({
+      state: 'working',
+      label: 'Checking the weather',
+      until: Date.parse(t(30)),
+    });
+    const idle = applyFrame(
+      working,
+      {
+        type: 'activity',
+        data: { conversation_id: 'cnv_1', agent_id: 'agt_1', state: 'idle', expires_at: t(21) },
+      },
+      'cnv_1',
+    );
+    expect(liveActivity(idle, Date.parse(t(21)))).toBeNull();
+    expect(idle.lastSignal).toBe(Date.parse(t(21)));
+  });
+
+  it('says "no reply yet" only after a received message meets silence', () => {
+    const mine = msg({
+      id: 'm2',
+      created_at: t(10),
+      sender: { kind: 'user', id: 'usr_1' },
+      body: { text: 'Weather in Goa?' },
+      delivery_status: 'delivered',
+    });
+    const s = upsert(empty, mine);
+    expect(noReplyDue(s)).toBe(Date.parse(t(10)) + NO_REPLY_AFTER_MS);
+    expect(lastWords(s)).toBe('Weather in Goa?');
+
+    // Still on its way, or refused: those have marks of their own.
+    expect(noReplyDue(upsert(empty, { ...mine, delivery_status: 'pending' }))).toBeNull();
+    expect(noReplyDue(upsert(empty, { ...mine, delivery_status: 'failed' }))).toBeNull();
+
+    // A sign of work moves the wait on from when that sign ran out.
+    const thought = applyFrame(
+      s,
+      {
+        type: 'activity',
+        data: { conversation_id: 'cnv_1', agent_id: 'agt_1', state: 'thinking', expires_at: t(25) },
+      },
+      'cnv_1',
+    );
+    expect(noReplyDue(thought)).toBe(Date.parse(t(25)) + NO_REPLY_AFTER_MS);
+
+    // An answer, or the person's own stop, ends the wait.
+    expect(noReplyDue(upsert(s, msg({ id: 'm3', created_at: t(40) })))).toBeNull();
+    expect(noReplyDue(markStopped(s, Date.parse(t(11))))).toBeNull();
+
+    // A tap cannot be simply said again.
+    const tap = upsert(empty, {
+      ...mine,
+      body: { text: 'Yes', action: { button_id: 'yes', source_message_id: 'm1' } },
+    });
+    expect(lastWords(tap)).toBeNull();
   });
 });

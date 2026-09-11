@@ -30,7 +30,7 @@ your own machine. Forgetting that is the most common first mistake.
 
 ### Handlers
 
-There are two, and both must be `async def`.
+All three must be `async def`.
 
 ```python
 @agent.on_message
@@ -38,11 +38,15 @@ async def handle(msg: Message, conv: Conversation) -> None: ...
 
 @agent.on_join
 async def greet(conv: Conversation, token: PairToken | None) -> None: ...
+
+@agent.on_stop
+async def stopped(stop: StopRequest, conv: Conversation) -> None: ...
 ```
 
 `on_message` is required. `on_join` is optional and fires when somebody adds
 your agent; `token` carries the payload from a personalised code, and is `None`
-when there was none.
+when there was none. `on_stop` is optional too: see
+[When the person presses stop](#when-the-person-presses-stop).
 
 Registering twice replaces the handler rather than adding one.
 
@@ -72,6 +76,8 @@ obvious repeats.
 class ProtocolError(Exception):
     code: str        # the hub's stable code, e.g. "file_too_large"
     message: str
+
+class StoppedError(ProtocolError): ...   # code "stopped": the person pressed stop
 ```
 
 ## Conversation
@@ -93,7 +99,6 @@ await conv.send(
     idempotency_key=None,    # generated for you if omitted
 ) -> Message
 
-await conv.typing(state="start")     # or "stop"
 ```
 
 `text` may be empty when there are attachments; then it is their caption.
@@ -112,6 +117,41 @@ print(reply.message.id)
 Buttons and quick replies passed to `stream()` are attached when it ends.
 Leaving the block finishes the message even if your code raised.
 
+### Saying what you are doing
+
+```python
+async with conv.working("Checking the weather"):
+    forecast = await weather(city)
+
+async with conv.thinking():
+    plan = await model(prompt)
+```
+
+The person sees *Checking the weather…* under the agent's name, in the chat and
+in their chat list, and a stop button where send was. The label is one line, at
+most 40 characters, no links. It is renewed while the block runs and cleared
+when it ends, however it ends. A stream says *writing…* by itself.
+
+### When the person presses stop
+
+You need to write nothing for stop to work. The task running your handler for
+that conversation is cancelled, `conv.stopped` becomes true, and any write from
+it raises `StoppedError`. Either way the event is acknowledged, not retried:
+doing the work again is exactly what the person asked not to happen. A
+`try/finally` in your handler still runs, so clean up there.
+
+Say something true afterwards, if there is anything worth saying:
+
+```python
+@agent.on_stop
+async def stopped(stop, conv):
+    await conv.send("Stopped. Nothing was booked.")
+```
+
+`stop.message_id` is the reply the hub ended, or `None` if you had not started
+writing. The hub has already done its part before this runs: the reply ended
+where it stood, marked `stopped`, and the indicator is gone from every screen.
+
 ## Message
 
 | Field | Type | Notes |
@@ -122,7 +162,8 @@ Leaving the block finishes the message even if your code raised.
 | `sender` | `Sender` | `kind`, `id`, `display_name` |
 | `created_at` | `str` | ISO-8601 text, not a `datetime` |
 | `status` | `str` | `complete` or `streaming` |
-| `truncated` | `bool` | The hub finished a stream you abandoned |
+| `truncated` | `bool` | The hub finished a stream: you went quiet, or the person stopped it |
+| `stopped` | `bool` | The person pressed stop while it was being written |
 | `action` | `Action \| None` | Set when a button of yours was tapped |
 | `reply_to` | `ReplyRef \| None` | |
 | `signature` | `str \| None` | The hub's seal over the message. Keep it with the message, unchanged. `None` on messages older than signing |

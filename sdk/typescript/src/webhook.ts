@@ -13,7 +13,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { HubClient, type ClientOptions } from "./client.ts";
-import { type Envelope, type Handlers, dispatch, parseEnvelope } from "./events.ts";
+import { type Envelope, type Handlers, InFlight, dispatch, parseEnvelope } from "./events.ts";
 
 /** The headers the hub sends with every webhook. */
 export const HEADER_EVENT = "x-cuckoo-event";
@@ -132,6 +132,9 @@ export interface ReceivedEvent {
  */
 export class WebhookReceiver {
   private readonly options: ReceiverOptions;
+  // Handlers running in this process, so a stop posted while one runs
+  // cancels it.
+  private readonly inflight = new InFlight();
 
   constructor(options: ReceiverOptions) {
     this.options = options;
@@ -157,7 +160,7 @@ export class WebhookReceiver {
     }
 
     const client = new HubClient(secret, this.options);
-    await dispatch(envelope, client, this.options.handlers);
+    await dispatch(envelope, client, this.options.handlers, this.inflight);
     return { envelope, client };
   }
 }

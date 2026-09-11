@@ -36,7 +36,8 @@ Everything a backend can do, under `/v1/agent`.
 | GET | `/conversations/{id}` | One conversation and its participants |
 | GET | `/conversations/{id}/messages` | History, newest first |
 | POST | `/conversations/{id}/messages` | Send, or start a stream |
-| POST | `/conversations/{id}/typing` | Show or hide the typing indicator |
+| POST | `/conversations/{id}/activity` | Say what the agent is doing: thinking, working, idle |
+| POST | `/conversations/{id}/typing` | The first version of `/activity`: start or stop |
 | POST | `/messages/{id}/append` | Add to a stream |
 | POST | `/messages/{id}/finish` | End a stream |
 | POST | `/media` | Upload a file |
@@ -89,7 +90,9 @@ One frame shape, with a `cid` you choose to match replies to requests.
 { "op": "stream.start", "cid": "c2", "conversation_id": "cnv_…", "reply_to": "msg_…" }
 { "op": "stream.delta", "message_id": "msg_…", "text": "…" }
 { "op": "stream.end",   "cid": "c3", "message_id": "msg_…", "buttons": [[ … ]] }
-{ "op": "typing",       "cid": "c4", "conversation_id": "cnv_…", "state": "start" }
+{ "op": "activity",     "cid": "c4", "conversation_id": "cnv_…", "state": "working",
+  "label": "Checking the weather" }
+{ "op": "typing",       "cid": "c5", "conversation_id": "cnv_…", "state": "start" }
 ```
 
 Replies come back as `{"reply_to_cid": "c1", "ok": true, "message": {…}}`, or
@@ -175,7 +178,24 @@ again joins with **no** `pair_token` at all.
 `user_blocked` is the only reason the hub emits. Treat it as final and stop
 sending.
 
-Typing, delivery and read state are not agent-facing events. They exist, but
+### `stop.requested`
+
+```json
+"data": { "conversation": { "id": "cnv_…", "kind": "dm" }, "message_id": "msg_…" }
+```
+
+The person pressed stop. By the time this arrives the hub has already done its
+part: the reply you were writing is finished where it stood, marked `stopped`
+(and `truncated`), and your next append to it is refused with `409 stopped`.
+`message_id` names that reply, or is null when you had not started writing.
+
+What is left is the work behind the words — a model call, a search, a booking
+not yet made. Cancel it. Anything already done stays done, and saying so is
+yours: "Stopped. Nothing was booked." Both SDKs cancel the handler running for
+that conversation for you, and treat the `StoppedError` its next write raises
+as a finished event rather than one to retry.
+
+Activity, delivery and read state are not agent-facing events. They exist, but
 they go to people's devices only.
 
 ## Sending a message
@@ -238,12 +258,33 @@ open five minutes after it began is finished from whatever the buffer holds.
 Text beyond 8000 characters is clamped and also marked truncated.
 
 Appending to a stream that is finished or not yours is `409 not_streaming`.
+Appending to one the person stopped is `409 stopped`: stop working, and do not
+retry.
 
-### Typing
+### Activity
 
-`POST /conversations/{id}/typing` with `{"state": "start"}` or `"stop"`, which
-returns `204`. A start expires by itself after 10 seconds. Nothing is stored. A
-stream shows the indicator on its own, so you rarely need this.
+`POST /conversations/{id}/activity` says what the agent is doing, and returns
+`204`:
+
+```json
+{ "state": "thinking" }
+{ "state": "working", "label": "Checking the weather" }
+{ "state": "idle" }
+```
+
+The person sees it under the agent's name, in the chat and in the chat list:
+*thinking…*, *Checking the weather…*. While they see it, the send button is a
+stop button. It expires by itself after **10 seconds** unless said again, so a
+backend that crashes mid-thought never leaves it spinning; say it again every
+few seconds while the work goes on. Nothing is stored.
+
+Only `working` takes a label: one line, at most 40 characters, no links —
+`invalid_label` otherwise. It is a status line, not a message. A stream says
+*writing…* by itself, so there is no need to send an activity while one is
+open. `conv.working("…")` in both SDKs does all of this for you.
+
+`POST /conversations/{id}/typing` with `{"state": "start"}` or `"stop"` is the
+first version of the same thing: start is `thinking`, stop is `idle`.
 
 ## Media
 

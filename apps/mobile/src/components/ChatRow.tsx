@@ -11,6 +11,7 @@ import { formatListTime } from '@/util/time';
 import { agentAvatar } from '@/media/avatar';
 
 import { Avatar } from './Avatar';
+import { WorkingDots } from './WorkingDots';
 
 // counterpart is who a DM is with: the agent.
 export function counterpart(c: Conversation) {
@@ -38,11 +39,17 @@ export function Ticks({ status, colors }: { status: DeliveryStatus; colors: Pale
   }
 }
 
+// badge is how an unread count is written: exact up to 99, then "99+".
+export function badge(n: number): string {
+  return n > 99 ? '99+' : String(n);
+}
+
 export function ChatRow({
   conversation,
   onPress,
   pinned,
   muted,
+  activity,
 }: {
   conversation: Conversation;
   onPress: () => void;
@@ -50,11 +57,15 @@ export function ChatRow({
   // the row says it without saying it loudly.
   pinned?: boolean;
   muted?: boolean;
+  // What the agent is doing right now, in words, in place of the last
+  // message: the list says who is busy without opening anything.
+  activity?: string | null;
 }) {
   const { colors } = useTheme();
   const who = counterpart(conversation);
   const last = conversation.last_message;
-  const mine = last?.sender.kind === 'user' && last.delivery_status;
+  const mine = !activity && last?.sender.kind === 'user' && last.delivery_status;
+  const unread = conversation.unread_count ?? 0;
   return (
     <Pressable
       accessibilityRole="button"
@@ -74,26 +85,56 @@ export function ChatRow({
             {who?.display_name ?? ''}
           </Text>
           {last ? (
-            <Text style={[styles.time, { color: colors.textSecondary }]}>
+            <Text
+              style={[
+                styles.time,
+                { color: unread && !muted ? colors.accentStrong : colors.textSecondary },
+                unread ? styles.timeUnread : null,
+              ]}
+            >
               {formatListTime(last.created_at, new Date(), t('chats.time.yesterday'))}
             </Text>
           ) : null}
         </View>
         <View style={styles.bottom}>
           {mine ? <Ticks status={mine} colors={colors} /> : null}
-          <Text
-            style={[
-              styles.preview,
-              { color: last?.delivery_status === 'failed' ? colors.danger : colors.textSecondary },
-            ]}
-            numberOfLines={1}
-          >
-            {preview(last)}
-          </Text>
+          {activity ? (
+            <>
+              <WorkingDots color={colors.accentStrong} />
+              <Text
+                style={[styles.preview, { color: colors.accentStrong }]}
+                numberOfLines={1}
+                testID={`row-activity-${conversation.id}`}
+              >
+                {activity}
+              </Text>
+            </>
+          ) : (
+            <Text
+              style={[
+                styles.preview,
+                { color: last?.delivery_status === 'failed' ? colors.danger : colors.textSecondary },
+              ]}
+              numberOfLines={1}
+            >
+              {preview(last)}
+            </Text>
+          )}
           {muted ? (
             <Ionicons name="volume-mute-outline" size={15} color={colors.textSecondary} testID="row-muted" />
           ) : null}
           {pinned ? <Ionicons name="pin" size={14} color={colors.textSecondary} testID="row-pinned" /> : null}
+          {unread ? (
+            // A muted chat still counts, in grey: nothing interrupts, but
+            // nothing is hidden either.
+            <View
+              style={[styles.badge, { backgroundColor: muted ? colors.textSecondary : colors.accent }]}
+              accessibilityLabel={t('chats.unread', { count: unread })}
+              testID={`row-unread-${conversation.id}`}
+            >
+              <Text style={[styles.badgeText, { color: colors.onAccent }]}>{badge(unread)}</Text>
+            </View>
+          ) : null}
         </View>
       </View>
     </Pressable>
@@ -112,6 +153,16 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.sm },
   name: { ...type.headline, flexShrink: 1 },
   time: type.caption,
+  timeUnread: { fontWeight: '600' },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { fontSize: 12, fontWeight: '700' },
   bottom: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   preview: { ...type.secondary, flex: 1 },
 });

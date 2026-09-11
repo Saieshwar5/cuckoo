@@ -45,7 +45,8 @@ type Conversation struct {
 
 // Message is a message as a backend sees it. Status is "streaming" while
 // an agent is still writing it and "complete" once it is final; Truncated
-// marks a stream the hub had to cut off.
+// marks a stream the hub had to cut off, and Stopped one the person asked
+// to stop.
 type Message struct {
 	ID        string    `json:"id"`
 	Sender    Sender    `json:"sender"`
@@ -53,6 +54,7 @@ type Message struct {
 	ReplyTo   *ReplyTo  `json:"reply_to"`
 	Status    string    `json:"status"`
 	Truncated bool      `json:"truncated"`
+	Stopped   bool      `json:"stopped"`
 	CreatedAt time.Time `json:"created_at"`
 	// Signature is the hub's mark over the message, for a backend that keeps
 	// its own copy: store it with the message and hand it back unchanged.
@@ -258,6 +260,7 @@ func MessageOf(msg conversations.Message, senderName string) Message {
 		ReplyTo:   ReplyToOf(msg.ReplyTo),
 		Status:    string(msg.Status),
 		Truncated: msg.Truncated,
+		Stopped:   msg.Stopped,
 		CreatedAt: msg.CreatedAt,
 		Signature: signatureOf(msg.Signature),
 	}

@@ -21,6 +21,7 @@ interface Place {
 export function weatherTool(fetchImpl: typeof fetch = fetch): Tool {
   return {
     name: "weather",
+    activity: "Checking the weather",
     description:
       "The weather forecast for a place. Use it whenever someone asks about " +
       "weather, rain, heat or what to wear. Understands Indian place names.",

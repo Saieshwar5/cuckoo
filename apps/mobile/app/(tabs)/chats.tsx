@@ -5,6 +5,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'rea
 
 import { useAgents } from '@/agents/AgentsProvider';
 import { isMuted } from '@/agents/store';
+import { rowActivity } from '@/chat/activity';
 import { arrange, filterConversations } from '@/chats/store';
 import { useChats } from '@/chats/useChats';
 import { ChatRow } from '@/components/ChatRow';
@@ -21,7 +22,7 @@ import { sizes, spacing, type, useTheme } from '@/theme';
 // person decided about each agent — pinned, muted, archived — comes from
 // their contacts and is laid over the list here.
 export default function ChatsScreen() {
-  const { conversations, loading, refresh, connected } = useChats();
+  const { conversations, activity, loading, refresh, connected } = useChats();
   const { contacts } = useAgents();
   const { colors } = useTheme();
   const router = useRouter();
@@ -67,6 +68,7 @@ export default function ChatsScreen() {
       />
       <FlatList
         data={shown}
+        extraData={activity}
         keyExtractor={(c) => c.id}
         renderItem={({ item }) => {
           const contact = contactOf(item);
@@ -75,6 +77,7 @@ export default function ChatsScreen() {
               conversation={item}
               pinned={contact?.pinned}
               muted={contact ? isMuted(contact) : false}
+              activity={rowActivity(item, activity[item.id])}
               onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id } })}
             />
           );

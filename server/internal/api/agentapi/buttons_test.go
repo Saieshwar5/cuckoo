@@ -158,6 +158,18 @@ func TestTypingOverHTTP(t *testing.T) {
 	f.srv.AsAgent(t, f.otherSecret).Post(path, map[string]any{"state": "start"}).ExpectError(http.StatusForbidden, "not_participant")
 }
 
+func TestActivityOverHTTP(t *testing.T) {
+	f := setupChat(t)
+	agent := f.srv.AsAgent(t, f.secret)
+	path := "/v1/agent/conversations/" + f.dmID + "/activity"
+
+	agent.Post(path, map[string]any{"state": "thinking"}).ExpectStatus(http.StatusNoContent)
+	agent.Post(path, map[string]any{"state": "working", "label": "Searching flights"}).ExpectStatus(http.StatusNoContent)
+	agent.Post(path, map[string]any{"state": "idle"}).ExpectStatus(http.StatusNoContent)
+	agent.Post(path, map[string]any{"state": "start"}).ExpectError(http.StatusUnprocessableEntity, "invalid_state")
+	agent.Post(path, map[string]any{"state": "working", "label": "www.example.com"}).ExpectError(http.StatusUnprocessableEntity, "invalid_label")
+}
+
 func TestFinishWithButtonsOverHTTP(t *testing.T) {
 	f := setupChat(t)
 	agent := f.srv.AsAgent(t, f.secret)
