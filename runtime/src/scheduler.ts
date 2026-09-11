@@ -124,6 +124,7 @@ export class Scheduler {
           // The reply says which schedule sent it, and the hub refuses it if
           // the person paused or deleted that schedule meanwhile.
           scheduleId: routine.hubScheduleId ?? undefined,
+          timezone: routine.timezone,
         },
         {
           turns: this.deps.turns,

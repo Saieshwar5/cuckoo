@@ -11,7 +11,7 @@ import { test } from "node:test";
 
 import { StoppedError, type HubClient } from "@cuckoo/agent";
 
-import { answer } from "../src/answer.ts";
+import { answer, withClock } from "../src/answer.ts";
 import type { AgentRecord } from "../src/agents/registry.ts";
 import { FakeHarness, type Script } from "../src/harness/fake.ts";
 import type { Tool } from "../src/harness/harness.ts";
@@ -387,4 +387,14 @@ test("two agents in one process keep their own persona, tools and memory", async
   assert.equal(translatorRows.length, 2);
   assert.ok(weatherRows.every((r) => r.conversationId === "cnv_w"));
   assert.ok(translatorRows.every((r) => r.conversationId === "cnv_t"));
+});
+
+test("the model is told the person's clock, so 'tomorrow at 7' is theirs", () => {
+  const at = new Date("2026-09-11T06:30:00Z"); // 07:30 in London, 12:00 in Kolkata
+  const london = withClock("You are the weather.", "Europe/London", at);
+  assert.match(london, /time zone is Europe\/London/);
+  assert.match(london, /07:30/);
+  assert.match(withClock("You are the weather.", "Asia/Kolkata", at), /12:00/);
+  // No phone has said: the persona is left as it is.
+  assert.equal(withClock("You are the weather.", undefined, at), "You are the weather.");
 });

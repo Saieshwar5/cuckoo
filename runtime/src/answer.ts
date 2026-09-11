@@ -17,6 +17,7 @@ import {
   type Harness,
   type HarnessMessage,
   type Tool,
+  type ToolContext,
   type ToolFactory,
 } from "./harness/harness.ts";
 import type { Turn, TurnStore } from "./memory/turns.ts";
@@ -44,6 +45,8 @@ export interface AnswerInput {
   userId: string;
   /** The hub schedule this run is for, when a routine fired it. */
   scheduleId?: string;
+  /** The person's time zone, as their phone last told the hub. */
+  timezone?: string;
 }
 
 export interface AnswerDeps {
@@ -105,6 +108,7 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
     agentId: agent.id,
     conversationId,
     userId: input.userId,
+    timezone: input.timezone,
   });
   // What the reply will end with, if a tool asked for a tap.
   let confirmation: Confirmation | undefined;
@@ -117,7 +121,7 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
 
   try {
     const events = deps.harness.run({
-      system: agent.persona,
+      system: withClock(agent.persona, input.timezone),
       messages: [...asMessages(history), { role: "user", content: input.text }],
       tools,
       model: agent.model,
@@ -203,11 +207,38 @@ async function stoppedHere(input: AnswerInput, deps: AnswerDeps, writer: Writer)
   });
 }
 
+/**
+ * The persona, with the person's clock at the end of it.
+ *
+ * A model has no idea what time it is or where the person is standing. "In
+ * two hours", "tomorrow at 7" and "this weekend" all need both, and a model
+ * told neither assumes whatever its training leaned towards.
+ */
+export function withClock(persona: string, timezone: string | undefined, now = new Date()): string {
+  if (!timezone) return persona;
+  let local: string;
+  try {
+    local = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone,
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(now);
+  } catch {
+    return persona;
+  }
+  return `${persona}\n\nThe person's time zone is ${timezone}. It is ${local} there now. ` +
+    `Use their time zone for any time they mention, unless they name another.`;
+}
+
 /** The tools an agent may use: what its template names, and nothing else. */
 function toolsFor(
   agent: AgentRecord,
   known: Map<string, ToolFactory>,
-  context: { agentId: string; conversationId: string; userId: string },
+  context: ToolContext,
 ): Tool[] {
   const tools: Tool[] = [];
   for (const name of agent.template.tools) {

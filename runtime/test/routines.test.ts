@@ -90,6 +90,24 @@ describe("with a database", { skip: available ? false : "no postgres on :5433" }
     assert.deepEqual(pending?.arguments.cadence, { repeat: "daily", time: "08:00", timezone: "Asia/Kolkata" });
   });
 
+  test("a routine is set on the person's own clock unless they name another", async () => {
+    const tool = createRoutineTool(
+      { routines, actions },
+      { agentId, conversationId: "cnv_1", userId: "usr_priya", timezone: "Europe/London" },
+    );
+    const mine = (await tool.execute({ instruction: "weather", title: "Weather", repeat: "daily", time: "07:00" })) as {
+      confirm: { buttonId: string };
+    };
+    const offered = await actions.take(mine.confirm.buttonId, agentId, "cnv_1");
+    assert.equal((offered?.arguments.cadence as { timezone: string }).timezone, "Europe/London");
+
+    const named = (await tool.execute({
+      instruction: "bell", title: "Bell", repeat: "weekdays", time: "09:30", timezone: "America/New_York",
+    })) as { confirm: { buttonId: string } };
+    const other = await actions.take(named.confirm.buttonId, agentId, "cnv_1");
+    assert.equal((other?.arguments.cadence as { timezone: string }).timezone, "America/New_York");
+  });
+
   test("a time that cannot be set is refused before anyone is asked", async () => {
     const tool = createRoutineTool({ routines, actions }, { agentId, conversationId: "cnv_1", userId: "usr_priya" });
     const bad = (await tool.execute({ instruction: "x", title: "x", repeat: "hourly", time: "08:00" })) as { error?: string };

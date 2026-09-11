@@ -116,14 +116,18 @@ export class Routines {
     return rows.map(toRoutine);
   }
 
-  /** A new what or when, from the person, and the next run worked out again. */
+  /**
+   * A new what or when, from the person, and the next run worked out again.
+   * Paused stays paused: a paused schedule can still move when its person's
+   * clock does.
+   */
   async change(
     id: string,
     input: { instruction: string; schedule: string; timezone: string; once: boolean; title: string },
   ): Promise<void> {
     await this.pool.query(
       `UPDATE routines SET instruction = $2, schedule = $3, timezone = $4, once = $5, title = $6,
-              next_run = $7, failures = 0, paused_at = NULL, paused_reason = NULL
+              next_run = $7, failures = 0
        WHERE id = $1`,
       [id, input.instruction, input.schedule, input.timezone, input.once, input.title,
         nextRun(input.schedule, input.timezone)],
