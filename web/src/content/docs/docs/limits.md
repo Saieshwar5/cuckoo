@@ -15,7 +15,7 @@ rate. Exceeding one gives `429` with a `Retry-After` header.
 | --- | --- | --- | --- |
 | Agent sends, and starting a stream | 60/s | 120 | agent |
 | Stream appends | 200/s | 400 | agent |
-| Typing | 200/s | 400 | agent |
+| Activity (and typing) | 200/s | 400 | agent |
 | Agent uploads | 5/s | 40 | agent |
 | A person's sends | 0.5/s | 30 | user |
 | A person's uploads | 0.5/s | 20 | user |
@@ -93,7 +93,7 @@ A sweep runs every six hours. Profile pictures are never swept.
 | --- | --- |
 | Stream idle before the hub finishes it | 30 s |
 | Stream open before the hub force-finishes it | 5 min |
-| Typing indicator | 10 s |
+| Activity indicator | 10 s |
 | Socket ping interval | 30 s |
 | Socket ping timeout | 15 s |
 | Unacknowledged event redelivered after | 30 s |

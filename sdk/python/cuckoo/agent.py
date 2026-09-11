@@ -17,7 +17,10 @@ import httpx
 import websockets
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
-from .models import DEFAULT_HUB, Attachment, Conversation, Link, Message, PairToken
+from .errors import ProtocolError, StoppedError, error_of, raise_for_status
+from .models import DEFAULT_HUB, Attachment, Conversation, Message, PairToken, StopRequest
+from .stream import Stream
+from .wire import Attachable, Buttons, _buttons_json, _quick_replies_json
 
 log = logging.getLogger("cuckoo")
 
@@ -34,66 +37,9 @@ _REPLY_TIMEOUT = 30.0
 
 Handler = Callable[[Message, Conversation], Awaitable[None]]
 JoinHandler = Callable[[Conversation, PairToken | None], Awaitable[None]]
+StopHandler = Callable[[StopRequest, Conversation], Awaitable[None]]
 
-# Rows of buttons. A button is either a choice, whose id comes back when it
-# is tapped — (id, label), (id, label, style), or a dict with those keys —
-# or a Link, which opens something and tells you nothing.
-Buttons = list[list[tuple[str, str] | tuple[str, str, str] | dict[str, str] | Link]]
-
-# What can be sent as an attachment: a path to a file, or something already
-# uploaded — an Attachment from a message, or a media id.
-Attachable = str | os.PathLike[str] | Attachment
-
-
-def _buttons_json(buttons: Buttons | None) -> list[list[dict[str, str]]] | None:
-    if not buttons:
-        return None
-    rows = []
-    for row in buttons:
-        wire = []
-        for b in row:
-            if isinstance(b, Link):
-                wire.append({"url": b.url, "label": b.label, "style": b.style})
-            elif isinstance(b, dict):
-                entry = {"label": b["label"], "style": b.get("style", "default")}
-                # A url button has no id, and an id button no url: the hub
-                # refuses a button carrying both.
-                entry["url" if "url" in b else "id"] = b.get("url") or b["id"]
-                wire.append(entry)
-            else:
-                wire.append({"id": b[0], "label": b[1], "style": b[2] if len(b) > 2 else "default"})
-        rows.append(wire)
-    return rows
-
-
-def _quick_replies_json(labels: list[str] | None) -> list[dict[str, str]] | None:
-    if not labels:
-        return None
-    return [{"label": label} for label in labels]
-
-
-class ProtocolError(Exception):
-    """The hub refused an operation. ``code`` is the stable error code."""
-
-    def __init__(self, code: str, message: str):
-        super().__init__(f"{code}: {message}")
-        self.code = code
-        self.message = message
-
-
-def _raise_for_status(response: httpx.Response) -> None:
-    """Turn a refusal into the hub's own error, so a caller sees
-    "file_too_large" rather than "422 Unprocessable Entity"."""
-    if response.status_code < 400:
-        return
-    try:
-        error = response.json()["error"]
-    except Exception:  # noqa: BLE001 - a hub that answered with prose
-        raise ProtocolError(
-            "http_error", f"{response.status_code}: {response.text[:200]}"
-        ) from None
-    raise ProtocolError(error.get("code", "error"), error.get("message", ""))
-
+__all__ = ["Agent", "Attachable", "Buttons", "ProtocolError", "Stream", "StoppedError"]
 
 class Agent:
     """A backend for one agent identity.
@@ -112,7 +58,13 @@ class Agent:
         self._max_backoff = max_backoff
         self._handler: Handler | None = None
         self._join_handler: JoinHandler | None = None
+        self._stop_handler: StopHandler | None = None
         self._seen: OrderedDict[str, None] = OrderedDict()
+        # Message handlers running now, by conversation, so a stop reaches
+        # them; and the replies the hub says were stopped, so a stream's
+        # next append fails here rather than disappearing on the socket.
+        self._running: dict[str, dict[asyncio.Task[None], Conversation]] = {}
+        self._stopped: OrderedDict[str, None] = OrderedDict()
         self._http: httpx.AsyncClient | None = None
         self._ws: Any = None
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
@@ -130,6 +82,17 @@ class Agent:
         conversation exists, and the token they scanned, if any, says who they
         are on your side. The place to say hello first."""
         self._join_handler = fn
+        return fn
+
+    def on_stop(self, fn: StopHandler) -> StopHandler:
+        """Register the coroutine called when the person presses stop.
+
+        Without one, stopping still works: the handler running for that
+        conversation is cancelled, and a write from it raises StoppedError,
+        which ends it quietly. What is left for this handler is to say
+        something true — "Stopped. Nothing was booked." — if anything.
+        """
+        self._stop_handler = fn
         return fn
 
     # -- running ----------------------------------------------------------
@@ -209,7 +172,11 @@ class Agent:
                 fut.set_result(frame)
             return
         if "error" in frame and "type" not in frame:
-            log.warning("hub rejected a frame for %s: %s", frame.get("message_id"), frame["error"])
+            error = frame["error"] or {}
+            if error.get("code") == "stopped" and frame.get("message_id"):
+                self._mark_stopped(frame["message_id"])
+                return
+            log.warning("hub rejected a frame for %s: %s", frame.get("message_id"), error)
             return
         if frame.get("id") and frame.get("type"):
             # Handlers run as tasks so a slow one never blocks the frames the
@@ -236,6 +203,12 @@ class Agent:
             self._remember(event_id)
             await self._ack(ws, event_id)
             return
+        if event.get("type") == "stop.requested":
+            if not await self._stop(event):
+                return
+            self._remember(event_id)
+            await self._ack(ws, event_id)
+            return
         if event.get("type") != "message.created":
             # Nothing to do with it, but it was received.
             self._remember(event_id)
@@ -246,11 +219,27 @@ class Agent:
         conv = Conversation.from_wire(data["conversation"], data.get("participants") or [], self)
         msg = Message.from_wire(data["message"], conv.id, event_id, self)
         assert self._handler is not None
+        task = asyncio.current_task()
+        assert task is not None
+        self._running.setdefault(conv.id, {})[task] = conv
         try:
             await self._handler(msg, conv)
+        except asyncio.CancelledError:
+            if not conv.stopped:
+                raise
+            # The person pressed stop: the work is over, as they asked, and
+            # this cancellation was ours rather than the agent shutting down.
+            task.uncancel()
+        except StoppedError:
+            pass
         except Exception:  # a handler bug must not stop the agent
             log.exception("handler failed for %s; the hub will send it again", event_id)
             return
+        finally:
+            running = self._running.get(conv.id, {})
+            running.pop(task, None)
+            if not running:
+                self._running.pop(conv.id, None)
 
         self._remember(event_id)
         await self._ack(ws, event_id)
@@ -265,6 +254,36 @@ class Agent:
         self._seen[event_id] = None
         while len(self._seen) > _REMEMBER:
             self._seen.popitem(last=False)
+
+    async def _stop(self, event: dict[str, Any]) -> bool:
+        """A person pressed stop: cancel what runs for the conversation, then
+        ask the stop handler. Reports whether the event is done with."""
+        data = event.get("data") or {}
+        conversation = data.get("conversation") or {}
+        conversation_id = conversation.get("id", "")
+        message_id = data.get("message_id")
+        if message_id:
+            self._mark_stopped(message_id)
+        for task, conv in list(self._running.get(conversation_id, {}).items()):
+            conv.stopped = True
+            task.cancel()
+        if self._stop_handler is None:
+            return True
+        conv = Conversation.from_wire(conversation, [], self)
+        try:
+            await self._stop_handler(StopRequest(conversation_id, message_id), conv)
+        except Exception:  # a handler bug must not stop the agent
+            log.exception("stop handler failed for %s; the hub will send it again", event["id"])
+            return False
+        return True
+
+    def _mark_stopped(self, message_id: str) -> None:
+        self._stopped[message_id] = None
+        while len(self._stopped) > _REMEMBER:
+            self._stopped.popitem(last=False)
+
+    def _was_stopped(self, message_id: str) -> bool:
+        return message_id in self._stopped
 
     # -- sending ----------------------------------------------------------
 
@@ -302,7 +321,7 @@ class Agent:
         response = await self._http.post(
             f"/v1/agent/conversations/{conversation_id}/messages", json=body
         )
-        _raise_for_status(response)
+        raise_for_status(response)
         return Message.from_wire(response.json()["message"], conversation_id, agent=self)
 
     # -- files ------------------------------------------------------------
@@ -345,7 +364,7 @@ class Agent:
             files={"file": (file.name, data, content_type)},
             timeout=None,
         )
-        _raise_for_status(response)
+        raise_for_status(response)
         return Attachment.from_wire(response.json()["media"], self)
 
     async def download(self, media_id: str, *, thumbnail: bool = False) -> bytes:
@@ -358,7 +377,7 @@ class Agent:
             params={"variant": "thumb"} if thumbnail else None,
             timeout=None,
         )
-        _raise_for_status(response)
+        raise_for_status(response)
         return response.content
 
     async def _upload_all(self, attachments: list[Attachable] | None) -> list[str]:
@@ -392,6 +411,15 @@ class Agent:
         """Show, or hide, the "working" indicator on the person's device."""
         await self._call("typing", conversation_id=conversation_id, state=state)
 
+    async def activity(self, conversation_id: str, state: str, label: str | None = None) -> None:
+        """Say what the agent is doing: ``thinking``, ``working`` with a short
+        label the person sees ("Checking the weather"), or ``idle``. It shows
+        for ten seconds unless said again; ``Conversation.working`` keeps it up."""
+        fields: dict[str, Any] = {"conversation_id": conversation_id, "state": state}
+        if label:
+            fields["label"] = label
+        await self._call("activity", **fields)
+
     # -- socket operations ------------------------------------------------
 
     async def _call(self, op: str, **fields: Any) -> dict[str, Any]:
@@ -409,7 +437,7 @@ class Agent:
             self._pending.pop(cid, None)
         if not reply.get("ok"):
             err = reply.get("error") or {}
-            raise ProtocolError(
+            raise error_of(
                 err.get("code", "unknown"), err.get("message", "The hub refused the operation.")
             )
         return reply
@@ -423,50 +451,3 @@ class Agent:
 
     def _auth(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._secret}"}
-
-
-class Stream:
-    """A message being written. Entering starts it; ``append`` adds text;
-    leaving finishes it, even after an exception, with what was sent."""
-
-    def __init__(
-        self,
-        agent: Agent,
-        conversation_id: str,
-        *,
-        reply_to: str | None = None,
-        buttons: Buttons | None = None,
-        quick_replies: list[str] | None = None,
-    ):
-        self._agent = agent
-        self.conversation_id = conversation_id
-        self.reply_to = reply_to
-        self.buttons = buttons
-        self.quick_replies = quick_replies
-        self.message_id: str | None = None
-        self.message: Message | None = None
-
-    async def __aenter__(self) -> Self:
-        fields: dict[str, Any] = {"conversation_id": self.conversation_id}
-        if self.reply_to:
-            fields["reply_to"] = self.reply_to
-        reply = await self._agent._call("stream.start", **fields)
-        self.message_id = reply["message"]["id"]
-        return self
-
-    async def append(self, text: str) -> None:
-        """Add text to the message."""
-        if self.message_id is None:
-            raise RuntimeError("append is only available inside the stream's context")
-        await self._agent._fire("stream.delta", message_id=self.message_id, text=text)
-
-    async def __aexit__(self, exc_type: object, exc: object, tb: object) -> bool:
-        if self.message_id is not None:
-            fields: dict[str, Any] = {"message_id": self.message_id}
-            if wire := _buttons_json(self.buttons):
-                fields["buttons"] = wire
-            if wire := _quick_replies_json(self.quick_replies):
-                fields["quick_replies"] = wire
-            reply = await self._agent._call("stream.end", **fields)
-            self.message = Message.from_wire(reply["message"], self.conversation_id)
-        return False

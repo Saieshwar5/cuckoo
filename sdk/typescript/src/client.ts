@@ -19,6 +19,9 @@ import {
 } from "./models.ts";
 
 /** What a message can carry besides its text. */
+/** What an agent can say it is doing. */
+export type ActivityState = "thinking" | "working" | "idle";
+
 export interface SendOptions {
   attachments?: (string | Attachment)[];
   buttons?: Buttons;
@@ -87,6 +90,17 @@ export class HubClient {
   /** Show, or hide, the "working" indicator on the person's device. */
   async typing(conversationId: string, state: "start" | "stop" = "start"): Promise<void> {
     await this.call("POST", `/v1/agent/conversations/${conversationId}/typing`, { state });
+  }
+
+  /**
+   * Say what the agent is doing: `thinking`, `working` with a short label
+   * the person sees ("Checking the weather"), or `idle`. It shows for ten
+   * seconds unless said again; `Conversation.working` keeps it up for you.
+   */
+  async activity(conversationId: string, state: ActivityState, label?: string): Promise<void> {
+    const body: Record<string, unknown> = { state };
+    if (label) body.label = label;
+    await this.call("POST", `/v1/agent/conversations/${conversationId}/activity`, body);
   }
 
   // -- streaming -----------------------------------------------------------

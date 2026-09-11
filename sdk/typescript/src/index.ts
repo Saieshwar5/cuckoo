@@ -11,7 +11,7 @@
  */
 
 export { Agent, type AgentOptions } from "./agent.ts";
-export { HubClient, type ClientOptions, type SendOptions } from "./client.ts";
+export { HubClient, type ActivityState, type ClientOptions, type SendOptions } from "./client.ts";
 export { Conversation, Stream } from "./conversation.ts";
 export {
   Management,
@@ -23,11 +23,13 @@ export {
   type ManagementOptions,
   type UpdateAgentInput,
 } from "./management.ts";
-export { ProtocolError } from "./errors.ts";
+export { ProtocolError, StoppedError } from "./errors.ts";
 export {
   EVENT_CONVERSATION_JOINED,
   EVENT_CONVERSATION_LEFT,
   EVENT_MESSAGE_CREATED,
+  EVENT_STOP_REQUESTED,
+  InFlight,
   SeenEvents,
   dispatch,
   parseEnvelope,
@@ -36,6 +38,8 @@ export {
   type JoinHandler,
   type LeaveHandler,
   type MessageHandler,
+  type StopHandler,
+  type StopRequest,
 } from "./events.ts";
 export {
   DEFAULT_HUB,

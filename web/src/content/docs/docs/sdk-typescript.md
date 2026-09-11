@@ -50,6 +50,7 @@ or the binding was revoked.
 agent.onMessage((message, conversation) => {});   // every message
 agent.onJoin((conversation, code) => {});         // someone added the agent
 agent.onLeave((conversationId, reason) => {});    // removed or blocked
+agent.onStop((stop, conversation) => {});         // the person pressed stop
 ```
 
 A handler that throws is **not** acknowledged, so the hub sends the event
@@ -122,7 +123,6 @@ await conversation.send("Track it", {
   quickReplies: ["Thanks"],
   replyTo: message.id,
 });
-await conversation.typing("start");
 ```
 
 A button carries an **id** or a **url**, never both — the hub refuses one that
@@ -140,6 +140,45 @@ await reply.finish({ buttons: [[{ id: "more", label: "Tell me more" }]] });
 Buttons are attached at the end, not the start. A stream left idle for **30
 seconds** is finished by the hub and marked truncated, so open it when you have
 something to say rather than before you begin thinking.
+
+### Saying what you are doing
+
+```ts
+const forecast = await conversation.working("Checking the weather", () => weather(city));
+const plan = await conversation.thinking(() => model(prompt));
+```
+
+The person sees *Checking the weather…* under the agent's name, in the chat and
+in their chat list, and a stop button where send was. The label is one line, at
+most 40 characters, no links. It is renewed while the work runs and cleared when
+it ends, however it ends. A stream says *writing…* by itself.
+
+### When the person presses stop
+
+You need to write nothing for stop to work. The handler running for that
+conversation is cancelled: `conversation.signal` fires, `working` rejects at
+once, and every write from that handler — `send`, `stream`, `append` — throws
+`StoppedError`. A handler that lets `StoppedError` escape is treated as finished
+and acknowledged, never retried: doing the work again is exactly what the
+person asked not to happen.
+
+Hand `conversation.signal` to anything that can be cancelled, so the work stops
+with the words rather than at the next write:
+
+```ts
+const answer = await openai.chat.completions.create({ … }, { signal: conversation.signal });
+```
+
+And say something true afterwards, if there is anything worth saying:
+
+```ts
+agent.onStop(async (stop, conversation) => {
+  await conversation.send("Stopped. Nothing was booked.");
+});
+```
+
+The hub has already done its part before any of this runs: the reply ended
+where it stood, marked `stopped`, and the indicator is gone from every screen.
 
 ## Files
 
@@ -215,7 +254,9 @@ try {
 ```
 
 Codes you will meet most: `no_binding`, `not_participant`, `blocked`,
-`invalid_text`, `not_streaming`, `rate_limited`, `handle_taken`.
+`invalid_text`, `not_streaming`, `rate_limited`, `handle_taken`. `stopped`
+arrives as `StoppedError`, a `ProtocolError` of its own — see
+[When the person presses stop](#when-the-person-presses-stop).
 
 ## Differences from the Python SDK
 

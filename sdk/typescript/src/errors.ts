@@ -7,7 +7,7 @@
  * `message` is the sentence written for a person to read.
  *
  * Codes met most often: `no_binding`, `not_participant`, `blocked`,
- * `invalid_text`, `not_streaming`, `rate_limited`.
+ * `invalid_text`, `not_streaming`, `stopped`, `rate_limited`.
  */
 export class ProtocolError extends Error {
   readonly code: string;
@@ -28,6 +28,24 @@ export class ProtocolError extends Error {
     this.field = options.field;
     this.requestId = options.requestId;
     this.status = options.status ?? 0;
+  }
+}
+
+/**
+ * The person pressed stop. Thrown by a write into a reply they stopped, and
+ * by any write from a handler whose conversation they stopped.
+ *
+ * It is not a failure to report. A handler that lets it escape is treated as
+ * finished — the event is acknowledged, never retried — because doing the
+ * work again is exactly what the person asked not to happen.
+ */
+export class StoppedError extends ProtocolError {
+  constructor(
+    message = "The person stopped this reply.",
+    options: { field?: string; requestId?: string; status?: number } = {},
+  ) {
+    super("stopped", message, options);
+    this.name = "StoppedError";
   }
 }
 
@@ -61,5 +79,6 @@ export async function raiseForStatus(response: Response): Promise<void> {
     message = `${response.status}: ${text.slice(0, 200)}`;
   }
 
+  if (code === "stopped") throw new StoppedError(message, { requestId, status: response.status });
   throw new ProtocolError(code, message, { field, requestId, status: response.status });
 }
