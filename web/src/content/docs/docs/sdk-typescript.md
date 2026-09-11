@@ -180,6 +180,27 @@ agent.onStop(async (stop, conversation) => {
 The hub has already done its part before any of this runs: the reply ended
 where it stood, marked `stopped`, and the indicator is gone from every screen.
 
+### Schedules
+
+For an agent created with `supportsSchedules: true`. Your backend holds the
+timer; the app shows the schedule and passes on what the person does.
+
+```ts
+agent.onSchedule(async ({ type, schedule }, conversation) => {
+  if (type === "deleted") return timers.cancel(schedule.id);
+  timers.set(schedule.id, schedule.cadence, schedule.instruction);   // your own timer
+  await conversation.schedules.confirm(schedule.id, "Morning weather");
+});
+
+// your timer fires:
+await conversation.send(forecast, { scheduleId: schedule.id });
+```
+
+`conversation.schedules` also has `list`, `create` (for one made in the chat),
+`update` and `remove`. A send for a schedule the person paused or deleted
+throws `ProtocolError` with `schedule_paused` or `schedule_deleted`: stop that
+timer. See [Schedules](/docs/protocol/#schedules) for the rules.
+
 ## Files
 
 ```ts

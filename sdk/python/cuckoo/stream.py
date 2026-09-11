@@ -24,8 +24,10 @@ class Stream:
         reply_to: str | None = None,
         buttons: Buttons | None = None,
         quick_replies: list[str] | None = None,
+        schedule_id: str | None = None,
     ):
         self._agent = agent
+        self.schedule_id = schedule_id
         self.conversation_id = conversation_id
         self.reply_to = reply_to
         self.buttons = buttons
@@ -37,6 +39,8 @@ class Stream:
         fields: dict[str, Any] = {"conversation_id": self.conversation_id}
         if self.reply_to:
             fields["reply_to"] = self.reply_to
+        if self.schedule_id:
+            fields["schedule_id"] = self.schedule_id
         reply = await self._agent._call("stream.start", **fields)
         self.message_id = reply["message"]["id"]
         return self

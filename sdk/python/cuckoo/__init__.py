@@ -2,6 +2,7 @@
 
 from .agent import Agent, Attachable, Buttons, ProtocolError, Stream, StoppedError
 from .management import AgentInfo, Code, Management
+from .schedules import Schedule, ScheduleChange, Schedules
 from .models import (
     Action,
     Attachment,
@@ -31,6 +32,9 @@ __all__ = [
     "Participant",
     "ProtocolError",
     "ReplyRef",
+    "Schedule",
+    "ScheduleChange",
+    "Schedules",
     "Sender",
     "StopRequest",
     "StoppedError",

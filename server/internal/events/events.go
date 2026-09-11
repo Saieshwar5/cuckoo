@@ -48,14 +48,16 @@ type Conversation struct {
 // marks a stream the hub had to cut off, and Stopped one the person asked
 // to stop.
 type Message struct {
-	ID        string    `json:"id"`
-	Sender    Sender    `json:"sender"`
-	Body      Body      `json:"body"`
-	ReplyTo   *ReplyTo  `json:"reply_to"`
-	Status    string    `json:"status"`
-	Truncated bool      `json:"truncated"`
-	Stopped   bool      `json:"stopped"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string   `json:"id"`
+	Sender    Sender   `json:"sender"`
+	Body      Body     `json:"body"`
+	ReplyTo   *ReplyTo `json:"reply_to"`
+	Status    string   `json:"status"`
+	Truncated bool     `json:"truncated"`
+	Stopped   bool     `json:"stopped"`
+	// ScheduleID is set on a message a schedule of yours sent.
+	ScheduleID string    `json:"schedule_id,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
 	// Signature is the hub's mark over the message, for a backend that keeps
 	// its own copy: store it with the message and hand it back unchanged.
 	// Absent on a stream still being written and on messages from before
@@ -256,14 +258,22 @@ func MessageOf(msg conversations.Message, senderName string) Message {
 			ID:          formatParticipantID(msg.Sender.Kind, msg.Sender.ID),
 			DisplayName: senderName,
 		},
-		Body:      BodyOf(msg.Body),
-		ReplyTo:   ReplyToOf(msg.ReplyTo),
-		Status:    string(msg.Status),
-		Truncated: msg.Truncated,
-		Stopped:   msg.Stopped,
-		CreatedAt: msg.CreatedAt,
-		Signature: signatureOf(msg.Signature),
+		Body:       BodyOf(msg.Body),
+		ReplyTo:    ReplyToOf(msg.ReplyTo),
+		Status:     string(msg.Status),
+		Truncated:  msg.Truncated,
+		Stopped:    msg.Stopped,
+		ScheduleID: scheduleIDOf(msg.ScheduleID),
+		CreatedAt:  msg.CreatedAt,
+		Signature:  signatureOf(msg.Signature),
 	}
+}
+
+func scheduleIDOf(id *uuid.UUID) string {
+	if id == nil {
+		return ""
+	}
+	return domain.FormatID(domain.PrefixSchedule, *id)
 }
 
 // signatureOf writes a signature the way it travels: base64 without padding,

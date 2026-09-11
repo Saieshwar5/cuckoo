@@ -59,9 +59,12 @@ type Agent struct {
 	// Listed means it belongs in the catalogue the app shows. Separate from
 	// having a code, because handing out a poster and wanting to appear in a
 	// directory are different wishes.
-	Listed    bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Listed bool
+	// SupportsSchedules means its backend can hold schedules — things a
+	// person asks it to do at a time — and the app offers them only then.
+	SupportsSchedules bool
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // Binding connects an agent to a backend. The secret is never part of this
@@ -78,17 +81,18 @@ type Binding struct {
 
 func agentFromRow(r gen.Agent) Agent {
 	return Agent{
-		ID:            r.ID,
-		OwnerID:       r.OwnerUserID,
-		Handle:        r.Handle,
-		DisplayName:   r.DisplayName,
-		Description:   r.Description,
-		AvatarMediaID: r.AvatarMediaID,
-		Starters:      startersFromRow(r.Starters),
-		Private:       r.Private,
-		Listed:        r.Listed,
-		CreatedAt:     r.CreatedAt,
-		UpdatedAt:     r.UpdatedAt,
+		ID:                r.ID,
+		OwnerID:           r.OwnerUserID,
+		Handle:            r.Handle,
+		DisplayName:       r.DisplayName,
+		Description:       r.Description,
+		AvatarMediaID:     r.AvatarMediaID,
+		Starters:          startersFromRow(r.Starters),
+		Private:           r.Private,
+		Listed:            r.Listed,
+		SupportsSchedules: r.SupportsSchedules,
+		CreatedAt:         r.CreatedAt,
+		UpdatedAt:         r.UpdatedAt,
 	}
 }
 
@@ -128,6 +132,8 @@ type CreateInput struct {
 	// the app's catalogue. An agent cannot be both.
 	Private bool
 	Listed  bool
+	// SupportsSchedules says its backend can hold schedules.
+	SupportsSchedules bool
 }
 
 // UpdateInput is a partial update; nil leaves a field alone. The handle is
@@ -137,9 +143,10 @@ type UpdateInput struct {
 	Description   *string
 	AvatarMediaID *uuid.UUID
 	// Starters replaces the whole list when set; nil leaves it.
-	Starters *[]string
-	Private  *bool
-	Listed   *bool
+	Starters          *[]string
+	Private           *bool
+	Listed            *bool
+	SupportsSchedules *bool
 }
 
 // SetBindingInput describes the backend that will answer for an agent.

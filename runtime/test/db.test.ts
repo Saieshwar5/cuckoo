@@ -56,7 +56,7 @@ describe("with a database", { skip: available ? false : "no postgres on :5433" }
     // The template's persona and tools come through, and the default model
     // fills in for a template that names none.
     assert.match(found!.persona, /weather assistant/);
-    assert.deepEqual(found!.template.tools, ["weather"]);
+    assert.deepEqual(found!.template.tools, ["weather", "create_routine", "list_routines", "delete_routine"]);
     assert.equal(found!.model, "claude-sonnet-5");
     assert.equal(await registry.find("agt_nobody"), undefined);
   });

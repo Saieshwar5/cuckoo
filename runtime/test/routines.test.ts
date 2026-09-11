@@ -70,8 +70,13 @@ describe("with a database", { skip: available ? false : "no postgres on :5433" }
 
     const result = (await tool.execute({
       instruction: "tell me the weather",
-      schedule: "0 8 * * *",
-    })) as { confirm?: { buttonId: string } };
+      title: "Morning weather",
+      repeat: "daily",
+      time: "08:00",
+    })) as { confirm?: { buttonId: string }; proposed?: { when: string } };
+
+    // Said back in words before anything is agreed to.
+    assert.equal(result.proposed?.when, "every day at 8:00 am");
 
     // An offer exists…
     assert.ok(result.confirm?.buttonId);
@@ -82,6 +87,17 @@ describe("with a database", { skip: available ? false : "no postgres on :5433" }
     const pending = await actions.take(result.confirm.buttonId, agentId, "cnv_1");
     assert.equal(pending?.action, "create_routine");
     assert.equal(pending?.arguments.instruction, "tell me the weather");
+    assert.deepEqual(pending?.arguments.cadence, { repeat: "daily", time: "08:00", timezone: "Asia/Kolkata" });
+  });
+
+  test("a time that cannot be set is refused before anyone is asked", async () => {
+    const tool = createRoutineTool({ routines, actions }, { agentId, conversationId: "cnv_1", userId: "usr_priya" });
+    const bad = (await tool.execute({ instruction: "x", title: "x", repeat: "hourly", time: "08:00" })) as { error?: string };
+    assert.ok(bad.error);
+    const past = (await tool.execute({
+      instruction: "x", title: "x", repeat: "once", time: "08:00", date: "2020-01-01",
+    })) as { error?: string };
+    assert.match(past.error ?? "", /already passed/);
   });
 
   test("a button is good once, however many times it is tapped", async () => {

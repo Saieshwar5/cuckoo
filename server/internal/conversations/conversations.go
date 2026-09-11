@@ -47,7 +47,9 @@ type Participant struct {
 	HasAvatar bool
 	// Starters are what an agent suggests saying first.
 	Starters []string
-	JoinedAt time.Time
+	// SupportsSchedules says an agent's backend holds schedules.
+	SupportsSchedules bool
+	JoinedAt          time.Time
 }
 
 // Conversation is what the chat list shows: who is in it and what was said
@@ -202,6 +204,10 @@ type Message struct {
 	Status         MessageStatus
 	Truncated      bool
 	Stopped        bool
+	// ScheduleID is the schedule the agent sent it for, and ScheduleTitle
+	// its name, read when the message is.
+	ScheduleID     *uuid.UUID
+	ScheduleTitle  string
 	DeliveryStatus DeliveryStatus
 	CreatedAt      time.Time
 	// Signature is the hub's mark over the content (see signature.go). Empty
@@ -224,6 +230,8 @@ type SendInput struct {
 	Buttons        [][]Button
 	QuickReplies   []QuickReply
 	Action         *Action
+	// ScheduleID says a schedule of the agent's sent this. Agents only.
+	ScheduleID *uuid.UUID
 }
 
 // FinishInput is what an agent may add when it finishes a stream. Buttons
@@ -276,6 +284,7 @@ func participantFromRow(r gen.ListParticipantsRow) Participant {
 		p.Handle = derefString(r.AgentHandle)
 		p.Status = derefString(r.AgentStatus)
 		p.HasAvatar = r.AgentHasAvatar
+		p.SupportsSchedules = r.AgentSupportsSchedules
 		if len(r.AgentStarters) > 0 {
 			_ = json.Unmarshal(r.AgentStarters, &p.Starters)
 		}
@@ -307,6 +316,7 @@ func messageFromRow(r gen.Message) (Message, error) {
 		Status:         MessageStatus(r.Status),
 		Truncated:      r.Truncated,
 		Stopped:        r.Stopped,
+		ScheduleID:     r.ScheduleID,
 		CreatedAt:      r.CreatedAt,
 		Signature:      r.Signature,
 	}

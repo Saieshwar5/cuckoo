@@ -16,6 +16,7 @@ import (
 	"github.com/Saieshwar5/cuckoo/server/internal/api/httpx"
 	"github.com/Saieshwar5/cuckoo/server/internal/conversations"
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
+	"github.com/Saieshwar5/cuckoo/server/internal/events"
 	"github.com/Saieshwar5/cuckoo/server/internal/principal"
 	"github.com/Saieshwar5/cuckoo/server/internal/realtime"
 )
@@ -233,6 +234,17 @@ func frameOf(ev realtime.Event) (frame, error) {
 			ConversationID: domain.FormatID(domain.PrefixConv, p.ConversationID),
 			MessageID:      domain.FormatID(domain.PrefixMessage, p.MessageID),
 			DeliveryStatus: string(p.DeliveryStatus),
+		}}, nil
+
+	case conversations.EventScheduleChanged:
+		var p conversations.ScheduleChangedEvent
+		if err := json.Unmarshal(ev.Payload, &p); err != nil {
+			return frame{}, err
+		}
+		return frame{Type: ev.Type, Data: scheduleChangedFrame{
+			ConversationID: domain.FormatID(domain.PrefixConv, p.ConversationID),
+			Schedule:       events.ScheduleOf(p.Schedule, time.Now()),
+			Deleted:        p.Schedule.Deleted,
 		}}, nil
 
 	case agents.EventAgentStatus:

@@ -77,15 +77,16 @@ func (s *Service) Create(ctx context.Context, ownerID uuid.UUID, in CreateInput)
 	err = s.store.WithTx(ctx, func(tx *store.Store) error {
 		var err error
 		row, err = tx.CreateAgent(ctx, gen.CreateAgentParams{
-			ID:            domain.NewID(),
-			OwnerUserID:   ownerID,
-			Handle:        handle,
-			DisplayName:   name,
-			Description:   desc,
-			AvatarMediaID: in.AvatarMediaID,
-			Starters:      startersJSON(starters),
-			Private:       in.Private,
-			Listed:        in.Listed,
+			ID:                domain.NewID(),
+			OwnerUserID:       ownerID,
+			Handle:            handle,
+			DisplayName:       name,
+			Description:       desc,
+			AvatarMediaID:     in.AvatarMediaID,
+			Starters:          startersJSON(starters),
+			Private:           in.Private,
+			Listed:            in.Listed,
+			SupportsSchedules: in.SupportsSchedules,
 		})
 		if err != nil {
 			return err
@@ -177,7 +178,8 @@ func (s *Service) Update(ctx context.Context, callerID, id uuid.UUID, in UpdateI
 	}
 	params := gen.UpdateAgentParams{
 		Starters: starters, ID: id, AvatarMediaID: in.AvatarMediaID,
-		Private: optionalBool(in.Private), Listed: optionalBool(in.Listed)}
+		Private: optionalBool(in.Private), Listed: optionalBool(in.Listed),
+		SupportsSchedules: optionalBool(in.SupportsSchedules)}
 	if in.DisplayName != nil {
 		name, err := validateDisplayName(*in.DisplayName)
 		if err != nil {
@@ -193,7 +195,8 @@ func (s *Service) Update(ctx context.Context, callerID, id uuid.UUID, in UpdateI
 		params.Description = &desc
 	}
 	if params.DisplayName == nil && params.Description == nil && params.AvatarMediaID == nil &&
-		params.Starters == nil && !params.Private.Valid && !params.Listed.Valid {
+		params.Starters == nil && !params.Private.Valid && !params.Listed.Valid &&
+		!params.SupportsSchedules.Valid {
 		return Agent{}, domain.Invalid("no_changes", "Provide at least one field to update.")
 	}
 

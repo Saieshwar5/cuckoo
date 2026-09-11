@@ -26,11 +26,14 @@ type agentResponse struct {
 	Starters []string `json:"starters"`
 	// Private: the agent cannot be handed out at all, and no code may be
 	// minted for it. Listed: it is offered in the app's catalogue.
-	Private   bool             `json:"private"`
-	Listed    bool             `json:"listed"`
-	CreatedAt time.Time        `json:"created_at"`
-	UpdatedAt time.Time        `json:"updated_at"`
-	Binding   *bindingResponse `json:"binding"`
+	Private bool `json:"private"`
+	Listed  bool `json:"listed"`
+	// SupportsSchedules: its backend holds schedules, so the app offers
+	// people a way to make them.
+	SupportsSchedules bool             `json:"supports_schedules"`
+	CreatedAt         time.Time        `json:"created_at"`
+	UpdatedAt         time.Time        `json:"updated_at"`
+	Binding           *bindingResponse `json:"binding"`
 }
 
 type bindingResponse struct {
@@ -44,16 +47,17 @@ type bindingResponse struct {
 
 func newAgentResponse(a agents.Agent, b *agents.Binding) agentResponse {
 	resp := agentResponse{
-		ID:          domain.FormatID(domain.PrefixAgent, a.ID),
-		Handle:      a.Handle,
-		DisplayName: a.DisplayName,
-		Description: a.Description,
-		HasAvatar:   a.AvatarMediaID != nil,
-		Starters:    a.Starters,
-		Private:     a.Private,
-		Listed:      a.Listed,
-		CreatedAt:   a.CreatedAt,
-		UpdatedAt:   a.UpdatedAt,
+		ID:                domain.FormatID(domain.PrefixAgent, a.ID),
+		Handle:            a.Handle,
+		DisplayName:       a.DisplayName,
+		Description:       a.Description,
+		HasAvatar:         a.AvatarMediaID != nil,
+		Starters:          a.Starters,
+		Private:           a.Private,
+		Listed:            a.Listed,
+		SupportsSchedules: a.SupportsSchedules,
+		CreatedAt:         a.CreatedAt,
+		UpdatedAt:         a.UpdatedAt,
 	}
 	if b != nil {
 		br := newBindingResponse(*b)
@@ -94,6 +98,8 @@ type createAgentRequest struct {
 	// An agent cannot be both.
 	Private bool `json:"private"`
 	Listed  bool `json:"listed"`
+	// SupportsSchedules says the backend will hold schedules people make.
+	SupportsSchedules bool `json:"supports_schedules"`
 }
 
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
@@ -115,13 +121,14 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agent, err := h.agents.Create(r.Context(), userID, agents.CreateInput{
-		Handle:        req.Handle,
-		DisplayName:   req.DisplayName,
-		Description:   req.Description,
-		AvatarMediaID: avatar,
-		Starters:      req.Starters,
-		Private:       req.Private,
-		Listed:        req.Listed,
+		Handle:            req.Handle,
+		DisplayName:       req.DisplayName,
+		Description:       req.Description,
+		AvatarMediaID:     avatar,
+		Starters:          req.Starters,
+		Private:           req.Private,
+		Listed:            req.Listed,
+		SupportsSchedules: req.SupportsSchedules,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)
@@ -188,9 +195,10 @@ type updateAgentRequest struct {
 	Description   *string `json:"description"`
 	AvatarMediaID *string `json:"avatar_media_id"`
 	// Starters replaces the list when present; send [] to clear it.
-	Starters *[]string `json:"starters"`
-	Private  *bool     `json:"private"`
-	Listed   *bool     `json:"listed"`
+	Starters          *[]string `json:"starters"`
+	Private           *bool     `json:"private"`
+	Listed            *bool     `json:"listed"`
+	SupportsSchedules *bool     `json:"supports_schedules"`
 }
 
 // avatarIDOf parses the id of a picture a profile is being given.
@@ -232,12 +240,13 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	agent, err := h.agents.Update(r.Context(), userID, id, agents.UpdateInput{
-		DisplayName:   req.DisplayName,
-		Description:   req.Description,
-		AvatarMediaID: avatar,
-		Starters:      req.Starters,
-		Private:       req.Private,
-		Listed:        req.Listed,
+		DisplayName:       req.DisplayName,
+		Description:       req.Description,
+		AvatarMediaID:     avatar,
+		Starters:          req.Starters,
+		Private:           req.Private,
+		Listed:            req.Listed,
+		SupportsSchedules: req.SupportsSchedules,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)

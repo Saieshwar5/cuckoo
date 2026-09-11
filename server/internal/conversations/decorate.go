@@ -21,6 +21,9 @@ func (s *Service) decorate(ctx context.Context, msgs []Message, forSender bool) 
 	if err := s.attachStreamText(ctx, msgs); err != nil {
 		return err
 	}
+	if err := s.attachScheduleTitles(ctx, msgs); err != nil {
+		return err
+	}
 	return s.attachReplyPreviews(ctx, msgs)
 }
 

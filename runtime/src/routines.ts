@@ -21,6 +21,11 @@ export interface Routine {
   timezone: string;
   nextRun: string;
   paused: boolean;
+  /** Its twin on the hub, the schedule the person sees; null until mirrored. */
+  hubScheduleId: string | null;
+  title: string;
+  /** Runs once and goes. */
+  once: boolean;
 }
 
 /** A routine that fails this many times running is paused and says so. */
@@ -63,13 +68,16 @@ export class Routines {
     instruction: string;
     schedule: string;
     timezone?: string;
+    title?: string;
+    once?: boolean;
+    hubScheduleId?: string;
   }): Promise<Routine> {
     const timezone = input.timezone || "Asia/Kolkata";
     const first = nextRun(input.schedule, timezone);
     const { rows } = await this.pool.query<Row>(
       `INSERT INTO routines (id, agent_id, conversation_id, user_id, instruction, schedule,
-                             timezone, next_run)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                             timezone, next_run, title, once, hub_schedule_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         randomUUID(),
@@ -80,9 +88,57 @@ export class Routines {
         input.schedule,
         timezone,
         first,
+        input.title ?? "",
+        input.once ?? false,
+        input.hubScheduleId ?? null,
       ],
     );
     return toRoutine(rows[0]!);
+  }
+
+  async findByHubId(hubScheduleId: string): Promise<Routine | undefined> {
+    const { rows } = await this.pool.query<Row>("SELECT * FROM routines WHERE hub_schedule_id = $1", [
+      hubScheduleId,
+    ]);
+    return rows[0] ? toRoutine(rows[0]) : undefined;
+  }
+
+  async setHubId(id: string, hubScheduleId: string): Promise<void> {
+    await this.pool.query("UPDATE routines SET hub_schedule_id = $2 WHERE id = $1", [id, hubScheduleId]);
+  }
+
+  /** Routines the hub has never heard of: made before the app could see them. */
+  async unmirrored(limit = 50): Promise<Routine[]> {
+    const { rows } = await this.pool.query<Row>(
+      "SELECT * FROM routines WHERE hub_schedule_id IS NULL ORDER BY created_at LIMIT $1",
+      [limit],
+    );
+    return rows.map(toRoutine);
+  }
+
+  /** A new what or when, from the person, and the next run worked out again. */
+  async change(
+    id: string,
+    input: { instruction: string; schedule: string; timezone: string; once: boolean; title: string },
+  ): Promise<void> {
+    await this.pool.query(
+      `UPDATE routines SET instruction = $2, schedule = $3, timezone = $4, once = $5, title = $6,
+              next_run = $7, failures = 0, paused_at = NULL, paused_reason = NULL
+       WHERE id = $1`,
+      [id, input.instruction, input.schedule, input.timezone, input.once, input.title,
+        nextRun(input.schedule, input.timezone)],
+    );
+  }
+
+  /** Running again, from its next time — not from every time it missed. */
+  async resume(id: string): Promise<void> {
+    const { rows } = await this.pool.query<Row>("SELECT * FROM routines WHERE id = $1", [id]);
+    const routine = rows[0];
+    if (!routine) return;
+    await this.pool.query(
+      "UPDATE routines SET paused_at = NULL, paused_reason = NULL, failures = 0, next_run = $2 WHERE id = $1",
+      [id, nextRun(routine.schedule, routine.timezone)],
+    );
   }
 
   /**
@@ -111,6 +167,9 @@ export class Routines {
 
     const claimed = rows.map(toRoutine);
     for (const routine of claimed) {
+      // A one-off keeps its hour's grace: it is deleted once it has run, and
+      // a run that failed is tried again then.
+      if (routine.once) continue;
       // A schedule that no longer parses would spin forever an hour at a
       // time; pausing says so once instead.
       try {
@@ -183,6 +242,9 @@ interface Row {
   timezone: string;
   next_run: Date;
   paused_at: Date | null;
+  hub_schedule_id: string | null;
+  title: string;
+  once: boolean;
 }
 
 function toRoutine(row: Row): Routine {
@@ -196,5 +258,8 @@ function toRoutine(row: Row): Routine {
     timezone: row.timezone,
     nextRun: row.next_run.toISOString(),
     paused: row.paused_at != null,
+    hubScheduleId: row.hub_schedule_id,
+    title: row.title,
+    once: row.once,
   };
 }

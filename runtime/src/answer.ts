@@ -42,6 +42,8 @@ export interface AnswerInput {
   hubMessageId: string;
   /** Whose bill this run is. The hub's usr_… identifier. */
   userId: string;
+  /** The hub schedule this run is for, when a routine fired it. */
+  scheduleId?: string;
 }
 
 export interface AnswerDeps {
@@ -106,7 +108,7 @@ export async function answer(input: AnswerInput, deps: AnswerDeps): Promise<void
   });
   // What the reply will end with, if a tool asked for a tap.
   let confirmation: Confirmation | undefined;
-  const writer = new Writer(deps.client, conversationId);
+  const writer = new Writer(deps.client, conversationId, input.scheduleId);
   const labels = new Map(tools.map((t) => [t.name, t.activity]));
 
   // The model may think for a while before it says anything, and a tool call
@@ -275,10 +277,13 @@ class Writer {
   private renew?: ReturnType<typeof setInterval>;
   // Whether an activity is up on the person's screen right now.
   private showing = false;
+  // The schedule the reply is for, so the person sees why it came.
+  private readonly scheduleId?: string;
 
-  constructor(client: HubClient, conversationId: string) {
+  constructor(client: HubClient, conversationId: string, scheduleId?: string) {
     this.client = client;
     this.conversationId = conversationId;
+    this.scheduleId = scheduleId;
   }
 
   /**
@@ -322,7 +327,7 @@ class Writer {
     this.buffer += text;
     if (!this.stream) {
       this.quiet();
-      const started = await this.client.startStream(this.conversationId);
+      const started = await this.client.startStream(this.conversationId, { scheduleId: this.scheduleId });
       this.stream = new StreamHandle(this.client, this.conversationId, started.id);
       this.lastFlush = Date.now();
     }

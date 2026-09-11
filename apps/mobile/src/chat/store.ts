@@ -188,6 +188,9 @@ export function applyFrame(state: ChatState, frame: Frame, conversationId: strin
     case 'conversation.read':
       // The badge is the chat list's; an open chat is being read already.
       return state;
+    case 'schedule.changed':
+      // The schedules screen's business; a message it sends arrives as one.
+      return state;
   }
 }
 

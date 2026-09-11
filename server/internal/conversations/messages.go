@@ -78,6 +78,9 @@ func (s *Service) create(ctx context.Context, sender Sender, conversationID uuid
 	if err != nil {
 		return SendResult{}, err
 	}
+	if err := s.checkScheduleTag(ctx, sender, conversationID, in.ScheduleID); err != nil {
+		return SendResult{}, err
+	}
 
 	// A retry of a message we already have is answered before the rate
 	// limit is consulted: it costs nothing and refusing it would make the
@@ -109,6 +112,7 @@ func (s *Service) create(ctx context.Context, sender Sender, conversationID uuid
 		IdempotencyKey:   key,
 		Status:           string(MessageComplete),
 		ReplyToMessageID: replyTo,
+		ScheduleID:       in.ScheduleID,
 	}
 	if streaming {
 		params.Status = string(MessageStreaming)
@@ -171,6 +175,9 @@ func (s *Service) create(ctx context.Context, sender Sender, conversationID uuid
 		return SendResult{}, domain.Internal(fmt.Errorf("send message: %w", err))
 	}
 
+	if in.ScheduleID != nil {
+		s.ranSchedule(ctx, *in.ScheduleID)
+	}
 	sent := []Message{msg}
 	if err := s.decorate(ctx, sent, true); err != nil {
 		return SendResult{}, err

@@ -29,6 +29,8 @@ type participantResponse struct {
 	HasAvatar bool `json:"has_avatar,omitempty"`
 	// Starters are what the agent suggests saying first, for an empty chat.
 	Starters []string `json:"starters,omitempty"`
+	// SupportsSchedules: the app offers this agent's schedules.
+	SupportsSchedules bool `json:"supports_schedules,omitempty"`
 }
 
 // conversationResponse is a row of the chat list. LastMessage is null until
@@ -62,13 +64,14 @@ func newConversationResponse(c conversations.Conversation) conversationResponse 
 	}
 	for _, p := range c.Participants {
 		resp.Participants = append(resp.Participants, participantResponse{
-			Kind:        string(p.Kind),
-			ID:          formatParticipantID(p.Kind, p.ID),
-			DisplayName: p.DisplayName,
-			Handle:      p.Handle,
-			Status:      p.Status,
-			HasAvatar:   p.HasAvatar,
-			Starters:    p.Starters,
+			Kind:              string(p.Kind),
+			ID:                formatParticipantID(p.Kind, p.ID),
+			DisplayName:       p.DisplayName,
+			Handle:            p.Handle,
+			Status:            p.Status,
+			HasAvatar:         p.HasAvatar,
+			Starters:          p.Starters,
+			SupportsSchedules: p.SupportsSchedules,
 		})
 	}
 	if c.LastMessage != nil {

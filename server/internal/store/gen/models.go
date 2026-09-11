@@ -12,18 +12,19 @@ import (
 )
 
 type Agent struct {
-	ID            uuid.UUID
-	OwnerUserID   uuid.UUID
-	Handle        string
-	DisplayName   string
-	Description   string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	DeletedAt     *time.Time
-	AvatarMediaID *uuid.UUID
-	Starters      []byte
-	Private       bool
-	Listed        bool
+	ID                uuid.UUID
+	OwnerUserID       uuid.UUID
+	Handle            string
+	DisplayName       string
+	Description       string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	DeletedAt         *time.Time
+	AvatarMediaID     *uuid.UUID
+	Starters          []byte
+	Private           bool
+	Listed            bool
+	SupportsSchedules bool
 }
 
 type AgentBinding struct {
@@ -101,6 +102,7 @@ type Message struct {
 	ReplyToMessageID *uuid.UUID
 	Signature        []byte
 	Stopped          bool
+	ScheduleID       *uuid.UUID
 }
 
 type MessageDelivery struct {
@@ -156,6 +158,21 @@ type Report struct {
 	Reason         string
 	Note           string
 	CreatedAt      time.Time
+}
+
+type Schedule struct {
+	ID             uuid.UUID
+	AgentID        uuid.UUID
+	ConversationID uuid.UUID
+	Title          string
+	Instruction    string
+	Cadence        []byte
+	Status         string
+	CreatedBy      string
+	LastRunAt      *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	DeletedAt      *time.Time
 }
 
 type Session struct {

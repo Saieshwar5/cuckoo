@@ -2,6 +2,7 @@ import type {
   Agent,
   ApiKey,
   Binding,
+  Cadence,
   Contact,
   ContactSettings,
   Conversation,
@@ -16,6 +17,7 @@ import type {
   PairResolve,
   PairToken,
   ReportReason,
+  Schedule,
   StorageUsage,
   User,
   Verified,
@@ -117,6 +119,19 @@ export interface Api {
   stopConversation(conversationId: string): Promise<Message[]>;
   // How far this person has read, for the badge on every device.
   markRead(conversationId: string, messageId: string): Promise<void>;
+  // Schedules: the agent runs them; these show them and carry the
+  // person's word on them.
+  listSchedules(conversationId: string): Promise<Schedule[]>;
+  requestSchedule(
+    conversationId: string,
+    input: { instruction: string; cadence: Cadence },
+  ): Promise<Schedule>;
+  updateSchedule(
+    conversationId: string,
+    scheduleId: string,
+    change: { paused?: boolean; instruction?: string; cadence?: Cadence },
+  ): Promise<Schedule>;
+  deleteSchedule(conversationId: string, scheduleId: string): Promise<void>;
   // Files. Uploading is its own step, so a slow photo does not hold a
   // message open; the send that follows names what came back.
   uploadMedia(file: UploadInput): Promise<Media>;
@@ -247,6 +262,21 @@ export function createApi(opts: ApiOptions): Api {
       (await request<{ stopped: Message[] }>('POST', `/v1/client/conversations/${id}/stop`)).stopped,
     markRead: (id, messageId) =>
       request('POST', `/v1/client/conversations/${id}/read`, { message_id: messageId }),
+    listSchedules: async (id) =>
+      (await request<{ schedules: Schedule[] }>('GET', `/v1/client/conversations/${id}/schedules`)).schedules,
+    requestSchedule: async (id, input) =>
+      (await request<{ schedule: Schedule }>('POST', `/v1/client/conversations/${id}/schedules`, input))
+        .schedule,
+    updateSchedule: async (id, scheduleId, change) =>
+      (
+        await request<{ schedule: Schedule }>(
+          'PATCH',
+          `/v1/client/conversations/${id}/schedules/${scheduleId}`,
+          change,
+        )
+      ).schedule,
+    deleteSchedule: (id, scheduleId) =>
+      request('DELETE', `/v1/client/conversations/${id}/schedules/${scheduleId}`),
     sendMessage: async (id, input, idempotencyKey = newIdempotencyKey()) =>
       (
         await request<{ message: Message }>('POST', `/v1/client/conversations/${id}/messages`, {

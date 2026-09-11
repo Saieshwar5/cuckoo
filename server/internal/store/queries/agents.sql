@@ -1,7 +1,7 @@
 -- name: CreateAgent :one
 INSERT INTO agents (id, owner_user_id, handle, display_name, description, avatar_media_id,
-                    starters, private, listed)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    starters, private, listed, supports_schedules)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: GetAgentByHandle :one
@@ -26,6 +26,7 @@ SET display_name    = COALESCE(sqlc.narg('display_name')::text, display_name),
     starters        = COALESCE(sqlc.narg('starters')::jsonb, starters),
     private         = COALESCE(sqlc.narg('private')::boolean, private),
     listed          = COALESCE(sqlc.narg('listed')::boolean, listed),
+    supports_schedules = COALESCE(sqlc.narg('supports_schedules')::boolean, supports_schedules),
     updated_at      = now()
 WHERE id = sqlc.arg('id') AND deleted_at IS NULL
 RETURNING *;

@@ -27,7 +27,10 @@ type agentCardResponse struct {
 	// Private: this agent answers only for its owner and cannot be shared,
 	// so the app hides Share rather than offering a code the hub will refuse.
 	Private bool `json:"private"`
-	Owner   struct {
+	// SupportsSchedules: the person can ask this agent to do things at a
+	// time, and the profile shows its schedules.
+	SupportsSchedules bool `json:"supports_schedules"`
+	Owner             struct {
 		DisplayName string `json:"display_name"`
 	} `json:"owner"`
 	Status string `json:"status,omitempty"`
@@ -38,13 +41,14 @@ type agentCardResponse struct {
 
 func newAgentCard(c pairing.Card) agentCardResponse {
 	resp := agentCardResponse{
-		ID:          domain.FormatID(domain.PrefixAgent, c.Agent.ID),
-		Handle:      c.Agent.Handle,
-		DisplayName: c.Agent.DisplayName,
-		Description: c.Agent.Description,
-		HasAvatar:   c.Agent.AvatarMediaID != nil,
-		Starters:    c.Agent.Starters,
-		Private:     c.Agent.Private,
+		ID:                domain.FormatID(domain.PrefixAgent, c.Agent.ID),
+		Handle:            c.Agent.Handle,
+		DisplayName:       c.Agent.DisplayName,
+		Description:       c.Agent.Description,
+		HasAvatar:         c.Agent.AvatarMediaID != nil,
+		Starters:          c.Agent.Starters,
+		Private:           c.Agent.Private,
+		SupportsSchedules: c.Agent.SupportsSchedules,
 	}
 	resp.Owner.DisplayName = c.OwnerName
 	if c.Status != nil {

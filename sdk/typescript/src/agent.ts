@@ -18,6 +18,7 @@ import {
   type JoinHandler,
   type LeaveHandler,
   type MessageHandler,
+  type ScheduleHandler,
   SeenEvents,
   type StopHandler,
   dispatch,
@@ -72,6 +73,16 @@ export class Agent {
    */
   onStop(fn: StopHandler): this {
     this.handlers.onStop = fn;
+    return this;
+  }
+
+  /**
+   * Register what runs when the person makes, changes or deletes a schedule
+   * in the app. Hold it in your own timer, then `conversation.schedules
+   * .confirm(schedule.id)`; the app says "waiting" until you do.
+   */
+  onSchedule(fn: ScheduleHandler): this {
+    this.handlers.onSchedule = fn;
     return this;
   }
 

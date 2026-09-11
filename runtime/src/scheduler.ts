@@ -12,7 +12,7 @@
  * whether the agent still exists.
  */
 
-import { HubClient, type InFlight } from "@cuckoo/agent";
+import { HubClient, ProtocolError, type InFlight } from "@cuckoo/agent";
 
 import type { Actions } from "./actions.ts";
 import type { Registry } from "./agents/registry.ts";
@@ -20,7 +20,7 @@ import { answer } from "./answer.ts";
 import type { Harness, ToolFactory } from "./harness/harness.ts";
 import type { TurnStore } from "./memory/turns.ts";
 import type { Proactive } from "./proactive.ts";
-import type { Routines } from "./routines.ts";
+import type { Routine, Routines } from "./routines.ts";
 import type { Usage } from "./usage.ts";
 
 export interface SchedulerDeps {
@@ -68,6 +68,16 @@ export class Scheduler {
       try {
         await this.run(routine);
       } catch (error) {
+        // The person paused or deleted it in the app and the hub said so on
+        // the send, before its event reached us. Their word, not a failure.
+        if (error instanceof ProtocolError && error.code === "schedule_deleted") {
+          await this.deps.routines.delete(routine.id, routine.agentId);
+          continue;
+        }
+        if (error instanceof ProtocolError && error.code === "schedule_paused") {
+          await this.deps.routines.pause(routine.id, "paused in the app");
+          continue;
+        }
         const message = error instanceof Error ? error.message : String(error);
         const { paused } = await this.deps.routines.recordFailure(routine.id, message);
         console.error(`runtime: routine ${routine.id} failed${paused ? " and was paused" : ""}`, error);
@@ -77,13 +87,7 @@ export class Scheduler {
     return due.length;
   }
 
-  private async run(routine: {
-    id: string;
-    agentId: string;
-    conversationId: string;
-    userId: string;
-    instruction: string;
-  }): Promise<void> {
+  private async run(routine: Routine): Promise<void> {
     const agent = await this.deps.registry.findById(routine.agentId);
     if (!agent) return; // deleted since the routine was set
 
@@ -117,6 +121,9 @@ export class Scheduler {
             routine.instruction,
           hubMessageId: "",
           userId: routine.userId,
+          // The reply says which schedule sent it, and the hub refuses it if
+          // the person paused or deleted that schedule meanwhile.
+          scheduleId: routine.hubScheduleId ?? undefined,
         },
         {
           turns: this.deps.turns,
@@ -137,6 +144,16 @@ export class Scheduler {
       conversationId: routine.conversationId,
       reason: `routine:${routine.id}`,
     });
+
+    // A one-off has done what it was for.
+    if (routine.once) {
+      await this.deps.routines.delete(routine.id, routine.agentId);
+      if (routine.hubScheduleId) {
+        await new HubClient(secret, { hub: this.deps.hubUrl })
+          .deleteSchedule(routine.conversationId, routine.hubScheduleId)
+          .catch(() => {});
+      }
+    }
   }
 
   /**

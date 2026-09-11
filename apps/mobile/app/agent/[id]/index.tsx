@@ -16,6 +16,7 @@ import { agentAvatar } from '@/media/avatar';
 import { Button } from '@/components/Button';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
 import { EmptyState } from '@/components/EmptyState';
+import { SchedulesTile } from '@/components/SchedulesTile';
 import { Screen } from '@/components/Screen';
 import { TopBar } from '@/components/TopBar';
 import { t } from '@/i18n';
@@ -316,6 +317,7 @@ export default function AgentProfileScreen() {
             colors={colors}
             testID="agent-message"
           />
+          <SchedulesTile contact={contact} colors={colors} />
           {owned ? (
             <>
               <ActionTile

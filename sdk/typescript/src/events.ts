@@ -11,12 +11,16 @@
 import type { HubClient } from "./client.ts";
 import { Conversation } from "./conversation.ts";
 import { StoppedError } from "./errors.ts";
+import { parseSchedule, type ScheduleChange } from "./schedules.ts";
 import { type Message, type PairToken, parseMessage, parseParticipant, parsePairToken } from "./models.ts";
 
 export const EVENT_MESSAGE_CREATED = "message.created";
 export const EVENT_CONVERSATION_JOINED = "conversation.joined";
 export const EVENT_CONVERSATION_LEFT = "conversation.left";
 export const EVENT_STOP_REQUESTED = "stop.requested";
+export const EVENT_SCHEDULE_REQUESTED = "schedule.requested";
+export const EVENT_SCHEDULE_UPDATED = "schedule.updated";
+export const EVENT_SCHEDULE_DELETED = "schedule.deleted";
 
 /**
  * The envelope around every event. `id` is what you acknowledge and
@@ -40,6 +44,7 @@ export interface StopRequest {
   messageId?: string;
 }
 export type StopHandler = (stop: StopRequest, conversation: Conversation) => void | Promise<void>;
+export type ScheduleHandler = (change: ScheduleChange, conversation: Conversation) => void | Promise<void>;
 
 export interface Handlers {
   /** Every message the agent receives. The one that matters. */
@@ -55,6 +60,11 @@ export interface Handlers {
    * worth saying.
    */
   onStop?: StopHandler;
+  /**
+   * The person made, changed or deleted a schedule in the app. Hold it in
+   * your own timer and confirm it; the hub only shows it.
+   */
+  onSchedule?: ScheduleHandler;
 }
 
 /**
@@ -172,6 +182,17 @@ export async function dispatch(
       const conv = (envelope.data.conversation ?? {}) as Record<string, unknown>;
       const reason = typeof envelope.data.reason === "string" ? envelope.data.reason : "";
       await handlers.onLeave(typeof conv.id === "string" ? conv.id : "", reason);
+      return;
+    }
+    case EVENT_SCHEDULE_REQUESTED:
+    case EVENT_SCHEDULE_UPDATED:
+    case EVENT_SCHEDULE_DELETED: {
+      if (!handlers.onSchedule) return;
+      const type = envelope.type.slice("schedule.".length) as ScheduleChange["type"];
+      await handlers.onSchedule(
+        { type, schedule: parseSchedule(envelope.data.schedule) },
+        conversationOf(envelope.data, client),
+      );
       return;
     }
     default:
