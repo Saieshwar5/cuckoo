@@ -38,6 +38,10 @@ Everything a backend can do, under `/v1/agent`.
 | POST | `/conversations/{id}/messages` | Send, or start a stream |
 | POST | `/conversations/{id}/activity` | Say what the agent is doing: thinking, working, idle |
 | POST | `/conversations/{id}/typing` | The first version of `/activity`: start or stop |
+| GET | `/conversations/{id}/schedules` | Your schedules in a conversation |
+| POST | `/conversations/{id}/schedules` | Record one you hold, made in the chat |
+| PATCH | `/conversations/{id}/schedules/{sid}` | Confirm, rename, change or pause one |
+| DELETE | `/conversations/{id}/schedules/{sid}` | Decline one, or end a one-off that ran |
 | POST | `/messages/{id}/append` | Add to a stream |
 | POST | `/messages/{id}/finish` | End a stream |
 | POST | `/media` | Upload a file |
@@ -195,6 +199,24 @@ yours: "Stopped. Nothing was booked." Both SDKs cancel the handler running for
 that conversation for you, and treat the `StoppedError` its next write raises
 as a finished event rather than one to retry.
 
+### `schedule.requested`, `schedule.updated`, `schedule.deleted`
+
+```json
+"data": {
+  "conversation": { "id": "cnv_…", "kind": "dm" },
+  "participants": [ … ],
+  "schedule": {
+    "id": "sch_…", "title": "Weather in Hyderabad", "instruction": "Weather in Hyderabad",
+    "cadence": { "repeat": "daily", "time": "07:00", "timezone": "Asia/Kolkata" },
+    "status": "pending", "created_by": "user",
+    "next_run_at": "…", "last_run_at": null, "missed_at": null
+  }
+}
+```
+
+The person made, changed or deleted a schedule in the app. See
+[Schedules](#schedules).
+
 Activity, delivery and read state are not agent-facing events. They exist, but
 they go to people's devices only.
 
@@ -285,6 +307,53 @@ open. `conv.working("…")` in both SDKs does all of this for you.
 
 `POST /conversations/{id}/typing` with `{"state": "start"}` or `"stop"` is the
 first version of the same thing: start is `thinking`, stop is `idle`.
+
+## Schedules
+
+A schedule is something a person asks your agent to do at a time, again and
+again: "every morning at 7, the weather in Hyderabad". **Your backend runs
+it** — the timer, the work, the answer. The hub fires nothing. It shows the
+schedule in the app, passes on what the person does to it, and enforces their
+word on it.
+
+Say your agent keeps schedules with `supports_schedules: true` on the
+management API; the app offers them only then.
+
+**When** is structure, never a sentence:
+
+```json
+{ "repeat": "daily",    "time": "07:00", "timezone": "Asia/Kolkata" }
+{ "repeat": "weekdays", "time": "06:30", "timezone": "Asia/Kolkata" }
+{ "repeat": "weekly",   "time": "18:00", "days": ["mon", "fri"], "timezone": "Asia/Kolkata" }
+{ "repeat": "once",     "time": "09:00", "date": "2026-09-12", "timezone": "Asia/Kolkata" }
+```
+
+Nothing more often than daily, a 24-hour time, an IANA zone. Ten to a chat.
+
+**A person makes one** in the app: you get `schedule.requested`, and the app
+says *Waiting for …* until you hold it and confirm:
+
+```
+PATCH /conversations/{id}/schedules/{sid}   {"status": "active", "title": "Morning weather"}
+```
+
+Can't do it? `DELETE` it and send a message saying why. A person pausing,
+resuming, or changing what or when sends `schedule.updated`; a change of what
+or when is `pending` until you confirm again. Only the person resumes what
+they paused (`403 paused_by_person`).
+
+**You made one in the chat?** Record it, so they see it beside the rest:
+`POST /conversations/{id}/schedules {title, instruction, cadence}`.
+
+**When it runs,** send with `schedule_id`. The bubble is tagged with its
+title, and the hub records that it ran. A message for a schedule the person
+paused is refused `409 schedule_paused`; for one they deleted,
+`409 schedule_deleted` — whatever your timer says. Take either as their word.
+
+`next_run_at` is worked out by the hub from the cadence. `missed_at` is the
+last time it was due, more than ten minutes ago, with nothing sent for it —
+the app shows *Didn't run* in red, because a backend that was down at seven
+is exactly what a person should be told.
 
 ## Media
 

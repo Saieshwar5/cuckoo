@@ -152,6 +152,28 @@ async def stopped(stop, conv):
 writing. The hub has already done its part before this runs: the reply ended
 where it stood, marked `stopped`, and the indicator is gone from every screen.
 
+### Schedules
+
+For an agent created with `supports_schedules=True`. Your backend holds the
+timer; the app shows the schedule and passes on what the person does.
+
+```python
+@agent.on_schedule
+async def schedule(change, conv):
+    if change.type == "deleted":
+        return timers.cancel(change.schedule.id)
+    timers.set(change.schedule.id, change.schedule.cadence, change.schedule.instruction)
+    await conv.schedules.confirm(change.schedule.id, "Morning weather")
+
+# your timer fires:
+await conv.send(forecast, schedule_id=schedule_id)
+```
+
+`conv.schedules` also has `list`, `create` (for one made in the chat),
+`update` and `remove`. A send for a schedule the person paused or deleted
+raises `ProtocolError` with `schedule_paused` or `schedule_deleted`: stop that
+timer. See [Schedules](/docs/protocol/#schedules) for the rules.
+
 ## Message
 
 | Field | Type | Notes |
