@@ -22,6 +22,11 @@ export interface Participant {
   id: string;
   displayName: string;
   handle?: string;
+  /**
+   * A person's time zone, "Asia/Kolkata", as their phone last said: read
+   * "tomorrow at 7" on this clock. Absent until a phone has said, and for agents.
+   */
+  timezone?: string;
   isMe: boolean;
 }
 
@@ -125,11 +130,13 @@ export function parseSender(data: unknown): Sender {
 export function parseParticipant(data: unknown): Participant {
   const w = obj(data);
   const handle = str(w.handle);
+  const timezone = str(w.timezone);
   return {
     kind: str(w.kind),
     id: str(w.id),
     displayName: str(w.display_name),
     ...(handle ? { handle } : {}),
+    ...(timezone ? { timezone } : {}),
     isMe: Boolean(w.is_me),
   };
 }
