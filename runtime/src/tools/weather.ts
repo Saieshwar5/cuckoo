@@ -23,8 +23,9 @@ export function weatherTool(fetchImpl: typeof fetch = fetch): Tool {
     name: "weather",
     activity: "Checking the weather",
     description:
-      "The weather forecast for a place. Use it whenever someone asks about " +
-      "weather, rain, heat or what to wear. Understands Indian place names.",
+      "The weather forecast for a place anywhere in the world. Use it whenever someone " +
+      "asks about weather, rain, heat or what to wear. Prefers the Indian place when a " +
+      "name could be more than one.",
     parameters: {
       type: "object",
       properties: {
@@ -70,9 +71,8 @@ export function weatherTool(fetchImpl: typeof fetch = fetch): Tool {
         ...(elsewhere
           ? {
               note:
-                `No place called "${place}" was found in India. This is ` +
-                `${found.name}, ${found.country}. If that is not what was meant, ` +
-                `ask again with a nearby city.`,
+                `This is ${found.name}, ${found.country} — there is no place called ` +
+                `"${place}" in India. Say which place you used, in case they meant another.`,
             }
           : {}),
         // Flattened per day: a model reads this far better than four parallel
