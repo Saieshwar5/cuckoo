@@ -110,6 +110,20 @@ export class Jobs {
     );
   }
 
+  /**
+   * The person pressed stop: messages from this conversation still waiting
+   * to be answered are not answered. Returns how many there were.
+   */
+  async dropPending(agentId: string, conversationId: string): Promise<number> {
+    const { rowCount } = await this.pool.query(
+      `UPDATE jobs SET status = 'done', last_error = 'stopped'
+       WHERE agent_id = $1 AND status = 'pending' AND type = 'message.created'
+         AND payload->'conversation'->>'id' = $2`,
+      [agentId, conversationId],
+    );
+    return rowCount ?? 0;
+  }
+
   /** Anything left running when the process died is due again. */
   async recoverAbandoned(olderThanSeconds = 300): Promise<number> {
     const { rowCount } = await this.pool.query(

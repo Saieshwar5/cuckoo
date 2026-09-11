@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { HubClient } from "@cuckoo/agent";
+import { StoppedError, type HubClient } from "@cuckoo/agent";
 
 import { answer } from "../src/answer.ts";
 import type { AgentRecord } from "../src/agents/registry.ts";
@@ -22,14 +22,16 @@ class StubHub {
   readonly calls: string[] = [];
   readonly appended: string[] = [];
   private streams = 0;
+  /** Refuse appends as the hub does once the person has pressed stop. */
+  stopped = false;
 
   async send(_conversationId: string, text: string): Promise<{ id: string }> {
     this.calls.push("send");
     this.appended.push(text);
     return { id: "msg_sent" };
   }
-  async typing(_conversationId: string, state: string): Promise<void> {
-    this.calls.push(`typing:${state}`);
+  async activity(_conversationId: string, state: string, label?: string): Promise<void> {
+    this.calls.push(label ? `activity:${state}:${label}` : `activity:${state}`);
   }
   async startStream(_conversationId: string): Promise<{ id: string }> {
     this.streams += 1;
@@ -37,6 +39,7 @@ class StubHub {
     return { id: `msg_stream_${this.streams}` };
   }
   async appendStream(_messageId: string, text: string): Promise<void> {
+    if (this.stopped) throw new StoppedError();
     this.calls.push("stream.append");
     this.appended.push(text);
   }
@@ -101,8 +104,8 @@ test("answers, streams the words, and writes down both sides", async () => {
   await answer(ASKED, deps);
 
   assert.equal(hub.said().trim(), "yes, tomorrow");
-  // Typing first, because the model is silent for a moment; then one stream.
-  assert.equal(hub.calls[0], "typing:start");
+  // Thinking first, because the model is silent for a moment; then one stream.
+  assert.equal(hub.calls[0], "activity:thinking");
   assert.equal(hub.calls.filter((c) => c === "stream.start").length, 1);
   assert.equal(hub.calls.at(-1), "stream.finish");
 
@@ -170,7 +173,7 @@ test("a tool call shows the indicator and its result is remembered", async () =>
 
   // The indicator goes up again while the tool runs: that is the pause the
   // person would otherwise read as nothing happening.
-  assert.equal(hub.calls.filter((c) => c === "typing:start").length, 2);
+  assert.equal(hub.calls.filter((c) => c === "activity:thinking").length, 2);
   const toolRow = turns.rows.find((r) => r.role === "tool");
   assert.equal(toolRow?.toolName, "weather");
   assert.deepEqual(toolRow?.toolResult, { highC: 31, rainChancePercent: 80 });
@@ -186,7 +189,7 @@ test("a stream is only opened when there is something to say", async () => {
   await answer(ASKED, deps);
 
   assert.equal(hub.calls.includes("stream.start"), false);
-  assert.equal(hub.calls.at(-1), "typing:stop");
+  assert.equal(hub.calls.at(-1), "activity:idle");
   assert.equal(turns.rows.some((r) => r.role === "assistant"), false);
 });
 
@@ -197,7 +200,60 @@ test("a model that fails leaves nothing open, and the failure is passed up", asy
 
   // The job queue decides whether to retry; what matters here is that the
   // indicator was taken down rather than left spinning forever.
-  assert.equal(hub.calls.at(-1), "typing:stop");
+  assert.equal(hub.calls.at(-1), "activity:idle");
+});
+
+test("a tool that names what it does is what the person sees while it runs", async () => {
+  const weather: Tool = {
+    name: "weather",
+    activity: "Checking the weather",
+    description: "",
+    parameters: {},
+    execute: async () => ({ highC: 31 }),
+  };
+  const { hub, deps } = setup([{ call: "weather" }, { say: "31 degrees" }], [weather]);
+
+  await answer(ASKED, deps);
+
+  assert.deepEqual(hub.calls.slice(0, 2), ["activity:thinking", "activity:working:Checking the weather"]);
+});
+
+test("a stop ends the run where it stands: nothing more is said, and the cut is remembered", async () => {
+  const stop = new AbortController();
+  // The stop lands while a tool runs, after the first words were written.
+  const slow: Tool = {
+    name: "weather",
+    description: "",
+    parameters: {},
+    execute: async () => {
+      stop.abort();
+      return {};
+    },
+  };
+  const { hub, turns, deps } = setup(
+    [{ say: "Let me look." }, { call: "weather" }, { say: "It will never say this" }],
+    [slow],
+  );
+
+  await answer(ASKED, { ...deps, signal: stop.signal });
+
+  assert.equal(hub.said().includes("never"), false);
+  // The hub ended the reply and cleared the indicator itself.
+  assert.equal(hub.calls.includes("stream.finish"), false);
+  assert.equal(hub.calls.at(-1) === "activity:idle", false);
+  const last = turns.rows.at(-1)!;
+  assert.equal(last.role, "assistant");
+  assert.match(last.text ?? "", /\[the person stopped this reply\]$/);
+});
+
+test("a stop felt only at the hub ends the run quietly rather than as a failure to retry", async () => {
+  const long = "word ".repeat(40); // past the flush size, so the words are sent
+  const { hub, turns, deps } = setup([{ say: long }]);
+  hub.stopped = true;
+
+  await answer(ASKED, deps); // resolves: the job is done, not retried
+
+  assert.match(turns.rows.at(-1)?.text ?? "", /\[the person stopped this reply\]$/);
 });
 
 /** A ceiling a test can set, and a ledger it can read. */

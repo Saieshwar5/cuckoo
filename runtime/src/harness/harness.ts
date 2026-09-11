@@ -37,6 +37,12 @@ export function asksToConfirm(result: unknown): result is ConfirmingResult {
 export interface Tool {
   name: string;
   description: string;
+  /**
+   * What the person sees while it runs, under the agent's name: "Checking
+   * the weather". One line, at most 40 characters, no links. Without one
+   * they see "thinking…".
+   */
+  activity?: string;
   parameters: Record<string, unknown>;
   /** What actually happens. Anything returned is shown to the model. */
   execute(args: Record<string, unknown>): Promise<unknown>;

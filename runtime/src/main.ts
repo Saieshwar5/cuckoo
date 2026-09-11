@@ -11,7 +11,7 @@
  * ever needs one, the protocol is what is incomplete.
  */
 
-import { HubClient } from "@cuckoo/agent";
+import { HubClient, InFlight } from "@cuckoo/agent";
 
 import { Actions } from "./actions.ts";
 import { Registry } from "./agents/registry.ts";
@@ -48,13 +48,15 @@ export async function start(config: Config = loadConfig()) {
   const tools = builtinTools({ routines, actions });
   const usage = new Usage(pool, config.dailyTokenLimit);
   const harness: Harness = selectHarness(config);
+  // Runs in progress by conversation: what a person's stop cancels.
+  const inflight = new InFlight();
 
   // Anything a previous process claimed and did not finish is due again.
   const recovered = await jobs.recoverAbandoned();
   if (recovered) console.log(`runtime: ${recovered} job(s) recovered from a previous run`);
 
   const worker = new Worker(jobs, (job) =>
-    run(job, { registry, turns, harness, tools, usage, actions, routines, config }),
+    run(job, { registry, turns, harness, tools, usage, actions, routines, config, inflight }),
   );
   worker.start();
 
@@ -67,11 +69,12 @@ export async function start(config: Config = loadConfig()) {
     usage,
     actions,
     proactive,
+    inflight,
     hubUrl: config.hubUrl,
   });
   scheduler.start();
 
-  const server = createRuntimeServer({ pool, registry, jobs, version: VERSION, hubUrl: config.hubUrl });
+  const server = createRuntimeServer({ pool, registry, jobs, inflight, version: VERSION, hubUrl: config.hubUrl });
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   console.log(`runtime: listening on :${config.port}, hub ${config.hubUrl}`);
 
@@ -97,6 +100,7 @@ interface RunDeps {
   actions: Actions;
   routines: Routines;
   config: Config;
+  inflight: InFlight;
 }
 
 /**
@@ -142,16 +146,22 @@ async function run(job: Job, deps: RunDeps): Promise<void> {
     if (done) return;
   }
 
-  await answer(
-    { agent, conversationId, text, hubMessageId: message.id, userId },
-    {
-      turns: deps.turns,
-      harness: deps.harness,
-      tools: deps.tools,
-      usage: deps.usage,
-      client,
-    },
-  );
+  const running = deps.inflight.start(conversationId);
+  try {
+    await answer(
+      { agent, conversationId, text, hubMessageId: message.id, userId },
+      {
+        turns: deps.turns,
+        harness: deps.harness,
+        tools: deps.tools,
+        usage: deps.usage,
+        client,
+        signal: running.signal,
+      },
+    );
+  } finally {
+    deps.inflight.end(conversationId, running);
+  }
 }
 
 // Started directly, rather than imported by a test.

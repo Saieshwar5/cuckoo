@@ -22,6 +22,7 @@ export interface RoutineToolDeps {
 export function createRoutineTool(deps: RoutineToolDeps, context: ToolContext): Tool {
   return {
     name: "create_routine",
+    activity: "Getting that ready",
     description:
       "Offer to run an instruction on a schedule, for example every morning or " +
       "every Friday. The person must confirm before it is set; you are offering, " +
@@ -84,6 +85,7 @@ export function createRoutineTool(deps: RoutineToolDeps, context: ToolContext): 
 export function listRoutinesTool(deps: RoutineToolDeps, context: ToolContext): Tool {
   return {
     name: "list_routines",
+    activity: "Looking at your routines",
     description: "The routines already set in this conversation.",
     parameters: { type: "object", properties: {} },
     async execute() {
@@ -106,6 +108,7 @@ export function listRoutinesTool(deps: RoutineToolDeps, context: ToolContext): T
 export function deleteRoutineTool(deps: RoutineToolDeps, context: ToolContext): Tool {
   return {
     name: "delete_routine",
+    activity: "Finding that routine",
     description: "Offer to stop a routine. Use list_routines first to find its id.",
     parameters: {
       type: "object",

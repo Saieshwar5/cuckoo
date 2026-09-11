@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, test } from "node:test";
 
-import { sign, signingKey } from "@cuckoo/agent";
+import { InFlight, sign, signingKey } from "@cuckoo/agent";
 
 import { Registry } from "../src/agents/registry.ts";
 import { createRuntimeServer } from "../src/api/server.ts";
@@ -30,6 +30,7 @@ describe("the webhook door", { skip: available ? false : "no postgres on :5433" 
   let pool: Pool;
   let jobs: Jobs;
   let base: string;
+  const inflight = new InFlight();
   let server: ReturnType<typeof createRuntimeServer>;
 
   before(async () => {
@@ -49,6 +50,7 @@ describe("the webhook door", { skip: available ? false : "no postgres on :5433" 
       pool,
       registry,
       jobs,
+      inflight,
       version: "test",
       hubUrl: "http://127.0.0.1:9",
     });
@@ -160,6 +162,31 @@ describe("the webhook door", { skip: available ? false : "no postgres on :5433" 
     const body = event(`evt_${randomUUID()}`).replace('"agt_weather"', '"agt_someone_else"');
     const response = await post("agt_weather", body);
     assert.equal(response.status, 401);
+  });
+
+  test("a stop cancels the run answering that chat, and what waited there is not answered", async () => {
+    const waiting = `evt_${randomUUID()}`;
+    await post("agt_weather", event(waiting));
+    const running = inflight.start("cnv_1");
+    const elsewhere = inflight.start("cnv_2");
+
+    const stop = JSON.stringify({
+      id: `evt_${randomUUID()}`,
+      type: "stop.requested",
+      created_at: new Date().toISOString(),
+      agent_id: "agt_weather",
+      data: { conversation: { id: "cnv_1", kind: "dm" }, message_id: null },
+    });
+    const response = await post("agt_weather", stop);
+
+    assert.equal(response.status, 200);
+    assert.equal(running.signal.aborted, true);
+    assert.equal(elsewhere.signal.aborted, false, "another chat's run is left alone");
+    const { rows } = await pool.query<{ status: string; last_error: string | null }>(
+      "SELECT status, last_error FROM jobs WHERE event_id = $1",
+      [waiting],
+    );
+    assert.deepEqual(rows[0], { status: "done", last_error: "stopped" });
   });
 
   test("anything else is a 404", async () => {

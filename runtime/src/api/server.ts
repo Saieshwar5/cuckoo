@@ -10,7 +10,7 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
-import { SignatureError, WebhookReceiver } from "@cuckoo/agent";
+import { type InFlight, SignatureError, WebhookReceiver } from "@cuckoo/agent";
 
 import type { Registry } from "../agents/registry.ts";
 import type { Pool } from "../db/pool.ts";
@@ -23,6 +23,8 @@ export interface ServerDeps {
   pool: Pool;
   registry: Registry;
   jobs: Jobs;
+  /** The runs in progress, so a stop can reach the one answering. */
+  inflight?: InFlight;
   version: string;
   /** The hub's base URL, so health can say whether it is reachable. */
   hubUrl?: string;
@@ -140,6 +142,16 @@ async function hook(
   if (!agent) {
     send(res, 401, { error: "bad_signature" });
     return;
+  }
+
+  // A stop is acted on here, on arrival, not queued behind the very work it
+  // is meant to stop: the run answering is cancelled, and whatever was still
+  // waiting to be answered in that conversation is not.
+  if (envelope.type === "stop.requested") {
+    const conversation = (envelope.data.conversation ?? {}) as { id?: unknown };
+    const conversationId = typeof conversation.id === "string" ? conversation.id : "";
+    deps.inflight?.stop(conversationId);
+    await deps.jobs.dropPending(agent.id, conversationId);
   }
 
   const fresh = await deps.jobs.enqueue({
