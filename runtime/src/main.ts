@@ -130,6 +130,7 @@ async function run(job: Job, deps: RunDeps): Promise<void> {
 
   const payload = job.payload as {
     conversation?: { id?: string };
+    participants?: { kind?: string; timezone?: string }[];
     message?: { id?: string; sender?: { kind?: string; id?: string }; body?: { text?: string } };
   };
   const conversationId = payload.conversation?.id;
@@ -161,7 +162,15 @@ async function run(job: Job, deps: RunDeps): Promise<void> {
   const running = deps.inflight.start(conversationId);
   try {
     await answer(
-      { agent, conversationId, text, hubMessageId: message.id, userId },
+      {
+        agent,
+        conversationId,
+        text,
+        hubMessageId: message.id,
+        userId,
+        // Their clock, so "tomorrow at 7" is their seven.
+        timezone: payload.participants?.find((p) => p.kind === "user")?.timezone || undefined,
+      },
       {
         turns: deps.turns,
         harness: deps.harness,

@@ -231,6 +231,8 @@ func (q *Queries) ListConversationsByIDs(ctx context.Context, ids []uuid.UUID) (
 const listParticipants = `-- name: ListParticipants :many
 SELECT p.conversation_id, p.kind, p.user_id, p.agent_id, p.joined_at,
        u.display_name AS user_display_name,
+       -- A person's time zone, so an agent's "7 in the morning" is theirs.
+       u.timezone     AS user_timezone,
        a.display_name AS agent_display_name,
        a.handle       AS agent_handle,
        -- Whether the agent has a published picture, so the app knows to
@@ -258,6 +260,7 @@ type ListParticipantsRow struct {
 	AgentID                *uuid.UUID
 	JoinedAt               time.Time
 	UserDisplayName        *string
+	UserTimezone           *string
 	AgentDisplayName       *string
 	AgentHandle            *string
 	AgentHasAvatar         bool
@@ -285,6 +288,7 @@ func (q *Queries) ListParticipants(ctx context.Context, conversationIds []uuid.U
 			&i.AgentID,
 			&i.JoinedAt,
 			&i.UserDisplayName,
+			&i.UserTimezone,
 			&i.AgentDisplayName,
 			&i.AgentHandle,
 			&i.AgentHasAvatar,

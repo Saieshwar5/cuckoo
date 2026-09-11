@@ -122,6 +122,19 @@ describe("with a database", { skip: available ? false : "no postgres on :5433" }
     assert.equal(await routines.findByHubId("sch_2"), undefined);
   });
 
+  test("a paused schedule moves with its person's clock and stays paused", async () => {
+    const hub = new StubHub();
+    await applyChange({ type: "requested", schedule: schedule("sch_tz") }, where(), hub.asClient(), routines);
+    await applyChange({ type: "updated", schedule: schedule("sch_tz", { status: "paused" }) }, where(), hub.asClient(), routines);
+
+    const london = { repeat: "daily" as const, time: "07:00", timezone: "Europe/London" };
+    await applyChange({ type: "updated", schedule: schedule("sch_tz", { status: "paused", cadence: london }) }, where(), hub.asClient(), routines);
+
+    const routine = await routines.findByHubId("sch_tz");
+    assert.equal(routine?.timezone, "Europe/London");
+    assert.equal(routine?.paused, true);
+  });
+
   test("a time it cannot hold is declined, and the person told", async () => {
     const hub = new StubHub();
     const odd = schedule("sch_3", { cadence: { repeat: "weekly", time: "07:00", timezone: "Asia/Kolkata" } });

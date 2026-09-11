@@ -1,6 +1,7 @@
 package client
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -20,6 +21,8 @@ type userResponse struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
 	Locale      string `json:"locale"`
+	// Timezone is where their phone's clock is, as it last said.
+	Timezone string `json:"timezone"`
 	// The person's photo, as a media id. Unlike an agent's logo it is not
 	// public: it is fetched from /media/{id}, which only they can read.
 	AvatarMediaID *string   `json:"avatar_media_id"`
@@ -32,6 +35,7 @@ func newUserResponse(u users.User) userResponse {
 		ID:          domain.FormatID(domain.PrefixUser, u.ID),
 		DisplayName: u.DisplayName,
 		Locale:      u.Locale,
+		Timezone:    u.Timezone,
 		CreatedAt:   u.CreatedAt,
 		UpdatedAt:   u.UpdatedAt,
 	}
@@ -73,6 +77,8 @@ type updateMeRequest struct {
 	AvatarMediaID *string `json:"avatar_media_id"`
 	DisplayName   *string `json:"display_name"`
 	Locale        *string `json:"locale"`
+	// Timezone is sent by the phone whenever its clock's zone changes.
+	Timezone *string `json:"timezone"`
 }
 
 // updateMe changes the signed-in account's profile.
@@ -100,14 +106,31 @@ func (h *Handler) updateMe(w http.ResponseWriter, r *http.Request) {
 		avatar = &id
 	}
 
+	// Where the clock was, when the phone says where it is now.
+	var before users.User
+	if req.Timezone != nil {
+		before, _ = h.users.Get(r.Context(), userID)
+	}
+
 	user, err := h.users.UpdateProfile(r.Context(), userID, users.UpdateProfileInput{
 		AvatarMediaID: avatar,
 		DisplayName:   req.DisplayName,
 		Locale:        req.Locale,
+		Timezone:      req.Timezone,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)
 		return
+	}
+
+	// The phone has moved to another zone: the schedules set to the old one
+	// move with it, so "every morning at 7" stays their seven. Once the
+	// profile is saved, and never failing it — the agents are told, and a
+	// schedule that could not move says so in its own row.
+	if before.Timezone != "" && before.Timezone != user.Timezone {
+		if err := h.conversations.MoveSchedules(r.Context(), userID, before.Timezone, user.Timezone); err != nil {
+			slog.WarnContext(r.Context(), "schedules did not follow a time zone change", "user", userID, "error", err)
+		}
 	}
 
 	httpx.JSON(w, r, http.StatusOK, meEnvelope{User: newUserResponse(user)})

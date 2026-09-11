@@ -1,3 +1,5 @@
+import { getCalendars } from 'expo-localization';
+
 import type { Cadence, Schedule, Weekday } from '../api/types';
 import { t } from '../i18n';
 
@@ -66,11 +68,32 @@ export function statusLine(s: Schedule, agentName: string, now: Date): { text: s
 }
 
 // deviceZone is where this phone's clock is, which is where "7 in the
-// morning" means anything.
+// morning" means anything: "Asia/Kolkata" in Hyderabad, "Europe/London" in
+// London. Read from the system rather than from Intl, which on some Android
+// engines answers "UTC" whatever the phone says.
 export function deviceZone(): string {
+  try {
+    const zone = getCalendars()[0]?.timeZone;
+    if (zone) return zone;
+  } catch {
+    // No native module to ask: a test, or the web.
+  }
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
   } catch {
     return 'Asia/Kolkata';
   }
+}
+
+// zoneName is a zone as a person says it: "Asia/Kolkata" is "Kolkata",
+// "America/New_York" is "New York".
+export function zoneName(zone: string): string {
+  return (zone.split('/').pop() ?? zone).replace(/_/g, ' ');
+}
+
+// elsewhere says where a schedule's clock is, when it is not this phone's:
+// "New York time". Empty when it runs on the phone's own clock, which is
+// almost always.
+export function elsewhere(c: Cadence, phoneZone: string): string {
+  return c.timezone === phoneZone ? '' : t('schedules.zone.other', { zone: zoneName(c.timezone) });
 }

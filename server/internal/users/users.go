@@ -39,6 +39,9 @@ type User struct {
 	ID          uuid.UUID
 	DisplayName string
 	Locale      string
+	// Timezone is where their phone's clock is, "Asia/Kolkata", as the phone
+	// last said; empty until one has.
+	Timezone string
 	// Their photo, or nil for the initials disc. Unlike an agent's logo it
 	// is not public: it is behind the session that owns it.
 	AvatarMediaID *uuid.UUID
@@ -51,6 +54,7 @@ func fromRow(row gen.User) User {
 		ID:            row.ID,
 		DisplayName:   row.DisplayName,
 		Locale:        row.Locale,
+		Timezone:      row.Timezone,
 		AvatarMediaID: row.AvatarMediaID,
 		CreatedAt:     row.CreatedAt,
 		UpdatedAt:     row.UpdatedAt,
@@ -69,4 +73,5 @@ type UpdateProfileInput struct {
 	AvatarMediaID *uuid.UUID
 	DisplayName   *string
 	Locale        *string
+	Timezone      *string
 }

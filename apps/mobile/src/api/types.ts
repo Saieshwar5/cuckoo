@@ -4,6 +4,8 @@ export interface User {
   id: string;
   display_name: string;
   locale: string;
+  // Where their phone's clock is, as it last told the hub.
+  timezone?: string;
   // Their photo, fetched from /media/{id}: theirs alone, unlike an agent's
   // logo, which is public.
   avatar_media_id?: string | null;

@@ -34,6 +34,14 @@ SET deleted_at = now(), updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
 RETURNING *;
 
+-- name: ListPersonSchedulesInZone :many
+-- A person's live schedules set to one time zone: the ones that move with
+-- them when their phone's clock does.
+SELECT s.* FROM schedules s
+JOIN participants p ON p.conversation_id = s.conversation_id AND p.user_id = sqlc.arg('user_id')::uuid
+WHERE s.deleted_at IS NULL AND s.cadence->>'timezone' = sqlc.arg('timezone')::text
+ORDER BY s.created_at;
+
 -- name: MarkScheduleRan :exec
 UPDATE schedules SET last_run_at = now()
 WHERE id = $1;

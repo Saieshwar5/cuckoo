@@ -51,7 +51,10 @@ export function createRoutineTool(deps: RoutineToolDeps, context: ToolContext): 
           description: "Weekly only: which days.",
         },
         date: { type: "string", description: "Once only: 'YYYY-MM-DD'." },
-        timezone: { type: "string", description: `An IANA time zone. Defaults to ${DEFAULT_TZ}.` },
+        timezone: {
+          type: "string",
+          description: "An IANA time zone. Leave it out to use the person's own, which is almost always right.",
+        },
       },
       required: ["instruction", "title", "repeat", "time"],
     },
@@ -61,7 +64,9 @@ export function createRoutineTool(deps: RoutineToolDeps, context: ToolContext): 
       const cadence: Cadence = {
         repeat: String(args.repeat ?? "") as Cadence["repeat"],
         time: String(args.time ?? "").trim(),
-        timezone: String(args.timezone ?? "") || DEFAULT_TZ,
+        // The person's own clock unless they named another; India's only when
+        // no phone has told the hub where it is.
+        timezone: String(args.timezone ?? "") || context.timezone || DEFAULT_TZ,
         ...(Array.isArray(args.days) ? { days: (args.days as unknown[]).map((d) => String(d).toLowerCase()) } : {}),
         ...(args.date ? { date: String(args.date) } : {}),
       };

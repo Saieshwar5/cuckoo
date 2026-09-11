@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/Saieshwar5/cuckoo/server/internal/domain"
@@ -47,6 +48,23 @@ func validateDisplayName(raw string) (string, error) {
 	}
 
 	return name, nil
+}
+
+// validateTimezone checks an IANA zone name, "Asia/Kolkata", the way a
+// phone reports it.
+func validateTimezone(raw string) (string, error) {
+	zone := strings.TrimSpace(raw)
+	if zone == "" || len(zone) > 64 {
+		return "", errInvalidTimezone()
+	}
+	if _, err := time.LoadLocation(zone); err != nil {
+		return "", errInvalidTimezone()
+	}
+	return zone, nil
+}
+
+func errInvalidTimezone() error {
+	return domain.InvalidField("timezone", "invalid_timezone", `Timezone must be a zone like "Asia/Kolkata".`)
 }
 
 // validateLocale checks a BCP 47 style language tag.

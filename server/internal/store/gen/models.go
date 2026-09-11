@@ -207,6 +207,7 @@ type User struct {
 	UpdatedAt     time.Time
 	DeletedAt     *time.Time
 	AvatarMediaID *uuid.UUID
+	Timezone      string
 }
 
 type UserIdentity struct {

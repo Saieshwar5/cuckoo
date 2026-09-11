@@ -102,17 +102,6 @@ export async function applyChange(
     if (existing) await routines.delete(existing.id, where.agentId);
     return;
   }
-  if (schedule.status === "paused") {
-    if (existing && !existing.paused) await routines.pause(existing.id, "paused in the app");
-    return;
-  }
-  if (schedule.status === "active") {
-    // Resumed in the app — or a request heard twice, already held.
-    if (existing?.paused) await routines.resume(existing.id);
-    return;
-  }
-
-  // Pending: new, or a new what or when. Hold it, then say so.
   if (!validCadence(schedule.cadence)) {
     await client.deleteSchedule(where.conversationId, schedule.id).catch(() => {});
     await client
@@ -120,10 +109,13 @@ export async function applyChange(
       .catch(() => {});
     return;
   }
+
+  // The what and when come first, whatever the status: a paused schedule
+  // still moves when its person's clock does, and resumes on the new one.
   const shape = routineShape(schedule);
   if (existing) {
     await routines.change(existing.id, shape);
-  } else {
+  } else if (schedule.status !== "paused") {
     await routines.create({
       agentId: where.agentId,
       conversationId: where.conversationId,
@@ -132,7 +124,16 @@ export async function applyChange(
       hubScheduleId: schedule.id,
     });
   }
-  await client.updateSchedule(where.conversationId, schedule.id, { status: "active" });
+
+  if (schedule.status === "paused") {
+    if (existing && !existing.paused) await routines.pause(existing.id, "paused in the app");
+    return;
+  }
+  if (existing?.paused) await routines.resume(existing.id);
+  // Pending: new, or a new what or when. Held now, and said so.
+  if (schedule.status === "pending") {
+    await client.updateSchedule(where.conversationId, schedule.id, { status: "active" });
+  }
 }
 
 function routineShape(schedule: Schedule) {

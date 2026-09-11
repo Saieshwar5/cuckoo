@@ -1,5 +1,5 @@
 import type { Schedule } from '@/api/types';
-import { cadenceLabel, clock, statusLine, whenLabel } from '@/schedules/format';
+import { cadenceLabel, clock, elsewhere, statusLine, whenLabel, zoneName } from '@/schedules/format';
 import { applyScheduleFrame } from '@/schedules/store';
 
 function schedule(over: Partial<Schedule> = {}): Schedule {
@@ -88,5 +88,13 @@ describe('schedule rows', () => {
       'cnv_1',
     );
     expect(list).toHaveLength(0);
+  });
+
+  it("says whose clock a schedule runs on only when it is not the phone's", () => {
+    expect(zoneName('Asia/Kolkata')).toBe('Kolkata');
+    expect(zoneName('America/New_York')).toBe('New York');
+    const india = { repeat: 'daily' as const, time: '07:00', timezone: 'Asia/Kolkata' };
+    expect(elsewhere(india, 'Asia/Kolkata')).toBe('');
+    expect(elsewhere(india, 'Europe/London')).toBe('Kolkata time');
   });
 });

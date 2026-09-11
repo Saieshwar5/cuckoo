@@ -63,6 +63,8 @@ export interface ToolContext {
   agentId: string;
   conversationId: string;
   userId: string;
+  /** Where the person's phone's clock is, when the hub knows: "Europe/London". */
+  timezone?: string;
 }
 
 /** A tool that needs to know whose conversation it is in. */

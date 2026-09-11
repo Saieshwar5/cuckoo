@@ -330,6 +330,14 @@ management API; the app offers them only then.
 
 Nothing more often than daily, a 24-hour time, an IANA zone. Ten to a chat.
 
+**Whose clock.** A person in an event's `participants` carries `timezone` —
+the zone their phone last reported, `"Asia/Kolkata"` — so read "tomorrow at 7"
+on it, and use it for schedules made in the chat. When their phone moves to
+another zone, the schedules set to the old one move with it (same time, new
+zone) and you get `schedule.updated`, pending until you confirm: "every
+morning at 7" stays seven in the morning wherever they wake up. One set on
+purpose to another zone stays where it is.
+
 **A person makes one** in the app: you get `schedule.requested`, and the app
 says *Waiting for …* until you hold it and confirm:
 

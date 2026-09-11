@@ -46,6 +46,9 @@ class Participant:
     display_name: str
     handle: str | None = None
     is_me: bool = False
+    # A person's time zone, "Asia/Kolkata", as their phone last said: read
+    # "tomorrow at 7" on this clock. None until a phone has said, and for agents.
+    timezone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -291,6 +294,7 @@ class Conversation:
                     display_name=p.get("display_name", ""),
                     handle=p.get("handle"),
                     is_me=bool(p.get("is_me")),
+                    timezone=p.get("timezone") or None,
                 )
                 for p in participants
             ],

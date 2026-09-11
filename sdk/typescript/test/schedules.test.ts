@@ -73,3 +73,20 @@ test("a message says which schedule sent it", async () => {
   await client.startStream("cnv_1", { scheduleId: "sch_1" });
   assert.equal(calls[1]?.body.schedule_id, "sch_1");
 });
+
+test("a person's time zone reaches the handler", async () => {
+  const { client } = hub();
+  let zone: string | undefined;
+  const envelope = parseEnvelope({
+    id: "evt_2",
+    type: "message.created",
+    agent_id: "agt_1",
+    data: {
+      conversation: { id: "cnv_1", kind: "dm" },
+      participants: [{ kind: "user", id: "usr_1", display_name: "Priya", timezone: "Europe/London" }],
+      message: { id: "msg_1", sender: { kind: "user", id: "usr_1" }, body: { text: "remind me at 7" } },
+    },
+  });
+  await dispatch(envelope, client, { onMessage: (_m, conversation) => void (zone = conversation.person?.timezone) });
+  assert.equal(zone, "Europe/London");
+});
