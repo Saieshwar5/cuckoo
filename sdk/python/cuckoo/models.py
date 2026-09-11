@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any
 
 from .errors import StoppedError
 
+from .schedules import Schedules
+
 if TYPE_CHECKING:
     from .agent import Agent
     from .stream import Stream
@@ -174,6 +176,8 @@ class Message:
     truncated: bool = False
     # The person pressed stop while this was being written.
     stopped: bool = False
+    # Set on a message one of your schedules sent.
+    schedule_id: str | None = None
     action: Action | None = None
     reply_to: ReplyRef | None = None
     # Opaque; absent on messages from before the hub signed them.
@@ -210,6 +214,7 @@ class Message:
             status=data.get("status", "complete"),
             truncated=bool(data.get("truncated")),
             stopped=bool(data.get("stopped")),
+            schedule_id=data.get("schedule_id") or None,
             action=Action(action["button_id"], action["source_message_id"]) if action else None,
             reply_to=ReplyRef(
                 reply["id"], reply.get("sender_kind", ""), reply.get("text_preview", "")
@@ -261,6 +266,12 @@ class Conversation:
     # conversation. Every write from here on raises StoppedError.
     stopped: bool = field(default=False, compare=False)
 
+    @property
+    def schedules(self) -> Schedules:
+        """The schedules the person keeps with you here:
+        ``await conv.schedules.confirm(schedule.id, "Morning weather")``."""
+        return Schedules(self.id, self._agent)
+
     @classmethod
     def from_wire(
         cls, data: dict[str, Any], participants: list[dict[str, Any]], agent: Agent
@@ -290,6 +301,7 @@ class Conversation:
         quick_replies: list[str] | None = None,
         reply_to: str | None = None,
         idempotency_key: str | None = None,
+        schedule_id: str | None = None,
     ) -> Message:
         """Say something in this conversation.
 
@@ -308,6 +320,7 @@ class Conversation:
             quick_replies=quick_replies,
             reply_to=reply_to,
             idempotency_key=idempotency_key,
+            schedule_id=schedule_id,
         )
 
     def stream(
@@ -316,6 +329,7 @@ class Conversation:
         reply_to: str | None = None,
         buttons: Buttons | None = None,
         quick_replies: list[str] | None = None,
+        schedule_id: str | None = None,
     ) -> Stream:
         """Begin a reply that arrives piece by piece::
 
@@ -326,7 +340,11 @@ class Conversation:
         Buttons and quick replies are attached when the stream finishes.
         """
         return self._writable().stream(
-            self.id, reply_to=reply_to, buttons=buttons, quick_replies=quick_replies
+            self.id,
+            reply_to=reply_to,
+            buttons=buttons,
+            quick_replies=quick_replies,
+            schedule_id=schedule_id,
         )
 
     @asynccontextmanager

@@ -17,6 +17,7 @@ import {
   parseMessage,
   quickRepliesToWire,
 } from "./models.ts";
+import { type Cadence, parseSchedule, type Schedule } from "./schedules.ts";
 
 /** What a message can carry besides its text. */
 /** What an agent can say it is doing. */
@@ -29,6 +30,11 @@ export interface SendOptions {
   replyTo?: string;
   /** A retry with the same key returns the same message instead of a second one. */
   idempotencyKey?: string;
+  /**
+   * The schedule this is being sent for. The person sees which one, and the
+   * hub refuses it if they paused or deleted that schedule.
+   */
+  scheduleId?: string;
 }
 
 export interface ClientOptions {
@@ -82,6 +88,7 @@ export class HubClient {
     if (buttons) body.buttons = buttons;
     const quickReplies = quickRepliesToWire(options.quickReplies);
     if (quickReplies) body.quick_replies = quickReplies;
+    if (options.scheduleId) body.schedule_id = options.scheduleId;
 
     const data = await this.json("POST", `/v1/agent/conversations/${conversationId}/messages`, body);
     return parseMessage(data.message, conversationId);
@@ -109,9 +116,13 @@ export class HubClient {
    * Begin a message that arrives piece by piece. Returns the id to append to.
    * A start that carries text, buttons or files is refused by the hub.
    */
-  async startStream(conversationId: string, options: { replyTo?: string } = {}): Promise<Message> {
+  async startStream(
+    conversationId: string,
+    options: { replyTo?: string; scheduleId?: string } = {},
+  ): Promise<Message> {
     const body: Record<string, unknown> = { stream: true };
     if (options.replyTo) body.reply_to = options.replyTo;
+    if (options.scheduleId) body.schedule_id = options.scheduleId;
     const data = await this.json("POST", `/v1/agent/conversations/${conversationId}/messages`, body);
     return parseMessage(data.message, conversationId);
   }
@@ -159,6 +170,38 @@ export class HubClient {
   }
 
   /** Recent messages of one conversation, newest last. */
+  // -- schedules -----------------------------------------------------------
+
+  async listSchedules(conversationId: string): Promise<Schedule[]> {
+    const data = await this.json("GET", `/v1/agent/conversations/${conversationId}/schedules`);
+    return (Array.isArray(data.schedules) ? data.schedules : []).map(parseSchedule);
+  }
+
+  async createSchedule(
+    conversationId: string,
+    input: { title: string; instruction: string; cadence: Cadence },
+  ): Promise<Schedule> {
+    const data = await this.json("POST", `/v1/agent/conversations/${conversationId}/schedules`, input);
+    return parseSchedule(data.schedule);
+  }
+
+  async updateSchedule(
+    conversationId: string,
+    scheduleId: string,
+    change: { title?: string; instruction?: string; cadence?: Cadence; status?: "active" | "paused" },
+  ): Promise<Schedule> {
+    const data = await this.json(
+      "PATCH",
+      `/v1/agent/conversations/${conversationId}/schedules/${scheduleId}`,
+      change,
+    );
+    return parseSchedule(data.schedule);
+  }
+
+  async deleteSchedule(conversationId: string, scheduleId: string): Promise<void> {
+    await this.call("DELETE", `/v1/agent/conversations/${conversationId}/schedules/${scheduleId}`);
+  }
+
   async history(
     conversationId: string,
     options: { limit?: number; before?: string } = {},

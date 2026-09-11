@@ -50,6 +50,8 @@ class AgentInfo:
     has_avatar: bool = False
     # What an empty chat suggests saying first; up to four.
     starters: tuple[str, ...] = ()
+    # Its backend holds schedules people make; the app offers them only then.
+    supports_schedules: bool = False
 
     @classmethod
     def from_wire(cls, data: dict[str, Any]) -> AgentInfo:
@@ -62,6 +64,7 @@ class AgentInfo:
             status=binding.get("status"),
             has_avatar=bool(data.get("has_avatar")),
             starters=tuple(data.get("starters") or ()),
+            supports_schedules=bool(data.get("supports_schedules")),
         )
 
 
@@ -122,6 +125,7 @@ class Management:
         *,
         avatar: str | os.PathLike[str] | None = None,
         starters: list[str] | None = None,
+        supports_schedules: bool = False,
     ) -> AgentInfo:
         """Create an agent. The handle is its permanent address on this hub.
 
@@ -142,6 +146,8 @@ class Management:
             body["avatar_media_id"] = self.upload_avatar(avatar)
         if starters is not None:
             body["starters"] = list(starters)
+        if supports_schedules:
+            body["supports_schedules"] = True
         data = self._call("POST", "/v1/mgmt/agents", body)
         return AgentInfo.from_wire(data["agent"])
 
@@ -162,8 +168,11 @@ class Management:
         description: str | None = None,
         avatar: str | os.PathLike[str] | None = None,
         starters: list[str] | None = None,
+        supports_schedules: bool | None = None,
     ) -> AgentInfo:
         body: dict[str, Any] = {}
+        if supports_schedules is not None:
+            body["supports_schedules"] = supports_schedules
         if avatar is not None:
             body["avatar_media_id"] = self.upload_avatar(avatar)
         if starters is not None:

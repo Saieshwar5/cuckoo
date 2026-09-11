@@ -28,6 +28,9 @@ export {
   EVENT_CONVERSATION_JOINED,
   EVENT_CONVERSATION_LEFT,
   EVENT_MESSAGE_CREATED,
+  EVENT_SCHEDULE_DELETED,
+  EVENT_SCHEDULE_REQUESTED,
+  EVENT_SCHEDULE_UPDATED,
   EVENT_STOP_REQUESTED,
   InFlight,
   SeenEvents,
@@ -38,6 +41,7 @@ export {
   type JoinHandler,
   type LeaveHandler,
   type MessageHandler,
+  type ScheduleHandler,
   type StopHandler,
   type StopRequest,
 } from "./events.ts";
@@ -54,6 +58,7 @@ export {
   type ReplyRef,
   type Sender,
 } from "./models.ts";
+export { Schedules, parseSchedule, type Cadence, type Schedule, type ScheduleChange } from "./schedules.ts";
 export { CLOSE_BINDING_GONE, CLOSE_REPLACED, SocketSession } from "./socket.ts";
 export {
   HEADER_EVENT,

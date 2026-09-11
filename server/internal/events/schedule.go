@@ -71,7 +71,9 @@ func ScheduleOf(s conversations.Schedule, now time.Time) Schedule {
 // stood when the person acted, and where.
 type ScheduleEvent struct {
 	Conversation Conversation `json:"conversation"`
-	Schedule     Schedule     `json:"schedule"`
+	// Participants says who the schedule is for, as in a message event.
+	Participants []Participant `json:"participants"`
+	Schedule     Schedule      `json:"schedule"`
 }
 
 // NewScheduleEvent builds the event agentID receives when the person acts
@@ -83,6 +85,10 @@ func NewScheduleEvent(eventID uuid.UUID, createdAt time.Time, agentID uuid.UUID,
 		Type:      eventType,
 		CreatedAt: createdAt,
 		AgentID:   domain.FormatID(domain.PrefixAgent, agentID),
-		Data:      ScheduleEvent{Conversation: ConversationOf(conv), Schedule: ScheduleOf(sch, time.Now())},
+		Data: ScheduleEvent{
+			Conversation: ConversationOf(conv),
+			Participants: ParticipantsOf(conv, agentID),
+			Schedule:     ScheduleOf(sch, time.Now()),
+		},
 	}
 }

@@ -19,6 +19,7 @@ from websockets.exceptions import ConnectionClosed, InvalidStatus
 
 from .errors import ProtocolError, StoppedError, error_of, raise_for_status
 from .models import DEFAULT_HUB, Attachment, Conversation, Message, PairToken, StopRequest
+from .schedules import Schedule, ScheduleChange
 from .stream import Stream
 from .wire import Attachable, Buttons, _buttons_json, _quick_replies_json
 
@@ -38,6 +39,7 @@ _REPLY_TIMEOUT = 30.0
 Handler = Callable[[Message, Conversation], Awaitable[None]]
 JoinHandler = Callable[[Conversation, PairToken | None], Awaitable[None]]
 StopHandler = Callable[[StopRequest, Conversation], Awaitable[None]]
+ScheduleHandler = Callable[[ScheduleChange, Conversation], Awaitable[None]]
 
 __all__ = ["Agent", "Attachable", "Buttons", "ProtocolError", "Stream", "StoppedError"]
 
@@ -59,6 +61,7 @@ class Agent:
         self._handler: Handler | None = None
         self._join_handler: JoinHandler | None = None
         self._stop_handler: StopHandler | None = None
+        self._schedule_handler: ScheduleHandler | None = None
         self._seen: OrderedDict[str, None] = OrderedDict()
         # Message handlers running now, by conversation, so a stop reaches
         # them; and the replies the hub says were stopped, so a stream's
@@ -93,6 +96,14 @@ class Agent:
         something true — "Stopped. Nothing was booked." — if anything.
         """
         self._stop_handler = fn
+        return fn
+
+    def on_schedule(self, fn: ScheduleHandler) -> ScheduleHandler:
+        """Register the coroutine called when the person makes, changes or
+        deletes a schedule in the app. Hold it in your own timer, then
+        ``await conv.schedules.confirm(change.schedule.id)``; the app says
+        "waiting" until you do."""
+        self._schedule_handler = fn
         return fn
 
     # -- running ----------------------------------------------------------
@@ -203,6 +214,20 @@ class Agent:
             self._remember(event_id)
             await self._ack(ws, event_id)
             return
+        if str(event.get("type", "")).startswith("schedule.") and self._schedule_handler is not None:
+            data = event.get("data") or {}
+            conv = Conversation.from_wire(data["conversation"], [], self)
+            change = ScheduleChange(
+                event["type"].removeprefix("schedule."), Schedule.from_wire(data.get("schedule") or {})
+            )
+            try:
+                await self._schedule_handler(change, conv)
+            except Exception:  # a handler bug must not stop the agent
+                log.exception("schedule handler failed for %s; the hub will send it again", event_id)
+                return
+            self._remember(event_id)
+            await self._ack(ws, event_id)
+            return
         if event.get("type") == "stop.requested":
             if not await self._stop(event):
                 return
@@ -297,6 +322,7 @@ class Agent:
         quick_replies: list[str] | None = None,
         reply_to: str | None = None,
         idempotency_key: str | None = None,
+        schedule_id: str | None = None,
     ) -> Message:
         """Say something in a conversation the agent is in.
 
@@ -314,6 +340,8 @@ class Agent:
             body["attachments"] = media_ids
         if reply_to:
             body["reply_to"] = reply_to
+        if schedule_id:
+            body["schedule_id"] = schedule_id
         if wire := _buttons_json(buttons):
             body["buttons"] = wire
         if wire := _quick_replies_json(quick_replies):
@@ -401,10 +429,16 @@ class Agent:
         reply_to: str | None = None,
         buttons: Buttons | None = None,
         quick_replies: list[str] | None = None,
+        schedule_id: str | None = None,
     ) -> Stream:
         """Begin a message that arrives piece by piece. Use as ``async with``."""
         return Stream(
-            self, conversation_id, reply_to=reply_to, buttons=buttons, quick_replies=quick_replies
+            self,
+            conversation_id,
+            reply_to=reply_to,
+            buttons=buttons,
+            quick_replies=quick_replies,
+            schedule_id=schedule_id,
         )
 
     async def typing(self, conversation_id: str, state: str = "start") -> None:

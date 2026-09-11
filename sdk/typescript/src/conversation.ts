@@ -8,6 +8,7 @@
 import type { ActivityState, HubClient, SendOptions } from "./client.ts";
 import { StoppedError } from "./errors.ts";
 import type { Buttons, Message, Participant } from "./models.ts";
+import { Schedules } from "./schedules.ts";
 
 /** An activity lasts ten seconds on the hub; it is said again well before. */
 const RENEW_MS = 7_000;
@@ -28,6 +29,8 @@ export class Conversation {
    * handler ends at its next write, and the SDK treats that as done.
    */
   readonly signal: AbortSignal;
+  /** Schedules the person keeps with you here: `conversation.schedules.confirm(id)`. */
+  readonly schedules: Schedules;
   private readonly client: HubClient;
 
   constructor(id: string, kind: string, participants: Participant[], client: HubClient, signal: AbortSignal = NEVER) {
@@ -36,6 +39,7 @@ export class Conversation {
     this.participants = participants;
     this.client = client;
     this.signal = signal;
+    this.schedules = new Schedules(client, id);
   }
 
   /** Whether the person has stopped this handler's work. */
@@ -61,7 +65,7 @@ export class Conversation {
    * Buttons and quick replies are attached when it finishes, not at the start.
    * While it streams the person sees "writing…" and a stop button.
    */
-  async stream(options: { replyTo?: string } = {}): Promise<Stream> {
+  async stream(options: { replyTo?: string; scheduleId?: string } = {}): Promise<Stream> {
     this.guard();
     const started = await this.client.startStream(this.id, options);
     return new Stream(this.client, this.id, started.id, this.signal);

@@ -22,6 +22,8 @@ export interface AgentInfo {
   description: string;
   starters: string[];
   hasAvatar: boolean;
+  /** The app offers people schedules with this agent. */
+  supportsSchedules: boolean;
   createdAt: string;
   /** How its backend is reached, or null when nothing is connected. */
   binding: BindingInfo | null;
@@ -65,6 +67,8 @@ export interface CreateAgentInput {
   starters?: string[];
   /** A media id from `uploadAvatar`. */
   avatarMediaId?: string;
+  /** Your backend holds schedules people make; the app offers them only then. */
+  supportsSchedules?: boolean;
 }
 
 export interface UpdateAgentInput {
@@ -72,6 +76,7 @@ export interface UpdateAgentInput {
   description?: string;
   starters?: string[];
   avatarMediaId?: string;
+  supportsSchedules?: boolean;
 }
 
 export interface ManagementOptions {
@@ -102,6 +107,7 @@ export class Management {
       description: input.description ?? "",
       ...(input.starters ? { starters: input.starters } : {}),
       ...(input.avatarMediaId ? { avatar_media_id: input.avatarMediaId } : {}),
+      ...(input.supportsSchedules ? { supports_schedules: true } : {}),
     });
     return toAgent(data.agent);
   }
@@ -121,6 +127,7 @@ export class Management {
     if (input.description !== undefined) body.description = input.description;
     if (input.starters !== undefined) body.starters = input.starters;
     if (input.avatarMediaId !== undefined) body.avatar_media_id = input.avatarMediaId;
+    if (input.supportsSchedules !== undefined) body.supports_schedules = input.supportsSchedules;
     return toAgent((await this.call("PATCH", `/agents/${agentId}`, body)).agent);
   }
 
@@ -273,6 +280,7 @@ function toAgent(raw: unknown): AgentInfo {
     description: String(w.description ?? ""),
     starters: Array.isArray(w.starters) ? (w.starters as string[]) : [],
     hasAvatar: Boolean(w.has_avatar),
+    supportsSchedules: Boolean(w.supports_schedules),
     createdAt: String(w.created_at ?? ""),
     binding: binding
       ? {
