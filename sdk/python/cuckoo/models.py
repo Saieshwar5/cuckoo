@@ -267,6 +267,11 @@ class Conversation:
     stopped: bool = field(default=False, compare=False)
 
     @property
+    def person(self) -> Participant | None:
+        """The person in a DM, or None if there is no human in it."""
+        return next((p for p in self.participants if p.kind == "user"), None)
+
+    @property
     def schedules(self) -> Schedules:
         """The schedules the person keeps with you here:
         ``await conv.schedules.confirm(schedule.id, "Morning weather")``."""

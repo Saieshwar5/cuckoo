@@ -216,7 +216,7 @@ class Agent:
             return
         if str(event.get("type", "")).startswith("schedule.") and self._schedule_handler is not None:
             data = event.get("data") or {}
-            conv = Conversation.from_wire(data["conversation"], [], self)
+            conv = Conversation.from_wire(data["conversation"], data.get("participants") or [], self)
             change = ScheduleChange(
                 event["type"].removeprefix("schedule."), Schedule.from_wire(data.get("schedule") or {})
             )
